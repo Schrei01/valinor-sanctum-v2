@@ -49,6 +49,19 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
 ORDER BY l.purchase_id, l.sequence
 ''');
         final linesByReceipt = <String, List<PurchaseReceiptLine>>{};
+        final paymentRows = await txn.rawQuery('''
+SELECT o.origin_document_id, s.amount_minor FROM payable_settlements s
+JOIN obligations o ON o.id = s.payable_id
+JOIN business_documents d ON d.id = s.supplier_payment_id AND d.status = 'posted'
+JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
+''');
+        final paidByReceipt = <String, BigInt>{};
+        for (final row in paymentRows) {
+          final id = row['origin_document_id'] as String;
+          paidByReceipt[id] =
+              (paidByReceipt[id] ?? BigInt.zero) +
+              BigInt.from(row['amount_minor'] as int);
+        }
         for (final line in receiptLines) {
           linesByReceipt
               .putIfAbsent(line['purchase_id'] as String, () => [])
@@ -107,6 +120,10 @@ ORDER BY l.purchase_id, l.sequence
                   supplierName: r['supplier_name_snapshot'] as String,
                   reference: r['supplier_reference'] as String?,
                   totalMinor: r['payable_minor'] as int,
+                  paidMinor: _int64(
+                    paidByReceipt[r['document_id']] ?? BigInt.zero,
+                    'Total pagado',
+                  ),
                   receivedAtUtc: DateTime.parse(
                     r['received_at_utc'] as String,
                   ).toUtc(),
@@ -326,6 +343,16 @@ ORDER BY l.purchase_id, l.sequence
         );
       }
 
+      if ((await txn.query(
+        'supplier_payment_requests',
+        columns: ['command_id'],
+        where: 'command_id = ?',
+        whereArgs: [command.commandId],
+      )).isNotEmpty) {
+        throw const InventoryValidationException(
+          'Este identificador ya corresponde a una solicitud de pago.',
+        );
+      }
       final suppliers = await txn.query(
         'counterparties',
         where: 'id = ? AND is_supplier = 1 AND is_active = 1',

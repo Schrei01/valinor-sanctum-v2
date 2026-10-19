@@ -286,6 +286,16 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
           'El identificador ya corresponde a una solicitud de cobro.',
         );
       }
+      if ((await txn.query(
+        'supplier_payment_requests',
+        columns: ['command_id'],
+        where: 'command_id = ?',
+        whereArgs: [commandId],
+      )).isNotEmpty) {
+        throw const SalesValidationException(
+          'El identificador ya corresponde a una solicitud de pago.',
+        );
+      }
       final rows = await txn.query(
         'sales_drafts',
         where: 'id = ?',

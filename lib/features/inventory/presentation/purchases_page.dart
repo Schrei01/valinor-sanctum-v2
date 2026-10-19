@@ -216,7 +216,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Quedará pendiente de pago. Los pagos a proveedores aún no están disponibles.',
+                        'Quedará pendiente de pago. Puedes registrar abonos desde Pagos después de confirmar la recepción.',
                       ),
                       const SizedBox(height: 24),
                       FilledButton.icon(
@@ -266,7 +266,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Compras a crédito registradas. Deuda pendiente de pago; gestión de pagos aún no disponible.',
+              'Compras a crédito registradas. Consulta lo pagado y pendiente; aplica abonos desde Pagos.',
             ),
             const SizedBox(height: 16),
             _history(data),
@@ -510,8 +510,19 @@ class _PurchasesPageState extends State<PurchasesPage> {
                         inventoryMoney(receipt.totalMinor, widget.profile),
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      const Chip(label: Text('Recibida a crédito')),
+                      Chip(
+                        label: Text(
+                          receipt.remainingMinor == 0
+                              ? 'Pagada'
+                              : 'Recibida a crédito',
+                        ),
+                      ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Pagado: ${inventoryMoney(receipt.paidMinor, widget.profile)} · '
+                    'Pendiente: ${inventoryMoney(receipt.remainingMinor, widget.profile)}',
                   ),
                   const SizedBox(height: 8),
                   Text(

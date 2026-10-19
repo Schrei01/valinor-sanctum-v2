@@ -128,6 +128,24 @@ class _CollectionsPageState extends State<CollectionsPage> {
           pending: pending,
         );
       }
+      if (data != null &&
+          pending == null &&
+          _pendingId != null &&
+          data.collections.any((item) => item.commandId == _pendingId)) {
+        _edit(
+          data.receivables
+                  .where(
+                    (item) =>
+                        item.receivableId == _receivableId &&
+                        item.remainingMinor > 0,
+                  )
+                  .firstOrNull ??
+              data.receivables
+                  .where((item) => item.remainingMinor > 0)
+                  .firstOrNull,
+        );
+        _historyPage = 0;
+      }
       if (data != null && _parts.isEmpty) {
         _edit(
           data.receivables.where((item) => item.remainingMinor > 0).firstOrNull,

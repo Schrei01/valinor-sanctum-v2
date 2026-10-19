@@ -310,4 +310,31 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets(
+    'refresh of a committed unknown receipt clears the previous amount',
+    (tester) async {
+      final fake = store()
+        ..confirmationFailure = StateError('lost commit reply')
+        ..commitBeforeConfirmationFailure = true;
+      await open(tester, fake);
+      await fill(tester, '40,00');
+      await confirm(tester);
+      expect(fake.collections, hasLength(1));
+      expect(
+        tester.widget<TextFormField>(keyed('collection-amount-').first).enabled,
+        isFalse,
+      );
+      await tap(tester, find.text('Actualizar').first);
+      final amount = tester.widget<TextFormField>(
+        keyed('collection-amount-').first,
+      );
+      expect(amount.enabled, isTrue);
+      expect(amount.controller!.text, isEmpty);
+      expect(find.text('Reintentar el mismo cobro'), findsNothing);
+      expect(fake.receivables.single.remainingMinor, 6000);
+      expect(fake.preparedInputs, hasLength(1));
+      expect(fake.collections, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

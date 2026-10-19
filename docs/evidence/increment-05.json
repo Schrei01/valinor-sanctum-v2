@@ -1,0 +1,61 @@
+{
+  "verifiedAtUtc": "2026-10-19T21:33:18.4735525Z",
+  "version": "0.5.0+5",
+  "schemaVersion": 5,
+  "checks": {
+    "testsPassed": 265,
+    "testsSkipped": 3,
+    "skippedReason": "Host cannot create symbolic links",
+    "dartFormatFiles": 65,
+    "dartFormatClean": true,
+    "analyzeClean": true,
+    "syntheticFlowChecksPassed": 36,
+    "supplierPaymentWidgetsPassed": 9,
+    "newSupplierControllerTestsPassed": 10,
+    "newSupplierStoreTestsPassed": 15,
+    "newSupplierSchemaTestsPassed": 25,
+    "widgetImageInspected": true
+  },
+  "build": {
+    "smokeSeconds": 60.379992,
+    "finalSeconds": 64.3736428,
+    "finalHasNoSanctumOverrides": true,
+    "smokeAndFinalAotDiffer": true,
+    "nativePartialAndFullHistoryObserved": true,
+    "nativeMoneyBalancesObserved": true,
+    "nativePurchasePaidProjectionObserved": true,
+    "fourCorrectIndicatorsInSmokeAndFinalObserved": true,
+    "nativeMethod": "Accessibility and keyboard",
+    "manualNativePaymentEntryPerformed": false,
+    "nativeWindowsClosed": true,
+    "imageIsWidgetRender": true
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.5.0-windows-x64.zip",
+    "bytes": 14530845,
+    "files": 17,
+    "sha256": "9B756E60A43D6695AC77E7CAB48B716B1C062927BD4C18DB0C4742D11606881D",
+    "version": "0.5.0+5",
+    "allFilesMatch": true,
+    "includesRuntimeDatabase": false,
+    "smokeAotSha256": "26BF08EB10201B8A42B5FB16FEE194F1851F84D9CFDD5A8515E4F4CBB13091D9",
+    "finalAotSha256": "2104CFB8343D42F93903CCA84B43F210FCF8FB1C22676ECB39F0A0D72F553FD1",
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.5.0/ValinorSanctum2"
+  },
+  "developmentMigration": {
+    "ownDevelopmentBackupCreated": true,
+    "backupName": "sanctum2.v4.1792445513594736-38040d8a.sqlite3",
+    "businessDataEntered": false
+  },
+  "packageHashUnchangedAfterNativeTest": true,
+  "databaseResetOrDowngradePerformed": false,
+  "originalPosOpenedOrModifiedByAgent": false,
+  "productionEnabled": false,
+  "remoteWorkflowResultInspected": false,
+  "evidenceFiles": [
+    "supplier-payments-flow.json",
+    "supplier-payments-native-observations.json",
+    "supplier-payments-final-observations.json"
+  ]
+}

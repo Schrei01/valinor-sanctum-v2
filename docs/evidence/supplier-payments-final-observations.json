@@ -1,0 +1,13 @@
+{
+  "observedAtUtc": "2026-10-19T21:32:49.812Z",
+  "version": "0.5.0+5",
+  "launcher": "Iniciar Valinor Sanctum.cmd",
+  "schemaVersion": 5,
+  "fourCorrectIndicatorsObserved": true,
+  "initialSetupObserved": true,
+  "businessDataEntered": false,
+  "windowClosed": true,
+  "method": "Accessibility and keyboard",
+  "screenshotCaptured": false,
+  "systemTree": "Window: \"Valinor Sanctum 2.0\", App: valinor_sanctum_2.exe.\n\t0 ventana Valinor Sanctum 2.0 Secondary Actions: Raise\n\t\t7 panel\n\t\t\t2208 grupo\n\t\t\t\t2209 grupo\n\t\t\t\t\t2210 grupo\n\t\t\t\t\t\t2211 grupo\n\t\t\t\t\t\t\t2212 texto Valinor Sanctum 2.0\n\t\t\t\t\t\t\t2213 texto Desarrollo\n\t\t\t\t\t\t\t2214 texto VALINOR SANCTUM\n\t\t\t\t\t\t\t2215 texto GESTIÓN COMERCIAL · 2.0\n\t\t\t\t\t\t\t2216 grupo\n\t\t\t\t\t\t\t\t2217 botón Inicio\n\t\t\t\t\t\t\t\t2218 botón Catálogo\n\t\t\t\t\t\t\t\t2219 botón Compras\n\t\t\t\t\t\t\t\t2220 botón Ventas\n\t\t\t\t\t\t\t\t2221 botón Cobros\n\t\t\t\t\t\t\t\t2222 botón Pagos\n\t\t\t\t\t\t\t\t2223 botón Sistema\n\t\t\t\t\t\t\t2224 texto EN DESARROLLO\n\t\t\t\t\t\t\t2225 texto Versión 0.5.0\n\t\t\t\t\t\t\t2226 grupo\n\t\t\t\t\t\t\t\t2227 texto SISTEMA\n\t\t\t\t\t\t\t\t2228 texto Almacenamiento y diagnóstico\n\t\t\t\t\t\t\t\t2229 texto Comprueba el estado del archivo exclusivo de este espacio.\n\t\t\t\t\t\t\t\t2230 grupo (settable, string) Perfil: development Ubicación de la base de datos Integridad SQLite Correcto Relaciones protegidas Correcto Esquema verificado Correcto Migración verificada Correcto Versión del esquema: 5 Value: C:\\proyectos\\valinor_sanctum_2\\data\\development\\development\\sanctum2.sqlite3\n\t\t\t\t\t\t\t\t\t2231 botón Volver a verificar\n\t\t\t\t\t\t\t\t2232 texto Entorno de desarrollo. Catálogo, compras, ventas a crédito, cobros y pagos a proveedores disponibles. Arqueo, usuarios e importación aún están pendientes.\n\t\t1 barra de título (settable, string) Value: Valinor Sanctum 2.0\n\t\t\t2 barra de menús Sistema ID: MenuBar\n\t\t\t\t3 elemento de menú Sistema\n\t\t\t4 botón Minimizar\n\t\t\t5 botón Maximizar\n\t\t\t6 botón Cerrar\n\nThe focused UI element is 2223 botón Sistema."
+}

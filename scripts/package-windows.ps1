@@ -94,7 +94,9 @@ Guarda cuentas abiertas y confirma entregas a crédito con stock y costo histór
 Las confirmaciones pendientes se recuperan al reabrir para reintentar sin duplicar.
 Configura cuentas y medios locales y registra cobros o abonos de las ventas.
 Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.
-Los pagos a proveedores, caja/arqueo y ajustes de inventario siguen pendientes.
+Registra pagos y abonos a proveedores con saldo disponible, incluso por varios medios.
+Las solicitudes de pago guardadas se recuperan al reabrir sin duplicarse.
+Caja/arqueo y ajustes de inventario siguen pendientes.
 No contiene datos del POS original ni está habilitado para producción.
 El almacenamiento de desarrollo permanece limitado al repositorio autorizado
 C:\proyectos\valinor_sanctum_2; ejecuta el bundle dentro de ese proyecto.

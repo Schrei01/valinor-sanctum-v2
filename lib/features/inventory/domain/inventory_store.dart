@@ -69,6 +69,7 @@ class PurchaseReceiptSummary {
     required this.supplierName,
     this.reference,
     required this.totalMinor,
+    this.paidMinor = 0,
     required this.receivedAtUtc,
     required this.dueDate,
     List<PurchaseReceiptLine> lines = const [],
@@ -77,6 +78,8 @@ class PurchaseReceiptSummary {
   final String supplierName;
   final String? reference;
   final int totalMinor;
+  final int paidMinor;
+  int get remainingMinor => totalMinor - paidMinor;
   final DateTime receivedAtUtc;
   final String dueDate;
   final List<PurchaseReceiptLine> lines;

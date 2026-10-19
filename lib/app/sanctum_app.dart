@@ -8,10 +8,21 @@ import '../features/sales/application/sales_controller.dart';
 import '../features/sales/presentation/sales_page.dart';
 import '../features/collections/application/collections_controller.dart';
 import '../features/collections/presentation/collections_page.dart';
+import '../features/supplier_payments/application/supplier_payments_controller.dart';
+import '../features/supplier_payments/presentation/supplier_payments_page.dart';
 
 const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
 const _paper = Color(0xFFF5F5F0);
+const _destinations = [
+  (Icons.home_outlined, 'Inicio'),
+  (Icons.inventory_2_outlined, 'Catálogo'),
+  (Icons.local_shipping_outlined, 'Compras'),
+  (Icons.point_of_sale_outlined, 'Ventas'),
+  (Icons.payments_outlined, 'Cobros'),
+  (Icons.outbound_outlined, 'Pagos'),
+  (Icons.settings_outlined, 'Sistema'),
+];
 
 class SanctumApp extends StatelessWidget {
   const SanctumApp({super.key, required this.controller});
@@ -52,6 +63,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   InventoryController? _inventory;
   SalesController? _sales;
   CollectionsController? _collections;
+  SupplierPaymentsController? _supplierPayments;
 
   void _selectSection(int index) {
     setState(() => _section = index);
@@ -59,6 +71,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     if (index == 1 || index == 2) unawaited(_inventory?.load());
     if (index == 3) unawaited(_sales?.load());
     if (index == 4) unawaited(_collections?.load());
+    if (index == 5) unawaited(_supplierPayments?.load());
   }
 
   @override
@@ -66,6 +79,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     _inventory?.dispose();
     _sales?.dispose();
     _collections?.dispose();
+    _supplierPayments?.dispose();
     super.dispose();
   }
 
@@ -111,6 +125,20 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
           !_collections!.loading &&
           _collections!.loadError == null) {
         unawaited(_collections!.load());
+      }
+      final supplierPaymentsStore = controller.supplierPaymentsStore;
+      if (!identical(_supplierPayments?.store, supplierPaymentsStore)) {
+        _supplierPayments?.dispose();
+        _supplierPayments = supplierPaymentsStore == null
+            ? null
+            : SupplierPaymentsController(store: supplierPaymentsStore);
+      }
+      if (_supplierPayments != null &&
+          controller.profile != null &&
+          _supplierPayments!.snapshot == null &&
+          !_supplierPayments!.loading &&
+          _supplierPayments!.loadError == null) {
+        unawaited(_supplierPayments!.load());
       }
       if (controller.state == WorkspaceState.loading) {
         return const Scaffold(
@@ -242,6 +270,18 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                 wide,
                               ),
                               _scrollPage(
+                                controller.profile == null
+                                    ? const _ConfigureFirst()
+                                    : _supplierPayments == null
+                                    ? const _ModuleUnavailable()
+                                    : SupplierPaymentsPage(
+                                        key: ObjectKey(_supplierPayments),
+                                        controller: _supplierPayments!,
+                                        profile: controller.profile!,
+                                      ),
+                                wide,
+                              ),
+                              _scrollPage(
                                 _System(controller: controller),
                                 wide,
                               ),
@@ -256,35 +296,9 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
             ),
             bottomNavigationBar: wide
                 ? null
-                : NavigationBar(
-                    selectedIndex: _section,
-                    onDestinationSelected: _selectSection,
-                    destinations: const [
-                      NavigationDestination(
-                        icon: Icon(Icons.home_outlined),
-                        label: 'Inicio',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.inventory_2_outlined),
-                        label: 'Catálogo',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.local_shipping_outlined),
-                        label: 'Compras',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.point_of_sale_outlined),
-                        label: 'Ventas',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.payments_outlined),
-                        label: 'Cobros',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.settings_outlined),
-                        label: 'Sistema',
-                      ),
-                    ],
+                : _CompactNavigation(
+                    selected: _section,
+                    onSelected: _selectSection,
                   ),
           );
         },
@@ -311,7 +325,7 @@ class _ConfigureFirst extends StatelessWidget {
     child: Padding(
       padding: EdgeInsets.all(28),
       child: Text(
-        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras, ventas y cobros.',
+        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras, ventas, cobros y pagos.',
       ),
     ),
   );
@@ -322,6 +336,66 @@ class _ModuleUnavailable extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const Text('El módulo no está disponible en esta sesión.');
+}
+
+class _CompactNavigation extends StatelessWidget {
+  const _CompactNavigation({required this.selected, required this.onSelected});
+  final int selected;
+  final ValueChanged<int> onSelected;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.white,
+    child: SafeArea(
+      top: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth < 600 ? 4 : _destinations.length;
+          return Wrap(
+            children: [
+              for (var index = 0; index < _destinations.length; index++)
+                SizedBox(
+                  width: constraints.maxWidth / columns,
+                  child: Semantics(
+                    selected: selected == index,
+                    button: true,
+                    child: InkWell(
+                      onTap: () => onSelected(index),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _destinations[index].$1,
+                              color: selected == index
+                                  ? _forest
+                                  : Colors.black54,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _destinations[index].$2,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: selected == index
+                                    ? _forest
+                                    : Colors.black54,
+                                fontWeight: selected == index
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
 }
 
 class _Sidebar extends StatelessWidget {
@@ -364,32 +438,34 @@ class _Sidebar extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 44),
-            for (final entry in [
-              (0, Icons.home_outlined, 'Inicio'),
-              (1, Icons.inventory_2_outlined, 'Catálogo'),
-              (2, Icons.local_shipping_outlined, 'Compras'),
-              (3, Icons.point_of_sale_outlined, 'Ventas'),
-              (4, Icons.payments_outlined, 'Cobros'),
-              (5, Icons.settings_outlined, 'Sistema'),
-            ])
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  selected: selected == entry.$1,
-                  selectedTileColor: Colors.white.withValues(alpha: .12),
-                  selectedColor: Colors.white,
-                  iconColor: Colors.white70,
-                  textColor: Colors.white70,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  leading: Icon(entry.$2),
-                  title: Text(entry.$3),
-                  onTap: () => onSelected(entry.$1),
+            const SizedBox(height: 24),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (var index = 0; index < _destinations.length; index++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          selected: selected == index,
+                          selectedTileColor: Colors.white.withValues(
+                            alpha: .12,
+                          ),
+                          selectedColor: Colors.white,
+                          iconColor: Colors.white70,
+                          textColor: Colors.white70,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          leading: Icon(_destinations[index].$1),
+                          title: Text(_destinations[index].$2),
+                          onTap: () => onSelected(index),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            const Spacer(),
+            ),
             const Padding(
               padding: EdgeInsets.all(12),
               child: Column(
@@ -405,7 +481,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.4.0',
+                    'Versión 0.5.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -507,7 +583,7 @@ class _Home extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   const Text(
-                    'Ya puedes organizar el catálogo, recibir compras, confirmar ventas a crédito y registrar cobros desde el menú.',
+                    'Ya puedes organizar el catálogo, recibir compras, confirmar ventas a crédito, registrar cobros y pagar a proveedores desde el menú.',
                     style: TextStyle(color: Color(0xFF65716A)),
                   ),
                 ],
@@ -529,7 +605,7 @@ class _Home extends StatelessWidget {
                   (
                     Icons.inventory_2_outlined,
                     'Catálogo e inventario',
-                    'Productos, proveedores y recepción de compras a crédito. Ajustes pendientes.',
+                    'Productos, proveedores, compras a crédito y pagos. Ajustes pendientes.',
                     'Disponible',
                   ),
                   (
@@ -802,7 +878,7 @@ class _System extends StatelessWidget {
       ),
       const SizedBox(height: 24),
       const Text(
-        'Entorno de desarrollo. Catálogo, compras, ventas a crédito y cobros disponibles. Pagos a proveedores, arqueo, usuarios e importación aún están pendientes.',
+        'Entorno de desarrollo. Catálogo, compras, ventas a crédito, cobros y pagos a proveedores disponibles. Arqueo, usuarios e importación aún están pendientes.',
         style: TextStyle(color: Color(0xFF65716A), height: 1.5),
       ),
     ],

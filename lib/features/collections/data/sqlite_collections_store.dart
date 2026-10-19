@@ -258,6 +258,11 @@ ORDER BY c.collected_at_utc DESC, c.document_id
             'sale_confirmations',
             where: 'command_id = ?',
             whereArgs: [command.commandId],
+          )).isNotEmpty ||
+          (await txn.query(
+            'supplier_payment_requests',
+            where: 'command_id = ?',
+            whereArgs: [command.commandId],
           )).isNotEmpty) {
         throw const CollectionsValidationException(
           'El identificador ya corresponde a otro comando.',

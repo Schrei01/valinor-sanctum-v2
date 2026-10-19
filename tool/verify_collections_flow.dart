@@ -334,7 +334,7 @@ Future<void> main(List<String> args) async {
     final health = await app.readHealth();
     check(
       'currentSchemaHealthy',
-      health['schemaVersion'] == 4 &&
+      health['schemaVersion'] == AppDatabase.schemaVersion &&
           health['integrityOk'] == true &&
           health['foreignKeyViolations'] == 0 &&
           health['schemaChecksumVerified'] == true &&

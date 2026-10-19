@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 4;
+  static const int version = 5;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -23,11 +23,16 @@ abstract final class DatabaseSchema {
   static String get migration4Checksum =>
       checksum(migration4Statements.join('\n;\n'));
 
+  static const String migration5Name = 'supplier_payments_v5';
+  static String get migration5Checksum =>
+      checksum(migration5Statements.join('\n;\n'));
+
   static String nameForVersion(int version) => switch (version) {
     1 => migrationName,
     2 => migration2Name,
     3 => migration3Name,
     4 => migration4Name,
+    5 => migration5Name,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -36,6 +41,7 @@ abstract final class DatabaseSchema {
     2 => migration2Checksum,
     3 => migration3Checksum,
     4 => migration4Checksum,
+    5 => migration5Checksum,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -1291,6 +1297,471 @@ END
     ..._freezeCollectionJournal(),
     ..._freezeCollectionCatalogs(),
   ]);
+
+  /// Released V1 through V4 remain permanent inputs; payments append facts.
+  static final List<String> migration5Statements = List<String>.unmodifiable([
+    '''
+CREATE TABLE supplier_payment_requests (
+  command_id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(command_id)) > 0),
+  canonical_payload TEXT NOT NULL CHECK (length(trim(canonical_payload)) > 0),
+  payable_id TEXT NOT NULL REFERENCES obligations(id) ON DELETE RESTRICT,
+  occurred_at_utc TEXT NOT NULL CHECK (${_collectionUtc('occurred_at_utc')}),
+  prepared_at_utc TEXT NOT NULL CHECK (${_collectionUtc('prepared_at_utc')}),
+  status TEXT NOT NULL CHECK (status IN ('prepared', 'rejected', 'cancelled', 'confirmed')),
+  rejection_reason TEXT,
+  CHECK ((status IN ('prepared', 'confirmed') AND rejection_reason IS NULL)
+    OR (status IN ('rejected', 'cancelled') AND rejection_reason IS NOT NULL
+      AND length(trim(rejection_reason)) > 0))
+)
+''',
+    '''
+CREATE TABLE supplier_payments (
+  document_id TEXT PRIMARY KEY NOT NULL REFERENCES business_documents(id) ON DELETE RESTRICT,
+  payable_id TEXT NOT NULL REFERENCES obligations(id) ON DELETE RESTRICT,
+  purchase_label_snapshot TEXT NOT NULL CHECK (length(trim(purchase_label_snapshot)) BETWEEN 1 AND 160),
+  supplier_name_snapshot TEXT NOT NULL CHECK (length(trim(supplier_name_snapshot)) BETWEEN 1 AND 160),
+  paid_at_utc TEXT NOT NULL CHECK (${_collectionUtc('paid_at_utc')}),
+  total_minor INTEGER NOT NULL CHECK (typeof(total_minor) = 'integer' AND total_minor > 0),
+  remaining_minor INTEGER NOT NULL CHECK (typeof(remaining_minor) = 'integer' AND remaining_minor >= 0)
+)
+''',
+    '''
+CREATE TABLE supplier_payment_parts (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  supplier_payment_id TEXT NOT NULL REFERENCES supplier_payments(document_id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  cash_account_id TEXT NOT NULL REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  payment_method_id TEXT NOT NULL REFERENCES payment_methods(id) ON DELETE RESTRICT,
+  cash_account_name_snapshot TEXT NOT NULL CHECK (length(trim(cash_account_name_snapshot)) BETWEEN 1 AND 160),
+  cash_account_kind_snapshot TEXT NOT NULL CHECK (cash_account_kind_snapshot IN ('cash', 'bank', 'mobile', 'clearing')),
+  payment_method_code_snapshot TEXT NOT NULL CHECK (length(trim(payment_method_code_snapshot)) BETWEEN 1 AND 32),
+  payment_method_name_snapshot TEXT NOT NULL CHECK (length(trim(payment_method_name_snapshot)) BETWEEN 1 AND 160),
+  amount_minor INTEGER NOT NULL CHECK (typeof(amount_minor) = 'integer' AND amount_minor > 0),
+  UNIQUE (supplier_payment_id, sequence)
+)
+''',
+    '''
+CREATE TABLE payable_settlements (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  payable_id TEXT NOT NULL REFERENCES obligations(id) ON DELETE RESTRICT,
+  supplier_payment_id TEXT NOT NULL UNIQUE REFERENCES supplier_payments(document_id) ON DELETE RESTRICT,
+  amount_minor INTEGER NOT NULL CHECK (typeof(amount_minor) = 'integer' AND amount_minor > 0)
+)
+''',
+    'CREATE INDEX idx_supplier_payments_payable ON supplier_payments(payable_id)',
+    'CREATE INDEX idx_supplier_payment_parts_cash ON supplier_payment_parts(cash_account_id)',
+    'CREATE INDEX idx_settlements_payable ON payable_settlements(payable_id)',
+    '''
+CREATE TRIGGER supplier_payment_requests_validate_insert
+BEFORE INSERT ON supplier_payment_requests
+BEGIN
+  SELECT CASE WHEN NEW.status <> 'prepared'
+    OR EXISTS (SELECT 1 FROM supplier_payment_requests WHERE command_id = NEW.command_id)
+    OR EXISTS (SELECT 1 FROM command_log WHERE id = NEW.command_id)
+    OR EXISTS (SELECT 1 FROM sale_confirmations WHERE command_id = NEW.command_id)
+    OR EXISTS (SELECT 1 FROM collection_requests WHERE command_id = NEW.command_id)
+    THEN RAISE(ABORT, 'Create a unique prepared supplier_payment request') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM obligations r
+    JOIN business_documents d ON d.id = r.origin_document_id
+    JOIN journal_entries j ON j.document_id = d.id
+    WHERE r.id = NEW.payable_id AND d.status = 'posted' AND j.status = 'posted')
+    THEN RAISE(ABORT, 'A supplier_payment request requires a confirmed supplier payable') END;
+END
+''',
+    '''
+CREATE TRIGGER supplier_payment_requests_validate_update
+BEFORE UPDATE ON supplier_payment_requests
+BEGIN
+  SELECT CASE WHEN NEW.command_id <> OLD.command_id
+    OR NEW.canonical_payload <> OLD.canonical_payload
+    OR NEW.payable_id <> OLD.payable_id
+    OR NEW.occurred_at_utc <> OLD.occurred_at_utc
+    OR NEW.prepared_at_utc <> OLD.prepared_at_utc
+    THEN RAISE(ABORT, 'Prepared supplier_payment input is immutable') END;
+  SELECT CASE WHEN NOT ((OLD.status = 'prepared' AND NEW.status IN ('rejected', 'confirmed'))
+    OR (OLD.status = 'rejected' AND NEW.status = 'cancelled'))
+    THEN RAISE(ABORT, 'Invalid supplier_payment request transition') END;
+  SELECT CASE WHEN NEW.status IN ('rejected', 'cancelled')
+    AND EXISTS (SELECT 1 FROM command_log WHERE id = OLD.command_id)
+    THEN RAISE(ABORT, 'A committed supplier_payment cannot be rejected or cancelled') END;
+  SELECT CASE WHEN NEW.status = 'cancelled' AND NEW.rejection_reason IS NOT OLD.rejection_reason
+    THEN RAISE(ABORT, 'The supplier_payment rejection reason is historical') END;
+  SELECT CASE WHEN NEW.status = 'confirmed' AND NOT EXISTS (
+    SELECT 1 FROM business_documents d JOIN supplier_payments c ON c.document_id = d.id
+    JOIN journal_entries j ON j.document_id = d.id
+    WHERE d.command_id = OLD.command_id AND c.payable_id = OLD.payable_id
+      AND d.type = 'supplier_payment' AND d.status = 'posted' AND j.status = 'posted')
+    THEN RAISE(ABORT, 'Post a supplier_payment and its journal before completing its request') END;
+END
+''',
+    '''
+CREATE TRIGGER supplier_payment_requests_no_delete
+BEFORE DELETE ON supplier_payment_requests
+BEGIN
+  SELECT RAISE(ABORT, 'Prepared supplier_payment inputs cannot be deleted');
+END
+''',
+    '''
+CREATE TRIGGER supplier_payment_requests_reserve_command_id
+BEFORE INSERT ON command_log
+WHEN EXISTS (SELECT 1 FROM supplier_payment_requests c WHERE c.command_id = NEW.id
+  AND (NEW.command_type <> 'pay_supplier' OR c.status <> 'prepared'))
+BEGIN
+  SELECT RAISE(ABORT, 'A prepared supplier_payment command identifier is reserved for its supplier_payment');
+END
+''',
+    '''
+CREATE TRIGGER sale_confirmations_reject_supplier_payment_command
+BEFORE INSERT ON sale_confirmations
+WHEN EXISTS (SELECT 1 FROM supplier_payment_requests WHERE command_id = NEW.command_id)
+BEGIN
+  SELECT RAISE(ABORT, 'SupplierPayment request command identifiers cannot be reused for sales');
+END
+''',
+    '''
+CREATE TRIGGER collection_requests_reject_supplier_payment_command
+BEFORE INSERT ON collection_requests
+WHEN EXISTS (SELECT 1 FROM supplier_payment_requests WHERE command_id = NEW.command_id)
+BEGIN
+  SELECT RAISE(ABORT, 'Supplier payment command identifiers cannot be reused for collections');
+END
+''',
+    '''
+CREATE TRIGGER supplier_payments_documents_insert_as_draft
+BEFORE INSERT ON business_documents
+WHEN NEW.type = 'supplier_payment' AND NEW.status <> 'draft'
+BEGIN
+  SELECT RAISE(ABORT, 'Create a supplier_payment document as draft before posting');
+END
+''',
+    '''
+CREATE TRIGGER supplier_payments_documents_no_replace
+BEFORE INSERT ON business_documents
+WHEN EXISTS (SELECT 1 FROM business_documents d
+  WHERE (d.id = NEW.id OR (d.command_id = NEW.command_id AND d.command_sequence = NEW.command_sequence))
+    AND d.type = 'supplier_payment' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed supplier_payment documents cannot be replaced');
+END
+''',
+    '''
+CREATE TRIGGER supplier_payments_documents_no_conflicting_update
+BEFORE UPDATE ON business_documents
+WHEN EXISTS (SELECT 1 FROM business_documents d
+  WHERE d.id <> OLD.id AND (d.id = NEW.id OR
+    (d.command_id = NEW.command_id AND d.command_sequence = NEW.command_sequence))
+    AND d.type = 'supplier_payment' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed supplier_payment documents cannot be replaced through an update');
+END
+''',
+    '''
+CREATE TRIGGER supplier_payments_require_draft_document
+BEFORE INSERT ON supplier_payments
+WHEN NOT EXISTS (SELECT 1 FROM business_documents WHERE id = NEW.document_id
+  AND type = 'supplier_payment' AND status = 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'A supplier_payment requires a draft supplier_payment document');
+END
+''',
+    '''
+CREATE TRIGGER supplier_payments_validate_document_posting
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status = 'draft' AND NEW.status = 'posted' AND
+  (NEW.type = 'supplier_payment' OR EXISTS (SELECT 1 FROM supplier_payments WHERE document_id = NEW.id))
+BEGIN
+  SELECT CASE WHEN NEW.type <> 'supplier_payment' OR NEW.command_sequence <> 0
+    OR NOT EXISTS (SELECT 1 FROM command_log c WHERE c.id = NEW.command_id
+      AND c.command_type = 'pay_supplier' AND c.actor_id = NEW.actor_id
+      AND c.authorization_policy_version = 'development-single-user-v1')
+    THEN RAISE(ABORT, 'Invalid supplier_payment command or document type') END;
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM supplier_payments c JOIN obligations r ON r.id = c.payable_id
+    JOIN purchases p ON p.document_id = r.origin_document_id
+    JOIN business_documents purchase_doc ON purchase_doc.id = p.document_id
+    JOIN journal_entries purchase_entry ON purchase_entry.document_id = purchase_doc.id
+    JOIN ledger_accounts a ON a.id = r.control_account_id
+    JOIN supplier_payment_requests request ON request.command_id = NEW.command_id
+    WHERE c.document_id = NEW.id AND request.status = 'prepared'
+      AND request.payable_id = c.payable_id
+      AND c.purchase_label_snapshot = coalesce(p.supplier_reference, p.document_id)
+      AND c.supplier_name_snapshot = p.supplier_name_snapshot
+      AND c.paid_at_utc = request.occurred_at_utc
+      AND c.paid_at_utc = NEW.occurred_at_utc
+      AND ${_utcSortKey('c.paid_at_utc')} >= ${_utcSortKey('r.issued_at_utc')}
+      AND date(NEW.occurred_at_utc, '-5 hours') = NEW.business_date
+      AND purchase_doc.status = 'posted' AND purchase_entry.status = 'posted'
+      AND r.kind = 'supplier_payable' AND r.counterparty_id = p.supplier_id
+      AND a.class = 'liability' AND a.role = 'supplier_payable' AND a.is_active = 1)
+    THEN RAISE(ABORT, 'A supplier_payment must match its prepared request and confirmed payable') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM supplier_payments current
+    JOIN supplier_payments previous ON previous.payable_id = current.payable_id
+    JOIN business_documents d ON d.id = previous.document_id
+    WHERE current.document_id = NEW.id AND previous.document_id <> NEW.id AND d.status <> 'draft'
+      AND ${_utcSortKey('previous.paid_at_utc')} > ${_utcSortKey('current.paid_at_utc')})
+    THEN RAISE(ABORT, 'A supplier_payment cannot predate the latest confirmed supplier_payment') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM supplier_payment_parts WHERE supplier_payment_id = NEW.id)
+    OR ${_supplierBoundedRemainder('(SELECT total_minor FROM supplier_payments WHERE document_id = NEW.id)', 'supplier_payment_parts', 'supplier_payment_id = NEW.id', 'amount_minor', 'sequence')} <> 0
+    OR (SELECT min(sequence) FROM supplier_payment_parts WHERE supplier_payment_id = NEW.id) <> 0
+    OR (SELECT max(sequence) FROM supplier_payment_parts WHERE supplier_payment_id = NEW.id)
+      <> (SELECT count(*) - 1 FROM supplier_payment_parts WHERE supplier_payment_id = NEW.id)
+    OR EXISTS (SELECT 1 FROM supplier_payment_parts p
+      JOIN cash_accounts cash ON cash.id = p.cash_account_id
+      JOIN ledger_accounts a ON a.id = cash.ledger_account_id
+      JOIN payment_methods method ON method.id = p.payment_method_id
+      WHERE p.supplier_payment_id = NEW.id AND (cash.is_active <> 1 OR cash.is_available <> 1
+        OR p.cash_account_kind_snapshot <> cash.kind
+        OR a.is_active <> 1 OR a.class <> 'asset' OR a.role <> 'cash'
+        OR method.is_active <> 1 OR p.payment_method_code_snapshot <> method.code))
+    THEN RAISE(ABORT, 'Payment parts must sum exactly and use active available money accounts and methods') END;
+  SELECT CASE WHEN (SELECT count(*) FROM payable_settlements WHERE supplier_payment_id = NEW.id) <> 1
+    OR NOT EXISTS (SELECT 1 FROM payable_settlements settlement
+      JOIN supplier_payments c ON c.document_id = settlement.supplier_payment_id
+      JOIN obligations r ON r.id = c.payable_id
+      WHERE c.document_id = NEW.id AND settlement.payable_id = c.payable_id
+        AND settlement.amount_minor = c.total_minor
+        AND c.total_minor <= ${_supplierPriorPayableRemainder()}
+        AND c.remaining_minor = ${_supplierPriorPayableRemainder()} - c.total_minor)
+    THEN RAISE(ABORT, 'A settlement must apply the exact payment without overpaying its payable') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM supplier_payment_parts p
+    JOIN cash_accounts cash ON cash.id = p.cash_account_id
+    JOIN journal_lines line ON line.account_id = cash.ledger_account_id
+    JOIN journal_entries entry ON entry.id = line.entry_id
+    JOIN business_documents doc ON doc.id = entry.document_id
+    WHERE p.supplier_payment_id = NEW.id AND doc.id <> NEW.id
+      AND doc.status <> 'draft' AND entry.status = 'posted'
+      AND ${_utcSortKey('doc.occurred_at_utc')} > ${_utcSortKey('NEW.occurred_at_utc')})
+    THEN RAISE(ABORT, 'A payment cannot predate a confirmed money movement of its accounts') END;
+  SELECT CASE WHEN ${_supplierMoneyInsufficient()}
+    THEN RAISE(ABORT, 'A payment requires a sufficient representable balance in each money account') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM journal_entries e
+    WHERE e.document_id = NEW.id AND e.status = 'draft' AND e.cost_completeness = 'not_applicable')
+    THEN RAISE(ABORT, 'Prepare the supplier_payment journal before posting') END;
+  SELECT CASE WHEN (SELECT count(*) FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+      WHERE e.document_id = NEW.id) <> 1 + (SELECT count(DISTINCT a.ledger_account_id)
+        FROM supplier_payment_parts p JOIN cash_accounts a ON a.id = p.cash_account_id
+        WHERE p.supplier_payment_id = NEW.id)
+    OR (SELECT count(*) FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+      JOIN supplier_payments c ON c.document_id = e.document_id
+      JOIN obligations r ON r.id = c.payable_id
+      WHERE e.document_id = NEW.id AND l.account_id = r.control_account_id
+        AND l.debit_minor = c.total_minor AND l.credit_minor = 0) <> 1
+    OR EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+      JOIN supplier_payments c ON c.document_id = e.document_id
+      JOIN obligations r ON r.id = c.payable_id
+      WHERE e.document_id = NEW.id AND NOT (
+        (l.account_id = r.control_account_id AND l.debit_minor = c.total_minor AND l.credit_minor = 0)
+        OR (l.debit_minor = 0 AND l.credit_minor > 0 AND EXISTS (
+          SELECT 1 FROM supplier_payment_parts p JOIN cash_accounts a ON a.id = p.cash_account_id
+          WHERE p.supplier_payment_id = NEW.id AND a.ledger_account_id = l.account_id))))
+    OR EXISTS (SELECT 1 FROM supplier_payment_parts p JOIN cash_accounts a ON a.id = p.cash_account_id
+      WHERE p.supplier_payment_id = NEW.id AND (
+        (SELECT count(*) FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+          WHERE e.document_id = NEW.id AND l.account_id = a.ledger_account_id) <> 1
+        OR ${_supplierBoundedRemainder('(SELECT l.credit_minor FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id WHERE e.document_id = NEW.id AND l.account_id = a.ledger_account_id LIMIT 1)', 'supplier_payment_parts part JOIN cash_accounts other ON other.id = part.cash_account_id', 'part.supplier_payment_id = NEW.id AND other.ledger_account_id = a.ledger_account_id', 'part.amount_minor', 'part.sequence')} <> 0))
+    THEN RAISE(ABORT, 'A payment must debit only its payable and credit its exact money accounts') END;
+END
+''',
+    ..._freezeSupplierPaymentFacts(
+      'supplier_payments',
+      'document_id',
+      'existing.document_id = NEW.document_id',
+    ),
+    ..._freezeSupplierPaymentFacts(
+      'supplier_payment_parts',
+      'supplier_payment_id',
+      'existing.id = NEW.id OR (existing.supplier_payment_id = NEW.supplier_payment_id AND existing.sequence = NEW.sequence)',
+    ),
+    ..._freezeSupplierPaymentFacts(
+      'payable_settlements',
+      'supplier_payment_id',
+      'existing.id = NEW.id OR existing.supplier_payment_id = NEW.supplier_payment_id',
+    ),
+    ..._freezeSupplierPaymentJournal(),
+  ]);
+
+  // Subtract positive facts from an int64 budget rather than SUMming them.
+  // A malformed aggregate becomes -1 without overflowing or using floats.
+  static String _supplierBoundedRemainder(
+    String initial,
+    String source,
+    String condition,
+    String amount,
+    String order,
+  ) =>
+      '''(WITH RECURSIVE ordered AS (
+    SELECT $amount AS amount, row_number() OVER (ORDER BY $order) AS n
+    FROM $source WHERE $condition
+  ), budget(n, remaining) AS (
+    SELECT 0, $initial
+    UNION ALL
+    SELECT ordered.n, CASE WHEN ordered.amount <= budget.remaining
+      THEN budget.remaining - ordered.amount ELSE -1 END
+    FROM budget JOIN ordered ON ordered.n = budget.n + 1
+    WHERE budget.remaining >= 0
+  ) SELECT remaining FROM budget ORDER BY n DESC LIMIT 1)''';
+
+  static String _supplierPriorPayableRemainder() => _supplierBoundedRemainder(
+    'r.initial_minor',
+    'payable_settlements previous JOIN business_documents previous_doc '
+        'ON previous_doc.id = previous.supplier_payment_id',
+    "previous.payable_id = r.id AND previous.supplier_payment_id <> NEW.id "
+        "AND previous_doc.status <> 'draft'",
+    'previous.amount_minor',
+    'previous.supplier_payment_id',
+  );
+
+  // Preserve integer precision even when historical gross debits exceed int64.
+  // Each chronological intermediate must be representable; invalid historical
+  // balances are refused conservatively instead of wrapping or rounding.
+  static String _supplierMoneyInsufficient() =>
+      '''EXISTS (
+    WITH RECURSIVE accounts AS (
+      SELECT DISTINCT cash.id, cash.ledger_account_id
+      FROM supplier_payment_parts part JOIN cash_accounts cash ON cash.id = part.cash_account_id
+      WHERE part.supplier_payment_id = NEW.id
+    ), ordered AS (
+      SELECT account.id, line.debit_minor, line.credit_minor,
+        row_number() OVER (PARTITION BY account.id ORDER BY
+          ${_utcSortKey('doc.occurred_at_utc')}, doc.recorded_at_utc, doc.id, line.sequence) AS n
+      FROM accounts account JOIN journal_lines line ON line.account_id = account.ledger_account_id
+      JOIN journal_entries entry ON entry.id = line.entry_id
+      JOIN business_documents doc ON doc.id = entry.document_id
+      WHERE doc.id <> NEW.id AND doc.status <> 'draft'
+        AND (entry.status = 'posted' OR doc.type = 'supplier_payment')
+    ), balances(id, n, balance, valid) AS (
+      SELECT id, 0, 0, 1 FROM accounts
+      UNION ALL
+      SELECT prior.id, line.n,
+        CASE WHEN prior.valid = 0 THEN 0
+          WHEN line.debit_minor > 0 THEN CASE
+            WHEN prior.balance <= 9223372036854775807 - line.debit_minor
+              THEN prior.balance + line.debit_minor ELSE 0 END
+          ELSE CASE WHEN prior.balance >= -9223372036854775808 + line.credit_minor
+            THEN prior.balance - line.credit_minor ELSE 0 END END,
+        CASE WHEN prior.valid = 1 AND
+          ((line.debit_minor > 0 AND prior.balance <= 9223372036854775807 - line.debit_minor)
+          OR (line.credit_minor > 0 AND prior.balance >= -9223372036854775808 + line.credit_minor))
+          THEN 1 ELSE 0 END
+      FROM balances prior JOIN ordered line ON line.id = prior.id AND line.n = prior.n + 1
+    ) SELECT 1 FROM accounts account WHERE NOT EXISTS (
+      SELECT 1 FROM balances final WHERE final.id = account.id AND final.valid = 1
+        AND final.n = (SELECT count(*) FROM ordered WHERE id = account.id)
+        AND ${_supplierBoundedRemainder('final.balance', 'supplier_payment_parts part', 'part.supplier_payment_id = NEW.id AND part.cash_account_id = account.id', 'part.amount_minor', 'part.sequence')} >= 0)
+  )''';
+
+  static List<String> _freezeSupplierPaymentFacts(
+    String table,
+    String documentColumn,
+    String conflicts,
+  ) {
+    String confirmed(String row) =>
+        '''EXISTS (SELECT 1 FROM business_documents d
+WHERE d.id = $row.$documentColumn AND d.status <> 'draft')''';
+    final insertGuard = '''(${confirmed('NEW')} OR EXISTS (
+SELECT 1 FROM $table existing WHERE ($conflicts) AND ${confirmed('existing')}))''';
+    return [
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER ${table}_confirmed_no_${action.toLowerCase()}
+BEFORE $action ON $table
+WHEN ${action == 'INSERT'
+            ? insertGuard
+            : action == 'DELETE'
+            ? confirmed('OLD')
+            : '(${confirmed('OLD')} OR $insertGuard)'}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed supplier_payment history is immutable');
+END
+''',
+    ];
+  }
+
+  static List<String> _freezeSupplierPaymentJournal() {
+    String confirmed(String row) =>
+        '''EXISTS (SELECT 1 FROM business_documents d
+WHERE d.id = $row.document_id AND d.type = 'supplier_payment' AND d.status <> 'draft')''';
+    String linesConfirmed(String row) =>
+        '''EXISTS (SELECT 1 FROM journal_entries e
+JOIN business_documents d ON d.id = e.document_id
+WHERE e.id = $row.entry_id AND d.type = 'supplier_payment' AND d.status <> 'draft')''';
+    return [
+      '''
+CREATE TRIGGER supplier_payment_entries_confirmed_no_delete
+BEFORE DELETE ON journal_entries
+WHEN ${confirmed('OLD')}
+BEGIN
+  SELECT RAISE(ABORT, 'A confirmed supplier_payment requires its journal entry');
+END
+''',
+      '''
+CREATE TRIGGER supplier_payment_entries_confirmed_no_rewrite
+BEFORE UPDATE ON journal_entries
+WHEN ${confirmed('OLD')}
+  AND (NEW.id <> OLD.id OR NEW.document_id <> OLD.document_id
+    OR NEW.cost_completeness <> OLD.cost_completeness
+    OR NEW.reversal_of_id IS NOT OLD.reversal_of_id OR NEW.status <> 'posted')
+BEGIN
+  SELECT RAISE(ABORT, 'Only posting is allowed on a confirmed supplier_payment journal');
+END
+''',
+      '''
+CREATE TRIGGER supplier_payment_entries_confirmed_no_replace
+BEFORE INSERT ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries e JOIN business_documents d ON d.id = e.document_id
+  WHERE (e.id = NEW.id OR e.document_id = NEW.document_id)
+    AND d.type = 'supplier_payment' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed supplier_payment journal entries cannot be replaced');
+END
+''',
+      '''
+CREATE TRIGGER supplier_payment_entries_confirmed_no_conflicting_update
+BEFORE UPDATE ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries e JOIN business_documents d ON d.id = e.document_id
+  WHERE e.id <> OLD.id AND (e.id = NEW.id OR e.document_id = NEW.document_id)
+    AND d.type = 'supplier_payment' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed supplier_payment journal entries cannot be replaced through an update');
+END
+''',
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER supplier_payment_journal_lines_confirmed_no_${action.toLowerCase()}
+BEFORE $action ON journal_lines
+WHEN ${action == 'INSERT'
+            ? linesConfirmed('NEW')
+            : action == 'DELETE'
+            ? linesConfirmed('OLD')
+            : '(${linesConfirmed('OLD')} OR ${linesConfirmed('NEW')})'}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed supplier_payment journal lines are immutable');
+END
+''',
+      '''
+CREATE TRIGGER supplier_payment_journal_lines_confirmed_no_replace
+BEFORE INSERT ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+  JOIN business_documents d ON d.id = e.document_id
+  WHERE (l.id = NEW.id OR (l.entry_id = NEW.entry_id AND l.sequence = NEW.sequence))
+    AND d.type = 'supplier_payment' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed supplier_payment journal lines cannot be replaced');
+END
+''',
+      '''
+CREATE TRIGGER supplier_payment_journal_lines_confirmed_no_conflicting_update
+BEFORE UPDATE ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+  JOIN business_documents d ON d.id = e.document_id
+  WHERE l.id <> OLD.id AND (l.id = NEW.id OR (l.entry_id = NEW.entry_id AND l.sequence = NEW.sequence))
+    AND d.type = 'supplier_payment' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed supplier_payment journal lines cannot be replaced through an update');
+END
+''',
+    ];
+  }
 
   static String _collectionUtc(String column) =>
       "length($column) IN (24, 27) AND substr($column, 20, 1) = '.' "
