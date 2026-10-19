@@ -1,0 +1,23 @@
+{
+  "client_reference_date": "2026-10-18",
+  "timezone": "America/Bogota",
+  "checked_at_utc": "2026-10-19T03:15:38.4097979Z",
+  "original_revision": "b94861326bcd9936a9515c104897703cb4f65347",
+  "original_files_before": 193,
+  "original_files_after": 193,
+  "added": [],
+  "removed": [],
+  "changed": [],
+  "original_git_status": [],
+  "original_content_unchanged": true,
+  "new_repository_root": "C:/proyectos/valinor_sanctum_2",
+  "markdown_files": 11,
+  "local_links_checked": 249,
+  "source_line_links_checked": 232,
+  "link_issues": [],
+  "forbidden_artifacts": [],
+  "flutter_in_path": false,
+  "dart_in_path": false,
+  "application_tests_run": false,
+  "production_database_opened": false
+}

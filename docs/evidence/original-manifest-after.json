@@ -1,0 +1,972 @@
+{
+  "root": "C:/proyectos/valinor_ludoteca",
+  "algorithm": "SHA-256",
+  "scope": "All regular files including .git; content only, not access timestamps",
+  "files": [
+    {
+      "Path": ".gitignore",
+      "Length": 754,
+      "Sha256": "A01D0E0344E9AB40BD0543C52CD0631E153D7A85B9F27C0089C2F23A73EEF89B"
+    },
+    {
+      "Path": ".metadata",
+      "Length": 1751,
+      "Sha256": "342894018E57876007AB5A48DEADBEE89BE6FC8E5C9179928EFBC5FCDB25A3DA"
+    },
+    {
+      "Path": "analysis_options.yaml",
+      "Length": 1448,
+      "Sha256": "B63207CF529949EC4727B68C23DBB38CE255B6F6F4AE1EFFCB5C1DCF2852D238"
+    },
+    {
+      "Path": "pubspec.lock",
+      "Length": 13079,
+      "Sha256": "0AD295A1F7B6B94889D3D45F4EB8B4A6BCA3DC7F314869695A5D60903B181FCE"
+    },
+    {
+      "Path": "pubspec.yaml",
+      "Length": 4139,
+      "Sha256": "ADD4D31F77005E552138B4FD332546301830FCAF119DF92A37F9E95E76AD45B4"
+    },
+    {
+      "Path": "README.md",
+      "Length": 583,
+      "Sha256": "93D0F0968633B68421F23A3DBB03A6E67CDD49A720E898468756CD23D4874FAA"
+    },
+    {
+      "Path": "ValinorLudotecaInstaller.iss",
+      "Length": 669,
+      "Sha256": "14987F941371FDDAFB430D9C4E19A521D4CB84CA47854246F3C66FF1ED5D3342"
+    },
+    {
+      "Path": ".git\\config",
+      "Length": 307,
+      "Sha256": "8A978829836D835D0C54E5D8FE19ED017CC4FD0C486A13C3ADAB11595AB306BF"
+    },
+    {
+      "Path": ".git\\description",
+      "Length": 73,
+      "Sha256": "85AB6C163D43A17EA9CF7788308BCA1466F1B0A8D1CC92E26E9BF63DA4062AEE"
+    },
+    {
+      "Path": ".git\\HEAD",
+      "Length": 21,
+      "Sha256": "28D25BF82AF4C0E2B72F50959B2BEB859E3E60B9630A5E8C603DAD4DDB2B6E80"
+    },
+    {
+      "Path": ".git\\index",
+      "Length": 20392,
+      "Sha256": "CB2030AE0F4E61F0CCD224639B3CF83D89A6DD732576894FC35029FEEEEF48AA"
+    },
+    {
+      "Path": ".git\\packed-refs",
+      "Length": 668,
+      "Sha256": "885342A2D524AF6734831E7D3DAEC131961823F9FAC6237F0916151973BAB0C7"
+    },
+    {
+      "Path": ".git\\hooks\\applypatch-msg.sample",
+      "Length": 478,
+      "Sha256": "0223497A0B8B033AA58A3A521B8629869386CF7AB0E2F101963D328AA62193F7"
+    },
+    {
+      "Path": ".git\\hooks\\commit-msg.sample",
+      "Length": 1972,
+      "Sha256": "EFC1401B0E99D1FF51494D154D98B46C1E99059BCD8BF9F73CECDE19FD3EB23B"
+    },
+    {
+      "Path": ".git\\hooks\\fsmonitor-watchman.sample",
+      "Length": 4611,
+      "Sha256": "9159720099AD5595B8E66645CBFD47763C1E920F46E0B50AE75E642BBEC57EF0"
+    },
+    {
+      "Path": ".git\\hooks\\post-update.sample",
+      "Length": 189,
+      "Sha256": "81765AF2DAEF323061DCBC5E61FC16481CB74B3BAC9AD8A174B186523586F6C5"
+    },
+    {
+      "Path": ".git\\hooks\\pre-applypatch.sample",
+      "Length": 424,
+      "Sha256": "E15C5B469EA3E0A695BEA6F2C82BCF8E62821074939DDD85B77E0007FF165475"
+    },
+    {
+      "Path": ".git\\hooks\\pre-commit.sample",
+      "Length": 1649,
+      "Sha256": "57185B7B9F05239D7AB52DB045F5B89EB31348D7B2177EAB214F5EB872E1971B"
+    },
+    {
+      "Path": ".git\\hooks\\pre-merge-commit.sample",
+      "Length": 416,
+      "Sha256": "D3825A70337940EBBD0A5C072984E13245920CDF8898BD225C8D27A6DFC9CB53"
+    },
+    {
+      "Path": ".git\\hooks\\pre-push.sample",
+      "Length": 1374,
+      "Sha256": "ECCE9C7E04D3F5DD9D8ADA81753DD1D549A9634B26770042B58DDA00217D086A"
+    },
+    {
+      "Path": ".git\\hooks\\pre-rebase.sample",
+      "Length": 4898,
+      "Sha256": "4FEBCE867790052338076F4E66CC47EFB14879D18097D1D61C8261859EAAA7B3"
+    },
+    {
+      "Path": ".git\\hooks\\pre-receive.sample",
+      "Length": 544,
+      "Sha256": "A4C3D2B9C7BB3FD8D1441C31BD4EE71A595D66B44FCF49DDB310252320169989"
+    },
+    {
+      "Path": ".git\\hooks\\prepare-commit-msg.sample",
+      "Length": 1492,
+      "Sha256": "E9DDCAA4189FDDD25ED97FC8C789ECA7B6CA16390B2392AE3276F0C8E1AA4619"
+    },
+    {
+      "Path": ".git\\hooks\\push-to-checkout.sample",
+      "Length": 2783,
+      "Sha256": "A53D0741798B287C6DD7AFA64AEE473F305E65D3F49463BB9D7408EC3B12BF5F"
+    },
+    {
+      "Path": ".git\\hooks\\sendemail-validate.sample",
+      "Length": 2308,
+      "Sha256": "44EBFC923DC5466BC009602F0ECF067B9C65459ABFE8868DDC49B78E6CED7A92"
+    },
+    {
+      "Path": ".git\\hooks\\update.sample",
+      "Length": 3650,
+      "Sha256": "8D5F2FA83E103CF08B57EAA67521DF9194F45CBDBCB37DA52AD586097A14D106"
+    },
+    {
+      "Path": ".git\\info\\exclude",
+      "Length": 240,
+      "Sha256": "6671FE83B7A07C8932EE89164D1F2793B2318058EB8B98DC5C06EE0A5A3B0EC1"
+    },
+    {
+      "Path": ".git\\logs\\HEAD",
+      "Length": 199,
+      "Sha256": "C07B7A6F6965315E7721E5BA5C8E5FE665998EA32EF2B8ECC8FF93DAF4229ACA"
+    },
+    {
+      "Path": ".git\\logs\\refs\\heads\\main",
+      "Length": 199,
+      "Sha256": "C07B7A6F6965315E7721E5BA5C8E5FE665998EA32EF2B8ECC8FF93DAF4229ACA"
+    },
+    {
+      "Path": ".git\\logs\\refs\\remotes\\origin\\HEAD",
+      "Length": 199,
+      "Sha256": "C07B7A6F6965315E7721E5BA5C8E5FE665998EA32EF2B8ECC8FF93DAF4229ACA"
+    },
+    {
+      "Path": ".git\\objects\\pack\\pack-42bb95262c9887f8c8cc4e138d2c62f01e381646.idx",
+      "Length": 18544,
+      "Sha256": "6080309DE33B8BFE9A152BE7662959E53F8FBE71209CA7076DAAB9159A2DC502"
+    },
+    {
+      "Path": ".git\\objects\\pack\\pack-42bb95262c9887f8c8cc4e138d2c62f01e381646.pack",
+      "Length": 41793761,
+      "Sha256": "A46BA18A272DE420D09AF78575DF56DCDEB1C400CB3365118D8DCD1C169C60EE"
+    },
+    {
+      "Path": ".git\\objects\\pack\\pack-42bb95262c9887f8c8cc4e138d2c62f01e381646.rev",
+      "Length": 2548,
+      "Sha256": "A63C72A611D42C4E4C9AD0631CD7A3ABCB84E162F746FE840A6833F661919683"
+    },
+    {
+      "Path": ".git\\refs\\codex\\turn-diffs\\captures\\1792379021883\\37244b47-2ae2-4be8-ae25-ae1b591411f8\\base",
+      "Length": 41,
+      "Sha256": "7AAC786058B52B7A3EA00152B43C2D18BBE59358BF55A166EACCB669A6CF97FF"
+    },
+    {
+      "Path": ".git\\refs\\codex\\turn-diffs\\checkpoints\\4bf5fc4b72386320c65b06632ced6247\\c81521ca2707fe0a652efcb4798d15d5\\1792377071417\\5e80984d-d877-4637-87a5-6b1da0163e1b",
+      "Length": 41,
+      "Sha256": "7AAC786058B52B7A3EA00152B43C2D18BBE59358BF55A166EACCB669A6CF97FF"
+    },
+    {
+      "Path": ".git\\refs\\heads\\main",
+      "Length": 41,
+      "Sha256": "D46C4CABAB6EED374836AEBEF75456003DC5F2275695DB764EAC5D9C61D8ED50"
+    },
+    {
+      "Path": ".git\\refs\\remotes\\origin\\HEAD",
+      "Length": 30,
+      "Sha256": "2BB6A24AA0FC6C484100F5D51A29BBAD841CD2C755F5D93FAA204E5DBB4EB2B4"
+    },
+    {
+      "Path": ".github\\workflows\\flutter_build.yml",
+      "Length": 984,
+      "Sha256": "BA8EC1E92FC9EBCE42D8258D6AFFDF6D772EED1AA48252C003805AE0584A4CE9"
+    },
+    {
+      "Path": "android\\.gitignore",
+      "Length": 267,
+      "Sha256": "C9AF75DBC2C8AA867476A09426C80B178C4AEED8B9393AE48503EEDFA3273D71"
+    },
+    {
+      "Path": "android\\build.gradle.kts",
+      "Length": 536,
+      "Sha256": "5EF49C8E4A3966B474C82207C2151484DBC0DB84AE6B110401879D398AC1E4F6"
+    },
+    {
+      "Path": "android\\gradle.properties",
+      "Length": 169,
+      "Sha256": "8C571C20E6B82D16E64D0A14320DB39367BA7D85AF2ECF3100F369459E1C0C8F"
+    },
+    {
+      "Path": "android\\settings.gradle.kts",
+      "Length": 763,
+      "Sha256": "F6DED0C0EE59C7B91C26E4A02D6EBDB2B5D153F5D070CFD761560813F7AAD15D"
+    },
+    {
+      "Path": "android\\app\\build.gradle.kts",
+      "Length": 1464,
+      "Sha256": "645B2E41829C9260D15847D7FF3D0378552492772F73F9A736DC3E53681D002C"
+    },
+    {
+      "Path": "android\\app\\src\\debug\\AndroidManifest.xml",
+      "Length": 385,
+      "Sha256": "B01A4541A8144C15BC617BAB7EB267C99FA1476368FBBDA5A12CDBF4E316A34C"
+    },
+    {
+      "Path": "android\\app\\src\\main\\AndroidManifest.xml",
+      "Length": 2257,
+      "Sha256": "5C2F1139A9764CA64F5CD61169D8880612EB97A1E02D8E2AC9497015152ADAD2"
+    },
+    {
+      "Path": "android\\app\\src\\main\\kotlin\\com\\example\\valinor_ludoteca_desktop\\MainActivity.kt",
+      "Length": 143,
+      "Sha256": "081EDAC024A1D85A022FC900F787789D56024AA92D9EFA527A4EBB9A8C352406"
+    },
+    {
+      "Path": "android\\app\\src\\main\\res\\drawable\\launch_background.xml",
+      "Length": 446,
+      "Sha256": "2DF60E2CFBEE873CE2858088CF003E6B93498F2F568476DA437610467EA1A9D7"
+    },
+    {
+      "Path": "android\\app\\src\\main\\res\\drawable-v21\\launch_background.xml",
+      "Length": 450,
+      "Sha256": "DCA312EC77DE83E43EF70A825C299B51451247286C29167D62F19165750B8793"
+    },
+    {
+      "Path": "android\\app\\src\\main\\res\\mipmap-hdpi\\ic_launcher.png",
+      "Length": 544,
+      "Sha256": "6A7C8F0D703E3682108F9662F813302236240D3F8F638BB391E32BFB96055FEF"
+    },
+    {
+      "Path": "android\\app\\src\\main\\res\\mipmap-mdpi\\ic_launcher.png",
+      "Length": 442,
+      "Sha256": "C7C0C0189145E4E32A401C61C9BDC615754B0264E7AFAE24E834BB81049EAF81"
+    },
+    {
+      "Path": "android\\app\\src\\main\\res\\mipmap-xhdpi\\ic_launcher.png",
+      "Length": 721,
+      "Sha256": "E14AA40904929BF313FDED22CF7E7FFCBF1D1AAC4263B5EF1BE8BFCE650397AA"
+    },
+    {
+      "Path": "android\\app\\src\\main\\res\\mipmap-xxhdpi\\ic_launcher.png",
+      "Length": 1031,
+      "Sha256": "4D470BF22D5C17D84EDC5F82516D1BA8A1C09559CD761CEFB792F86D9F52B540"
+    },
+    {
+      "Path": "android\\app\\src\\main\\res\\mipmap-xxxhdpi\\ic_launcher.png",
+      "Length": 1443,
+      "Sha256": "3C34E1F298D0C9EA3455D46DB6B7759C8211A49E9EC6E44B635FC5C87DFB4180"
+    },
+    {
+      "Path": "android\\app\\src\\main\\res\\values\\styles.xml",
+      "Length": 1014,
+      "Sha256": "CCA15A99B59380A548BF6A890F7CA5380EE509B1F9BBB2F5F9EC3589FA25C2F7"
+    },
+    {
+      "Path": "android\\app\\src\\main\\res\\values-night\\styles.xml",
+      "Length": 1013,
+      "Sha256": "EA763597DC1A84C8034251CAEE98D7753E0FBF57340FFC94677427DE4B537516"
+    },
+    {
+      "Path": "android\\app\\src\\profile\\AndroidManifest.xml",
+      "Length": 385,
+      "Sha256": "B01A4541A8144C15BC617BAB7EB267C99FA1476368FBBDA5A12CDBF4E316A34C"
+    },
+    {
+      "Path": "android\\gradle\\wrapper\\gradle-wrapper.properties",
+      "Length": 206,
+      "Sha256": "A23FAF39F936281E98C22C568A812DED3684A61FCF683BBD1AAC2E85691622AC"
+    },
+    {
+      "Path": "assets\\logo_valinor.png",
+      "Length": 641497,
+      "Sha256": "1778B43857156646F41EC6777336AB9C85DCA2446AE5048003639832186365F2"
+    },
+    {
+      "Path": "ios\\.gitignore",
+      "Length": 603,
+      "Sha256": "E85B4DB8BA6ED14708E5F7D3C60336E5A3067CE11329B84AA8BA5D98603EE253"
+    },
+    {
+      "Path": "ios\\Flutter\\AppFrameworkInfo.plist",
+      "Length": 800,
+      "Sha256": "5309426F22A74C9135D09DE49B310CE7174BE4D378AF844B70B78C14FA872279"
+    },
+    {
+      "Path": "ios\\Flutter\\Debug.xcconfig",
+      "Length": 31,
+      "Sha256": "C0D1DA54718E75F2028962B689258ECC741ABF7CDAED50483AA5225264D0A7D7"
+    },
+    {
+      "Path": "ios\\Flutter\\Release.xcconfig",
+      "Length": 31,
+      "Sha256": "C0D1DA54718E75F2028962B689258ECC741ABF7CDAED50483AA5225264D0A7D7"
+    },
+    {
+      "Path": "ios\\Runner\\AppDelegate.swift",
+      "Length": 404,
+      "Sha256": "13E99DAB5435148EFC15D9177BA505DA3D24859A6BA663767510622FDF7A97FA"
+    },
+    {
+      "Path": "ios\\Runner\\Info.plist",
+      "Length": 1724,
+      "Sha256": "73BE4448550D15C9ED9BD51FA43B30EBF3E2E9BD94734381CE6753215A1995A4"
+    },
+    {
+      "Path": "ios\\Runner\\Runner-Bridging-Header.h",
+      "Length": 39,
+      "Sha256": "EFE657D8B27F7F8595A0D416BFFB33FE7D93BD2869D81F7353B556C439D7A1A7"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Contents.json",
+      "Length": 2641,
+      "Sha256": "5F8B941B774BDE4496D73347C1F79CBDD786BB76FBDAB9ED1F3F0CB78A0FB0D3"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-1024x1024@1x.png",
+      "Length": 10932,
+      "Sha256": "7770183009E914112DE7D8EF1D235A6A30C5834424858E0D2F8253F6B8D31926"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-20x20@1x.png",
+      "Length": 295,
+      "Sha256": "CAB10A0D391EC5BC09EF50CE49E8AD401CEE7EF03707EC0923A222C5C2B3D212"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-20x20@2x.png",
+      "Length": 406,
+      "Sha256": "B9AD02CF6576A04D1B6806AC02A2431481B448DD0C2E505CE25842D1F7C4730B"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-20x20@3x.png",
+      "Length": 450,
+      "Sha256": "C6E6D3B215AE744A9C391F4C4D44157EFF5E739D6AD6C39F9BFA5DF66DDDD267"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-29x29@1x.png",
+      "Length": 282,
+      "Sha256": "5DEE24DC104AC76DC162E42AE0BEB163D426BF365562EE28BA7B3AD368559A60"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-29x29@2x.png",
+      "Length": 462,
+      "Sha256": "A9B21EB6F4271385655A8771F76E29EEF8C1107D7879CBCFC567E6619D1F716A"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-29x29@3x.png",
+      "Length": 704,
+      "Sha256": "E677D701FFE4AF7BC2935098D6B3984CC9AB7ACE573E6900955A5535B12410CF"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-40x40@1x.png",
+      "Length": 406,
+      "Sha256": "B9AD02CF6576A04D1B6806AC02A2431481B448DD0C2E505CE25842D1F7C4730B"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-40x40@2x.png",
+      "Length": 586,
+      "Sha256": "7C61C42FC7B657D9CF314D32A4EC458F0647C3AAF360BE1B9377857266EC2499"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-40x40@3x.png",
+      "Length": 862,
+      "Sha256": "19BE171481DC71A0B2803EBCD01DD8B0C5FD5778DEE34C0A3CABC948C225F24E"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-60x60@2x.png",
+      "Length": 862,
+      "Sha256": "19BE171481DC71A0B2803EBCD01DD8B0C5FD5778DEE34C0A3CABC948C225F24E"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-60x60@3x.png",
+      "Length": 1674,
+      "Sha256": "4209A49E44A92EC40A327D3455EB1B1C153EE83D75DE1C2BE0A12AB18B2FF9DE"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-76x76@1x.png",
+      "Length": 762,
+      "Sha256": "836C918CB613249EBA0483A6B02FA3DF3C1C0A89A315EE4D3B88509B83C7AB73"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-76x76@2x.png",
+      "Length": 1226,
+      "Sha256": "41C7D42F6E61F8FE7F30B1FFA2256AECBC9682BE06D18C4A3062043E1A2E547C"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-83.5x83.5@2x.png",
+      "Length": 1418,
+      "Sha256": "5D7E5BDF01B93802BC973345B3A78C038907147625035952A08A115A563B7F81"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\Contents.json",
+      "Length": 414,
+      "Sha256": "FBD112A9F3B541A1D811F71AC8E4FE68B6176687D973A5F4D99B7AA4A722E94E"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\LaunchImage.png",
+      "Length": 68,
+      "Sha256": "93AE7D494FAD0FB30CBF3AE746A39C4BC7A0F8BBF87FBB587A3F3C01F3C5CE20"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\LaunchImage@2x.png",
+      "Length": 68,
+      "Sha256": "93AE7D494FAD0FB30CBF3AE746A39C4BC7A0F8BBF87FBB587A3F3C01F3C5CE20"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\LaunchImage@3x.png",
+      "Length": 68,
+      "Sha256": "93AE7D494FAD0FB30CBF3AE746A39C4BC7A0F8BBF87FBB587A3F3C01F3C5CE20"
+    },
+    {
+      "Path": "ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\README.md",
+      "Length": 340,
+      "Sha256": "853AC958E2416FE2540F6F61165283A3618B71A7BA5F85F65AC41C2158DFCD21"
+    },
+    {
+      "Path": "ios\\Runner\\Base.lproj\\LaunchScreen.storyboard",
+      "Length": 2414,
+      "Sha256": "BC3644FBB251FF1E18DE25A4932C927850AE1A025BE3DD1447940429633FE4B2"
+    },
+    {
+      "Path": "ios\\Runner\\Base.lproj\\Main.storyboard",
+      "Length": 1631,
+      "Sha256": "DCEA4686C02065E56217FD19FCFB73D7509B41872E7486126149D47A18559363"
+    },
+    {
+      "Path": "ios\\Runner.xcodeproj\\project.pbxproj",
+      "Length": 24354,
+      "Sha256": "052D095AFE0420990EA32A7138B34A46BBCC0CEE07DA42FD473EFB6A2881F6EE"
+    },
+    {
+      "Path": "ios\\Runner.xcodeproj\\project.xcworkspace\\contents.xcworkspacedata",
+      "Length": 142,
+      "Sha256": "AC28B35C2B940210BEC0FFF8E424B07FD0EFE9112AB178A10533583F251A386C"
+    },
+    {
+      "Path": "ios\\Runner.xcodeproj\\project.xcworkspace\\xcshareddata\\IDEWorkspaceChecks.plist",
+      "Length": 246,
+      "Sha256": "D557C2C32FC6258EC28981FA45DC847B76C9968BEB90A2E26D13EF9C4EA45C30"
+    },
+    {
+      "Path": "ios\\Runner.xcodeproj\\project.xcworkspace\\xcshareddata\\WorkspaceSettings.xcsettings",
+      "Length": 234,
+      "Sha256": "DD64C0308AB2971C456871B990B24A008BDC3ECE09833E8DBE9675E33A496E74"
+    },
+    {
+      "Path": "ios\\Runner.xcodeproj\\xcshareddata\\xcschemes\\Runner.xcscheme",
+      "Length": 3934,
+      "Sha256": "570C49FD61C67330EFB75097018D1B0DF0C68D03667631105A5ACF5621112B1B"
+    },
+    {
+      "Path": "ios\\Runner.xcworkspace\\contents.xcworkspacedata",
+      "Length": 159,
+      "Sha256": "706A4C812F2A1E220E6785C27580020D58048E2AE4D30D1280F3C43344CE6B38"
+    },
+    {
+      "Path": "ios\\Runner.xcworkspace\\xcshareddata\\IDEWorkspaceChecks.plist",
+      "Length": 246,
+      "Sha256": "D557C2C32FC6258EC28981FA45DC847B76C9968BEB90A2E26D13EF9C4EA45C30"
+    },
+    {
+      "Path": "ios\\Runner.xcworkspace\\xcshareddata\\WorkspaceSettings.xcsettings",
+      "Length": 234,
+      "Sha256": "DD64C0308AB2971C456871B990B24A008BDC3ECE09833E8DBE9675E33A496E74"
+    },
+    {
+      "Path": "ios\\RunnerTests\\RunnerTests.swift",
+      "Length": 297,
+      "Sha256": "C0E04141287EB7F9C9F3D31CF5BE8CB626A9EA71351206C9121578E8B8F480C3"
+    },
+    {
+      "Path": "lib\\main.dart",
+      "Length": 4531,
+      "Sha256": "C9F599A0FC33199F49F905D5AD93E2D31326DA26CD15E634FEE8C27C50BC0894"
+    },
+    {
+      "Path": "lib\\db\\database_helper.dart",
+      "Length": 13741,
+      "Sha256": "CFEC6E1C36EF8E679346650E82A74CA5C7645A5ED730523AFF51F0BE45BA56AA"
+    },
+    {
+      "Path": "lib\\models\\products.dart",
+      "Length": 966,
+      "Sha256": "524417C236636389991A576881A55DE307A3441B414493651F887620FCAA7B7F"
+    },
+    {
+      "Path": "lib\\models\\saleline.dart",
+      "Length": 427,
+      "Sha256": "B6C74D6FF037A02B413979F33080B7812F1037B3EE9342A763DDA258DCF4DE37"
+    },
+    {
+      "Path": "lib\\providers\\accounts_provider.dart",
+      "Length": 2555,
+      "Sha256": "34F205E7B7F20D95648B38281F04F90684E5FA33A51184C4ECC8DE0D77C06DDE"
+    },
+    {
+      "Path": "lib\\providers\\caja_provider.dart",
+      "Length": 1240,
+      "Sha256": "20F661DBB42BDF5789A5BA63EF9C808CB12F39B5F60BBEABEFF2FA948DC82CC6"
+    },
+    {
+      "Path": "lib\\providers\\cash_provider.dart",
+      "Length": 1549,
+      "Sha256": "B5B0EEAD0A9ACB03D24A547A38DE00FC453DE67F6D3604DE8BC608CE5C6ADD92"
+    },
+    {
+      "Path": "lib\\providers\\deudas_provider.dart",
+      "Length": 899,
+      "Sha256": "B1A39288FEE2DACA33FF5F91DF6A5D88FB22D61B338C07A29D9BD52AC4176AAE"
+    },
+    {
+      "Path": "lib\\providers\\movements_provider.dart",
+      "Length": 844,
+      "Sha256": "2CAA295509EF521B7EE29CA44883E7126CDECFC379D3E9AEFB8D461FC9837874"
+    },
+    {
+      "Path": "lib\\providers\\nequi_provider.dart",
+      "Length": 1475,
+      "Sha256": "6071E631C86B62B3BC4A33A7FF9325E33AA93C5D2CC6F0C80D2B9D50ED2C7BA4"
+    },
+    {
+      "Path": "lib\\screens\\inventario_screen.dart",
+      "Length": 7010,
+      "Sha256": "A717BF20D00E0ACD31951A1E432EC85BAC61074B36B3A15EE0D4A32A7D90FE8D"
+    },
+    {
+      "Path": "lib\\screens\\ventas_screen.dart",
+      "Length": 13767,
+      "Sha256": "DA9BAE6D26151DD8D0BD60FFFC85CBBAEB9E4E7E3C4ECE09DFB90E895D1EBA9C"
+    },
+    {
+      "Path": "lib\\screens\\management\\management_screen.dart",
+      "Length": 2167,
+      "Sha256": "736061D54E870C49DA10A6E974B44BC9C73D7852DD585F0D648958CF806CC4B8"
+    },
+    {
+      "Path": "lib\\screens\\management\\dialogs\\add_dialog.dart",
+      "Length": 2009,
+      "Sha256": "08C1644B79A514A8F5719E39A819FB6925112CA084DB80FD0F4F18AAC7C59FC8"
+    },
+    {
+      "Path": "lib\\screens\\management\\dialogs\\expense_dialog.dart",
+      "Length": 4453,
+      "Sha256": "05E635D6FBCEC89B7384D20AD426B6B22724D64D70B9F15BEB0F6636D26EE662"
+    },
+    {
+      "Path": "lib\\screens\\management\\dialogs\\tranfer_dialog.dart",
+      "Length": 5273,
+      "Sha256": "508BEBAEEEFF46BC2B52732A7F9A2B9A2E93C6D5B83E1AC731A7B1CF16A420F6"
+    },
+    {
+      "Path": "lib\\screens\\management\\widgets\\action_panel_widget.dart",
+      "Length": 3475,
+      "Sha256": "E687B536F588957B5C96F240FB2E891049BF9ECDDC6915F02ECFC2D569843274"
+    },
+    {
+      "Path": "lib\\screens\\management\\widgets\\cash_card_widget.dart",
+      "Length": 2276,
+      "Sha256": "0203230A2A10125043F18A4A6A83219755AF92E22EF622B6879BF6FD339CCC4D"
+    },
+    {
+      "Path": "lib\\screens\\management\\widgets\\cash_summary_widget.dart",
+      "Length": 1863,
+      "Sha256": "ED1EBE49F7707BA090F2315F233F32FA66E9F4E5CC1B7279E8601E367593A9C0"
+    },
+    {
+      "Path": "lib\\screens\\management\\widgets\\graphics_panel_widget.dart",
+      "Length": 5328,
+      "Sha256": "E16FD4C01A1F912B9A792C57708FE6B1D0FD2B22D7C4468BBF4B6E5E6410D6C8"
+    },
+    {
+      "Path": "lib\\screens\\management\\widgets\\historic_panel_widget.dart",
+      "Length": 3479,
+      "Sha256": "AA616CB72648661D7BD0F0EDFF325179AA831CFCE2BD89A67ED326A3BD9E6E66"
+    },
+    {
+      "Path": "lib\\screens\\management\\widgets\\total_card_widget.dart",
+      "Length": 1640,
+      "Sha256": "E6B1C3DAC64D3392AD75857B0F672310786415345D5A10310A96DAE693DDA17E"
+    },
+    {
+      "Path": "lib\\screens\\reports\\reports_screen.dart",
+      "Length": 4447,
+      "Sha256": "A30C55C7D9D4A2E26764A5EF60D68DD3383DDE7A8405125F912A0FA51E8D61D6"
+    },
+    {
+      "Path": "lib\\screens\\reports\\controller\\report_controller.dart",
+      "Length": 2144,
+      "Sha256": "A1683A76288C1991FC42E7EC616C40CDE5F9592550727D2D2DFF625BEC15B3A3"
+    },
+    {
+      "Path": "lib\\screens\\reports\\widgets\\date_selector.dart",
+      "Length": 2608,
+      "Sha256": "FAFF995F2E84EAD46207CC825B986445CC64A090FEC53FCC3A195C20D2E010A9"
+    },
+    {
+      "Path": "lib\\screens\\reports\\widgets\\report_list.dart",
+      "Length": 1334,
+      "Sha256": "88FEB8C8B0CA1E41A3C010A70CF87A7DF5BE5C9E827C29762476DCE0BD6B2B71"
+    },
+    {
+      "Path": "lib\\screens\\reports\\widgets\\report_pie_chart.dart",
+      "Length": 4769,
+      "Sha256": "D126B03F1D59DB3FB4815E50E32791254761580EF31E402D13CC6D3ABD387983"
+    },
+    {
+      "Path": "lib\\screens\\reports\\widgets\\totals_sections.dart",
+      "Length": 1792,
+      "Sha256": "54E19C2ED4CB8292410C1773E76CD5BDD522A770FA6D6CE117A56FA7E7FEF77D"
+    },
+    {
+      "Path": "lib\\widgets\\product_form_widget.dart",
+      "Length": 4235,
+      "Sha256": "28607FC2252D23438489D6C755BCF9D382F778D706A4502D8679A8EA64A68648"
+    },
+    {
+      "Path": "lib\\widgets\\product_list_widget.dart",
+      "Length": 2468,
+      "Sha256": "1E6CB3DB725868E0973C6C64AE774E7598FD38BDC0C400D598415BCFE2F11B00"
+    },
+    {
+      "Path": "lib\\widgets\\sale_line_widget.dart",
+      "Length": 4455,
+      "Sha256": "A8C17E83D3E921953B3896064806FAD1609CB2FCCAADF0FAF31C0309E64DD2FB"
+    },
+    {
+      "Path": "linux\\.gitignore",
+      "Length": 19,
+      "Sha256": "D7BBEAC6BA86E2D94D8CCC63A1A2FBBAC5EE7467F52F75C168165412D6AC3B60"
+    },
+    {
+      "Path": "linux\\CMakeLists.txt",
+      "Length": 4915,
+      "Sha256": "45E97101A277FAF22DD9BED87BFF0CC383F4210AFF589EE918F28DA4D10E7D4E"
+    },
+    {
+      "Path": "linux\\flutter\\CMakeLists.txt",
+      "Length": 2903,
+      "Sha256": "4EB17836308C1CD53F6B2BB8EDB3B7B30610BFF3B1D9DF7FECC9317F9109700C"
+    },
+    {
+      "Path": "linux\\flutter\\generated_plugin_registrant.cc",
+      "Length": 172,
+      "Sha256": "749A9451DAD2825E6178746A37D04FDEDAE865919236B4C7D50480F84D2ED501"
+    },
+    {
+      "Path": "linux\\flutter\\generated_plugin_registrant.h",
+      "Length": 318,
+      "Sha256": "3E4CF762B2BB67328E807ADA539EAD7BFC68CF7203D15F54267C519C94735099"
+    },
+    {
+      "Path": "linux\\flutter\\generated_plugins.cmake",
+      "Length": 762,
+      "Sha256": "9B8A7687F86DB4EAD50878E7BB8087D9125D4828C3A0688F78A4682B92ABBC6C"
+    },
+    {
+      "Path": "linux\\runner\\CMakeLists.txt",
+      "Length": 1000,
+      "Sha256": "81ECF2604C50F480C23D460B2DDF653ECD39DF29CC5B2FE4913F1A59F008A5A7"
+    },
+    {
+      "Path": "linux\\runner\\main.cc",
+      "Length": 186,
+      "Sha256": "905B4DFA4EAB584C1EB6244899B7D5EF56D0BCEAF3BFFB5EA335ED7E0BA3C549"
+    },
+    {
+      "Path": "linux\\runner\\my_application.cc",
+      "Length": 4912,
+      "Sha256": "7676AC5A85F0AE724331CB035F84C88FB6579DB14EE887733999D50512A16D52"
+    },
+    {
+      "Path": "linux\\runner\\my_application.h",
+      "Length": 406,
+      "Sha256": "B9BE2B58EAD9FA2FA3422636120E85EA8EE2A600AA0B42E268CB8FF0AE4B9B5D"
+    },
+    {
+      "Path": "macos\\.gitignore",
+      "Length": 96,
+      "Sha256": "236A523A43625A2D63AF3CD0F2CE8600A3668846F8CB278C1C7C5CBFD4AA4088"
+    },
+    {
+      "Path": "macos\\Flutter\\Flutter-Debug.xcconfig",
+      "Length": 49,
+      "Sha256": "7E9B3EE3961B7D7718B418CEAED812A5F06A4E4CEC894AAE712A78E159C32AB0"
+    },
+    {
+      "Path": "macos\\Flutter\\Flutter-Release.xcconfig",
+      "Length": 49,
+      "Sha256": "7E9B3EE3961B7D7718B418CEAED812A5F06A4E4CEC894AAE712A78E159C32AB0"
+    },
+    {
+      "Path": "macos\\Flutter\\GeneratedPluginRegistrant.swift",
+      "Length": 280,
+      "Sha256": "19FE86CFED1DFD559F051953B100F7E54B1040F7FCF2FD2549ECE985B2FEF294"
+    },
+    {
+      "Path": "macos\\Runner\\AppDelegate.swift",
+      "Length": 324,
+      "Sha256": "5B9CBDCB563AD8578A99B7C283958490E4AF537322E9092FE1EFBB3C29AB3E1B"
+    },
+    {
+      "Path": "macos\\Runner\\DebugProfile.entitlements",
+      "Length": 360,
+      "Sha256": "B2AA41D03E18907D360B721B7BB3EDB302897C8A3DE98EC47B6665033FEA0B0E"
+    },
+    {
+      "Path": "macos\\Runner\\Info.plist",
+      "Length": 1092,
+      "Sha256": "047F9CB0F1122C04589483BEAEDBBE23492FDC8946B94E09BB13080736AF4F93"
+    },
+    {
+      "Path": "macos\\Runner\\MainFlutterWindow.swift",
+      "Length": 403,
+      "Sha256": "8178AD756F958F986F794A8BB06E321A6630CEAAF8F235B3B4AE3936E415DC7C"
+    },
+    {
+      "Path": "macos\\Runner\\Release.entitlements",
+      "Length": 248,
+      "Sha256": "C3B881C72AA4CCA9CF50DA6654C4D675DEC929056692AF46A6FBECD00AEF5990"
+    },
+    {
+      "Path": "macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_1024.png",
+      "Length": 102994,
+      "Sha256": "6232E5815AF17E25E0268B2FEC7AEA9E068CC92EC709E9605C2B31DF4FF2A313"
+    },
+    {
+      "Path": "macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_128.png",
+      "Length": 5680,
+      "Sha256": "15591F03F31313AF6FD644ED0512106CC04365130B8B73244F1CFA6DDDFB4400"
+    },
+    {
+      "Path": "macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_16.png",
+      "Length": 520,
+      "Sha256": "CC6928B5ADFC00DBF526192E2705DD9AF641CDF20AB4C6C7CA7CD4936DCA59F0"
+    },
+    {
+      "Path": "macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_256.png",
+      "Length": 14142,
+      "Sha256": "416EFD77CDE932D42EF34168DA24DD428A495B1F4F34BBBD125A18D2ADD186A2"
+    },
+    {
+      "Path": "macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_32.png",
+      "Length": 1066,
+      "Sha256": "AE8C4458E41F1E28B1E851ED87D3268D4A0351CEEA427FA2A84CC94DDFB6D4C5"
+    },
+    {
+      "Path": "macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_512.png",
+      "Length": 36406,
+      "Sha256": "0A91C6C1BF242E54EE179E34629E9EF3E8A6D286C0FCE01E302280A8BE9277E6"
+    },
+    {
+      "Path": "macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_64.png",
+      "Length": 2218,
+      "Sha256": "6AD229623498E5F1277800DB3AB7CB11FAF85EB2569E1213F7D8E55003C07B42"
+    },
+    {
+      "Path": "macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Contents.json",
+      "Length": 1359,
+      "Sha256": "992BA63D183DFB8F8E3AF38AC203D834D23C004DA1417C438B4C5A3D7D1D7103"
+    },
+    {
+      "Path": "macos\\Runner\\Base.lproj\\MainMenu.xib",
+      "Length": 24072,
+      "Sha256": "776C35481F6581F14148B90071558B25F6CE6262E771988985E9FE8D3E70A472"
+    },
+    {
+      "Path": "macos\\Runner\\Configs\\AppInfo.xcconfig",
+      "Length": 647,
+      "Sha256": "9ADC352F119A4E755C9D3A4CAD24C8CB12F6E74F5D9E6D34199F113B203963BC"
+    },
+    {
+      "Path": "macos\\Runner\\Configs\\Debug.xcconfig",
+      "Length": 79,
+      "Sha256": "86BE603022E2A385DD7884FCE4CC29255676C3DDA579D3D4A56C958BF1E57DE0"
+    },
+    {
+      "Path": "macos\\Runner\\Configs\\Release.xcconfig",
+      "Length": 81,
+      "Sha256": "D1BF3F0349AADD5C58EE9D46C0CE4CE45467127C438936E9BB481D861D296565"
+    },
+    {
+      "Path": "macos\\Runner\\Configs\\Warnings.xcconfig",
+      "Length": 593,
+      "Sha256": "AA8DED4C14068CB05F51F5446509FE56805CF1E29961AD6D5A97233BB0632BC1"
+    },
+    {
+      "Path": "macos\\Runner.xcodeproj\\project.pbxproj",
+      "Length": 27266,
+      "Sha256": "91B102D2019065431C25A12867A2B5A81746CEAD47D2421623816DEF991AD06C"
+    },
+    {
+      "Path": "macos\\Runner.xcodeproj\\project.xcworkspace\\xcshareddata\\IDEWorkspaceChecks.plist",
+      "Length": 246,
+      "Sha256": "D557C2C32FC6258EC28981FA45DC847B76C9968BEB90A2E26D13EF9C4EA45C30"
+    },
+    {
+      "Path": "macos\\Runner.xcodeproj\\xcshareddata\\xcschemes\\Runner.xcscheme",
+      "Length": 3854,
+      "Sha256": "099D2F3D2AF2AC85CFDEC178919B1B687D72CAA6404C48D84F5C15201AE4CA08"
+    },
+    {
+      "Path": "macos\\Runner.xcworkspace\\contents.xcworkspacedata",
+      "Length": 159,
+      "Sha256": "706A4C812F2A1E220E6785C27580020D58048E2AE4D30D1280F3C43344CE6B38"
+    },
+    {
+      "Path": "macos\\Runner.xcworkspace\\xcshareddata\\IDEWorkspaceChecks.plist",
+      "Length": 246,
+      "Sha256": "D557C2C32FC6258EC28981FA45DC847B76C9968BEB90A2E26D13EF9C4EA45C30"
+    },
+    {
+      "Path": "macos\\RunnerTests\\RunnerTests.swift",
+      "Length": 302,
+      "Sha256": "8A0FF977C64CEAC0750FFFA48087988B7B4125D1B1C49019221E7FFFB574423E"
+    },
+    {
+      "Path": "Output\\ValinorLudotecaInstaller.exe",
+      "Length": 10894548,
+      "Sha256": "ADF65381FA840FDBB43626EDB70B0FE9C7C3A0B6E463EB0D83576C649396581D"
+    },
+    {
+      "Path": "test\\widget_test.dart",
+      "Length": 1110,
+      "Sha256": "32A6CA347FED25280764F863C2B6F522ED3929F2AA44A2483982E49DF19FA083"
+    },
+    {
+      "Path": "web\\favicon.png",
+      "Length": 917,
+      "Sha256": "7AB2525F4B86B65D3E4C70358A17E5A1AAF6F437F99CBCC046DAD73D59BB9015"
+    },
+    {
+      "Path": "web\\index.html",
+      "Length": 1284,
+      "Sha256": "230D16E53AB811003CB76BB6BC065FFE5682E2E01BDA4FD25156E6171685EF2D"
+    },
+    {
+      "Path": "web\\manifest.json",
+      "Length": 979,
+      "Sha256": "0D30543899D583AAD4DA89557258353049914839B3BA0EE0BCC8074A847F0133"
+    },
+    {
+      "Path": "web\\icons\\Icon-192.png",
+      "Length": 5292,
+      "Sha256": "3DCE99077602F70421C1C6B2A240BC9B83D64D86681D45F2154143310C980BE3"
+    },
+    {
+      "Path": "web\\icons\\Icon-512.png",
+      "Length": 8252,
+      "Sha256": "BACCB205AE45F0B421BE1657259B4943AC40C95094AB877F3BCBE12CD544DCBE"
+    },
+    {
+      "Path": "web\\icons\\Icon-maskable-192.png",
+      "Length": 5594,
+      "Sha256": "D2C842E22A9F4EC9D996B23373A905C88D9A203B220C5C151885AD621F974B5C"
+    },
+    {
+      "Path": "web\\icons\\Icon-maskable-512.png",
+      "Length": 20998,
+      "Sha256": "6AEE06CDCAB6B2AEF74B1734C4778F4421D2DA100B0FF9E52B21B55240202929"
+    },
+    {
+      "Path": "windows\\.gitignore",
+      "Length": 308,
+      "Sha256": "955E3110CB16494EE76E1CD5DF47E2C212309EB94A49A123FE87F718DE413CB8"
+    },
+    {
+      "Path": "windows\\CMakeLists.txt",
+      "Length": 4292,
+      "Sha256": "2D3ACDB46D3F4203BFC1F80A3A08DE1462C4B6C1176992C38A5D3F7D873AF961"
+    },
+    {
+      "Path": "windows\\flutter\\CMakeLists.txt",
+      "Length": 3851,
+      "Sha256": "BD05E3268B2F246BCBAFDB778165FE67A7BAFDBA04EB73599502563A67B8AE7E"
+    },
+    {
+      "Path": "windows\\flutter\\generated_plugin_registrant.cc",
+      "Length": 175,
+      "Sha256": "0B1652D84E4A121DF3A34005938AA45196C4828192AC8A54FBC318D265BD4C26"
+    },
+    {
+      "Path": "windows\\flutter\\generated_plugin_registrant.h",
+      "Length": 317,
+      "Sha256": "BAC28D0D2535578BF27DB13B937AA03E7790F98619A322914624C1C4E7CDCC6B"
+    },
+    {
+      "Path": "windows\\flutter\\generated_plugins.cmake",
+      "Length": 766,
+      "Sha256": "76714014161293B0FB5FB3350C840D4410710A32F28F49E9E80737D66C24362C"
+    },
+    {
+      "Path": "windows\\runner\\CMakeLists.txt",
+      "Length": 1836,
+      "Sha256": "D765FDD05F63AD099E585A2CCED0CBFF13EC3229B7DE68C8681B2107DB850089"
+    },
+    {
+      "Path": "windows\\runner\\flutter_window.cpp",
+      "Length": 2193,
+      "Sha256": "D615EEDC06AE37321E59C2C00C7687D1887DCD97904EB7225FAFD8DCB5B83DA6"
+    },
+    {
+      "Path": "windows\\runner\\flutter_window.h",
+      "Length": 961,
+      "Sha256": "0252B804F5DA380C7709CBE1DAFF2B8D18DAF6C49D7E6DD43E5AF3C99C19F56C"
+    },
+    {
+      "Path": "windows\\runner\\main.cpp",
+      "Length": 1320,
+      "Sha256": "BA01FE0E24D17E918B9BA5DD146264096BC9EA4F87FAC879E38AF5983F3592C5"
+    },
+    {
+      "Path": "windows\\runner\\resource.h",
+      "Length": 448,
+      "Sha256": "D0E8BF7835468B4B6B1F8F0747F2E8F25C19841F2DF2AC60AAA584DDAE3AA7C6"
+    },
+    {
+      "Path": "windows\\runner\\runner.exe.manifest",
+      "Length": 616,
+      "Sha256": "639A56233FCD8CBCB8BBEFCD93E4680EC2664F32D9ACFB3D2EC1D8726A96E090"
+    },
+    {
+      "Path": "windows\\runner\\Runner.rc",
+      "Length": 3214,
+      "Sha256": "C28AD33CE46CC6F695306A064B1E455D87D8D2DAC89CD2AB31CF7454E1841694"
+    },
+    {
+      "Path": "windows\\runner\\utils.cpp",
+      "Length": 1862,
+      "Sha256": "FBB18524C22593D0CE7869B0733E237BE38E668FE045E3023BCF2D0B31784FA3"
+    },
+    {
+      "Path": "windows\\runner\\utils.h",
+      "Length": 691,
+      "Sha256": "832E246B6758253F89016FB0374B30791242E97AD950D27FC678B3D9FEACFDC4"
+    },
+    {
+      "Path": "windows\\runner\\win32_window.cpp",
+      "Length": 8822,
+      "Sha256": "4E4F4DCF8E86EA6E097562CB3476039E693449BD8045367538AFEE579C017511"
+    },
+    {
+      "Path": "windows\\runner\\win32_window.h",
+      "Length": 3624,
+      "Sha256": "D154CF89BA85F820631A9B5BEDACBE64FC5815E428FE6BC5DA579CE649F69841"
+    },
+    {
+      "Path": "windows\\runner\\resources\\app_icon.ico",
+      "Length": 33772,
+      "Sha256": "C098D3FC85CACFF98B8E69811B48E9F0D852FCEE278132D794411D978869CBF8"
+    }
+  ]
+}

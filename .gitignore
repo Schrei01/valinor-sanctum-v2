@@ -1,0 +1,27 @@
+# Almacenamiento y pruebas futuros: no versionar datos operativos.
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.tooling/
+/build/
+/dist/
+coverage/
+/data/
+/tmp/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+/backups/
+/imports/
+.env
+.env.*
+!.env.example
+*.log
+
+# Entorno local
+.idea/
+*.iml
+.DS_Store

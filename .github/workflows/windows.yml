@@ -1,0 +1,43 @@
+name: Windows foundation checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned portable Flutter
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .tooling/flutter | Out-Null
+          git -C .tooling/flutter init
+          git -C .tooling/flutter fetch --depth 1 https://github.com/flutter/flutter.git abaf9c523780a608bd46686fd5e53740a07077f8
+          git -C .tooling/flutter checkout --detach FETCH_HEAD
+          ./scripts/flutter.ps1 --version
+      - name: Resolve locked dependencies
+        shell: pwsh
+        run: ./scripts/flutter.ps1 pub get --enforce-lockfile
+      - name: Check formatting
+        shell: pwsh
+        run: ./scripts/dart.ps1 format --output=none --set-exit-if-changed lib test tool
+      - name: Analyze
+        shell: pwsh
+        run: ./scripts/flutter.ps1 analyze
+      - name: Test isolated workspace
+        shell: pwsh
+        run: ./scripts/flutter.ps1 test --reporter expanded --dart-define="SANCTUM_WORKSPACE_ROOT=$pwd"
+      - name: Build Windows development bundle
+        shell: pwsh
+        run: ./scripts/flutter.ps1 build windows --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: valinor-sanctum-2-foundation-windows
+          path: build/windows/x64/runner/Release/
+          if-no-files-found: error
