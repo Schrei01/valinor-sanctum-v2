@@ -9,6 +9,7 @@ import 'features/workspace/data/sqlite_workspace_store.dart';
 import 'features/workspace/domain/workspace_store.dart';
 import 'features/inventory/data/sqlite_inventory_store.dart';
 import 'features/sales/data/sqlite_sales_store.dart';
+import 'features/collections/data/sqlite_collections_store.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +27,10 @@ void main() {
           synthetic: config.environment == AppEnvironment.test,
         ),
         salesStore: SqliteSalesStore(
+          database,
+          synthetic: config.environment == AppEnvironment.test,
+        ),
+        collectionsStore: SqliteCollectionsStore(
           database,
           synthetic: config.environment == AppEnvironment.test,
         ),

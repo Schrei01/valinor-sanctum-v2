@@ -79,6 +79,10 @@ void main() {
         'sale_outflows',
         'sale_cost_allocations',
         'customer_receivables',
+        'collection_requests',
+        'collections',
+        'collection_parts',
+        'receivable_settlements',
       ]) {
         expect(await app.database.query(table), isEmpty, reason: table);
       }
@@ -343,6 +347,7 @@ void main() {
   test('v1 DDL remains byte-for-byte compatible with released checksums', () {
     expect(DatabaseSchema.migrationChecksum, 'fnv1a64:2b8aa24f7fdff6d1');
     expect(DatabaseSchema.migration2Checksum, 'fnv1a64:7c3f94396eb01ba3');
+    expect(DatabaseSchema.migration3Checksum, 'fnv1a64:c719534b847edc09');
   });
 
   test(
@@ -499,7 +504,7 @@ void main() {
   );
 
   test(
-    'v2 purchase history survives v3 migration with a verified v2 backup',
+    'v2 purchase history survives current migration with a verified v2 backup',
     () async {
       final path = p.join(fixtureDirectory.path, 'upgrade_v2.sqlite3');
       final old = await _createVersion2(path);
@@ -514,7 +519,7 @@ void main() {
 
       final app = await AppDatabase.open(path: path);
       final health = await app.readHealth();
-      expect(health['schemaVersion'], 3);
+      expect(health['schemaVersion'], DatabaseSchema.version);
       expect(health['schemaChecksumVerified'], isTrue);
       expect(health['migrationChecksumVerified'], isTrue);
       for (final table in before.keys) {
@@ -646,6 +651,80 @@ void main() {
     expect(
       (await app.database.query('business_documents')).single['status'],
       'posted',
+    );
+  });
+
+  test(
+    'v3 sale, FIFO and prepared history survive v4 with a complete WAL backup',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'upgrade_v3.sqlite3');
+      final old = await _createVersion3(path);
+      await old.rawQuery('PRAGMA journal_mode = WAL');
+      await _insertVersion3Sale(old);
+      final before = await _allRows(old);
+      expect(await File('$path-wal').exists(), isTrue);
+      final app = await AppDatabase.open(path: path);
+      await old.close();
+      expect((await app.readHealth())['schemaVersion'], DatabaseSchema.version);
+      expect((await app.readHealth())['schemaChecksumVerified'], isTrue);
+      for (final table in before.keys) {
+        final after = await app.database.query(table);
+        expect(
+          table == 'schema_migrations' ? after.take(3).toList() : after,
+          before[table],
+          reason: table,
+        );
+      }
+      await app.close();
+      final backups = await Directory(
+        p.join(fixtureDirectory.path, 'backups'),
+      ).list().toList();
+      expect(backups, hasLength(1));
+      expect(p.basename(backups.single.path), contains('.v3.'));
+      final backup = await databaseFactoryFfi.openDatabase(
+        backups.single.path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      expect(await backup.getVersion(), 3);
+      expect(await _allRows(backup), before);
+      expect(await backup.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      await backup.close();
+    },
+  );
+
+  test(
+    'v3 backup failure preserves the file and all released migration rows',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'backup_failure_v3.sqlite3');
+      final old = await _createVersion3(path);
+      await _insertActor(old);
+      await old.close();
+      await File(
+        p.join(fixtureDirectory.path, 'backups'),
+      ).writeAsString('keep');
+      final before = await File(path).readAsBytes();
+      await expectLater(
+        AppDatabase.open(path: path),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await File(path).readAsBytes(), before);
+    },
+  );
+
+  test('historical v3 drift is refused before migration or backup', () async {
+    final path = p.join(fixtureDirectory.path, 'history_failure_v3.sqlite3');
+    final old = await _createVersion3(path);
+    await old.update('schema_migrations', {
+      'migration_checksum': 'changed-v3',
+    }, where: 'version = 3');
+    await old.close();
+    await expectLater(
+      AppDatabase.open(path: path),
+      throwsA(isA<DatabaseValidationException>()),
+    );
+    expect(
+      await Directory(p.join(fixtureDirectory.path, 'backups')).exists(),
+      isFalse,
     );
   });
 
@@ -965,6 +1044,222 @@ Future<Database> _createVersion2(String path) async {
     'applied_at_utc': _timestamp,
   });
   return db;
+}
+
+Future<Database> _createVersion3(String path) async {
+  final db = await _createVersion2(path);
+  for (final statement in DatabaseSchema.migration3Statements) {
+    await db.execute(statement);
+  }
+  await db.execute('PRAGMA user_version = 3');
+  await db.insert('schema_migrations', {
+    'version': 3,
+    'name': DatabaseSchema.migration3Name,
+    'migration_checksum': DatabaseSchema.migration3Checksum,
+    'schema_checksum': await _testSchemaChecksum(db),
+    'applied_at_utc': _timestamp,
+  });
+  return db;
+}
+
+/// Constructs an actual released-v3 sale without opening it through the newer
+/// adapter. This tests migration of stock/cost/debt, not only empty DDL.
+Future<void> _insertVersion3Sale(DatabaseExecutor db) async {
+  await _insertPurchaseDraft(db);
+  await _postPurchaseDocument(db);
+  await db.update('journal_entries', {
+    'status': 'posted',
+    'posted_at_utc': _timestamp,
+  });
+  const occurred = '2026-01-01T15:00:01.000Z';
+  for (final (id, accountClass, role) in [
+    ('receivable-account', 'asset', 'customer_receivable'),
+    ('revenue-account', 'revenue', 'sales_revenue'),
+    ('cost-account', 'cost', 'cost_of_sales'),
+  ]) {
+    await db.insert('ledger_accounts', {
+      'id': id,
+      'code': id,
+      'name': id,
+      'class': accountClass,
+      'role': role,
+      'is_active': 1,
+    });
+  }
+  await db.insert('sales_drafts', {
+    'id': 'old-tab',
+    'label': 'Mesa sintética',
+    'customer_name': 'Cliente sintético',
+    'revision': 1,
+    'status': 'open',
+    'updated_at_utc': occurred,
+  });
+  await db.insert('sales_draft_lines', {
+    'draft_id': 'old-tab',
+    'sequence': 0,
+    'product_id': 'product',
+    'quantity': 1,
+    'unit_price_minor': 150,
+  });
+  final canonical = jsonEncode({
+    'version': 1,
+    'profileId': 'synthetic-profile',
+    'currency': 'COP',
+    'scale': 2,
+    'draftId': 'old-tab',
+    'draftRevision': 1,
+    'label': 'Mesa sintética',
+    'customerName': 'Cliente sintético',
+    'occurredAtUtc': occurred,
+    'dueDate': '2026-01-10',
+    'costPolicy': 'fifo-front-remainder-v1',
+    'lines': [
+      {'productId': 'product', 'quantity': 1, 'unitPriceMinor': 150},
+    ],
+  });
+  await db.insert('sale_confirmations', {
+    'command_id': 'old-sale-command',
+    'draft_id': 'old-tab',
+    'draft_revision': 1,
+    'canonical_payload': canonical,
+    'occurred_at_utc': occurred,
+    'due_date': '2026-01-10',
+    'prepared_at_utc': occurred,
+    'status': 'prepared',
+  });
+  await db.update(
+    'sales_drafts',
+    {'status': 'prepared'},
+    where: 'id = ?',
+    whereArgs: ['old-tab'],
+  );
+  await db.insert('command_log', {
+    'id': 'old-sale-command',
+    'command_type': 'confirm_sale',
+    'payload_hash': DatabaseSchema.checksum(canonical),
+    'actor_id': 'synthetic-actor',
+    'response_json': jsonEncode({
+      'canonicalPayload': canonical,
+      'result': {
+        'documentId': 'old-sale',
+        'commandId': 'old-sale-command',
+        'totalMinor': 150,
+        'totalCostMinor': 50,
+      },
+    }),
+    'response_version': 1,
+    'committed_at_utc': occurred,
+    'authorization_policy_version': 'development-single-user-v1',
+  });
+  await db.insert('business_documents', {
+    'id': 'old-sale',
+    'command_id': 'old-sale-command',
+    'command_sequence': 0,
+    'profile_id': 'synthetic-profile',
+    'actor_id': 'synthetic-actor',
+    'type': 'credit_sale',
+    'status': 'draft',
+    'occurred_at_utc': occurred,
+    'business_date': '2026-01-01',
+    'recorded_at_utc': occurred,
+    'source_kind': 'synthetic',
+    'date_quality': 'documented',
+  });
+  await db.insert('sales', {
+    'document_id': 'old-sale',
+    'draft_id': 'old-tab',
+    'label_snapshot': 'Mesa sintética',
+    'customer_name_snapshot': 'Cliente sintético',
+    'sold_at_utc': occurred,
+    'due_date': '2026-01-10',
+    'receivable_minor': 150,
+    'total_cost_minor': 50,
+    'terms': 'credit',
+    'cost_policy': 'fifo-front-remainder-v1',
+  });
+  await db.insert('sale_lines', {
+    'id': 'old-sale-line',
+    'sale_id': 'old-sale',
+    'sequence': 0,
+    'product_id': 'product',
+    'name_snapshot': 'Synthetic product',
+    'quantity': 1,
+    'unit_price_minor': 150,
+    'total_minor': 150,
+    'total_cost_minor': 50,
+  });
+  await db.insert('sale_outflows', {
+    'id': 'old-outflow',
+    'document_id': 'old-sale',
+    'sequence': 0,
+    'product_id': 'product',
+    'sale_line_id': 'old-sale-line',
+    'quantity': 1,
+    'cost_minor': 50,
+  });
+  await db.insert('sale_cost_allocations', {
+    'id': 'old-allocation',
+    'sale_line_id': 'old-sale-line',
+    'cost_layer_id': 'layer',
+    'sequence': 0,
+    'quantity': 1,
+    'cost_minor': 50,
+  });
+  await db.insert('customer_receivables', {
+    'id': 'old-receivable',
+    'origin_document_id': 'old-sale',
+    'customer_name_snapshot': 'Cliente sintético',
+    'control_account_id': 'receivable-account',
+    'initial_minor': 150,
+    'issued_at_utc': occurred,
+    'due_date': '2026-01-10',
+  });
+  await db.insert('journal_entries', {
+    'id': 'old-sale-entry',
+    'document_id': 'old-sale',
+    'status': 'draft',
+    'cost_completeness': 'complete',
+  });
+  var sequence = 0;
+  for (final (account, debit, credit) in [
+    ('receivable-account', 150, 0),
+    ('revenue-account', 0, 150),
+    ('cost-account', 50, 0),
+    ('inventory-account', 0, 50),
+  ]) {
+    await db.insert('journal_lines', {
+      'id': 'old-journal-$sequence',
+      'entry_id': 'old-sale-entry',
+      'sequence': sequence++,
+      'account_id': account,
+      'debit_minor': debit,
+      'credit_minor': credit,
+    });
+  }
+  await db.update(
+    'business_documents',
+    {'status': 'posted'},
+    where: 'id = ?',
+    whereArgs: ['old-sale'],
+  );
+  await db.update(
+    'journal_entries',
+    {'status': 'posted', 'posted_at_utc': occurred},
+    where: 'id = ?',
+    whereArgs: ['old-sale-entry'],
+  );
+  await db.update(
+    'sale_confirmations',
+    {'status': 'confirmed'},
+    where: 'command_id = ?',
+    whereArgs: ['old-sale-command'],
+  );
+  await db.update(
+    'sales_drafts',
+    {'status': 'confirmed', 'confirmed_document_id': 'old-sale'},
+    where: 'id = ?',
+    whereArgs: ['old-tab'],
+  );
 }
 
 Future<Map<String, List<Map<String, Object?>>>> _allRows(

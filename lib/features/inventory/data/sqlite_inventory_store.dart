@@ -315,6 +315,16 @@ ORDER BY l.purchase_id, l.sequence
           'Este identificador ya corresponde a una confirmación de venta.',
         );
       }
+      if ((await txn.query(
+        'collection_requests',
+        columns: ['command_id'],
+        where: 'command_id = ?',
+        whereArgs: [command.commandId],
+      )).isNotEmpty) {
+        throw const InventoryValidationException(
+          'Este identificador ya corresponde a una solicitud de cobro.',
+        );
+      }
 
       final suppliers = await txn.query(
         'counterparties',

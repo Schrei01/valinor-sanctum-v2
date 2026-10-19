@@ -1,0 +1,12 @@
+{
+  "observedAtUtc": "2026-10-19T21:13:11.355Z",
+  "version": "0.4.0+4",
+  "launcher": "Iniciar Valinor Sanctum.cmd",
+  "schemaVersion": 4,
+  "fourCorrectIndicatorsObserved": true,
+  "initialSetupObserved": true,
+  "businessDataEntered": false,
+  "windowClosed": true,
+  "method": "Accessibility and keyboard",
+  "systemTree": "Window: \"Valinor Sanctum 2.0\", App: valinor_sanctum_2.exe.\n\t0 ventana Valinor Sanctum 2.0 Secondary Actions: Raise\n\t\t1 panel\n\t\t\t1745 grupo\n\t\t\t\t1746 grupo\n\t\t\t\t\t1747 grupo\n\t\t\t\t\t\t1748 grupo\n\t\t\t\t\t\t\t1749 texto Valinor Sanctum 2.0\n\t\t\t\t\t\t\t1750 texto Desarrollo\n\t\t\t\t\t\t\t1751 texto VALINOR SANCTUM\n\t\t\t\t\t\t\t1752 texto GESTIÓN COMERCIAL · 2.0\n\t\t\t\t\t\t\t1753 botón Inicio\n\t\t\t\t\t\t\t1754 botón Catálogo\n\t\t\t\t\t\t\t1755 botón Compras\n\t\t\t\t\t\t\t1756 botón Ventas\n\t\t\t\t\t\t\t1757 botón Cobros\n\t\t\t\t\t\t\t1758 botón Sistema\n\t\t\t\t\t\t\t1759 texto EN DESARROLLO\n\t\t\t\t\t\t\t1760 texto Versión 0.4.0\n\t\t\t\t\t\t\t1761 grupo\n\t\t\t\t\t\t\t\t1762 texto SISTEMA\n\t\t\t\t\t\t\t\t1763 texto Almacenamiento y diagnóstico\n\t\t\t\t\t\t\t\t1764 texto Comprueba el estado del archivo exclusivo de este espacio.\n\t\t\t\t\t\t\t\t1765 grupo (settable, string) Perfil: development Ubicación de la base de datos Integridad SQLite Correcto Relaciones protegidas Correcto Esquema verificado Correcto Migración verificada Correcto Versión del esquema: 4 Value: C:\\proyectos\\valinor_sanctum_2\\data\\development\\development\\sanctum2.sqlite3\n\t\t\t\t\t\t\t\t\t1766 botón Volver a verificar\n\t\t\t\t\t\t\t\t1767 texto Entorno de desarrollo. Catálogo, compras, ventas a crédito y cobros disponibles. Pagos a proveedores, arqueo, usuarios e importación aún están pendientes.\n\t\t7 barra de título (settable, string) Value: Valinor Sanctum 2.0\n\t\t\t8 barra de menús Sistema ID: MenuBar\n\t\t\t\t9 elemento de menú Sistema\n\t\t\t10 botón Minimizar\n\t\t\t11 botón Maximizar\n\t\t\t12 botón Cerrar\n\nThe focused UI element is 1758 botón Sistema."
+}

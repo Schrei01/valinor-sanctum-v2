@@ -2,6 +2,8 @@
 
 Fecha: 19 de octubre de 2026, America/Bogota. Continuación autorizada mediante «Entonces continúa», después de acordar cuentas y ventas primero y cobros en la siguiente entrega. Versión 0.3.0, esquema SQLite v3. Solo desarrollo/pruebas independientes.
 
+Registro histórico: 0.4.0 añade cobros/abonos y esquema v4. Utiliza el acceso de inicio de la raíz para abrir la entrega vigente; un ejecutable 0.3.0 no abre una base migrada a v4.
+
 ## Funcionalidad
 
 - Crear y editar cuentas con nombre, cliente, productos, cantidades enteras y precio unitario exacto. Guardar con Ctrl+S o con el botón; las cuentas guardadas se recuperan al reabrir. Los cambios de formulario todavía sin guardar se señalan y se conservan al cambiar de sección durante la sesión.

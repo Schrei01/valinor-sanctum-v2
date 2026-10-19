@@ -111,6 +111,7 @@ class ConfirmedSale {
     required this.totalMinor,
     required this.totalCostMinor,
     required List<ConfirmedSaleLine> lines,
+    this.paidMinor = 0,
   }) : lines = List.unmodifiable(lines);
   final String documentId;
   final String draftId;
@@ -121,6 +122,8 @@ class ConfirmedSale {
   final int totalMinor;
   final int totalCostMinor;
   final List<ConfirmedSaleLine> lines;
+  final int paidMinor;
+  int get remainingMinor => totalMinor - paidMinor;
 }
 
 class SalesSnapshot {

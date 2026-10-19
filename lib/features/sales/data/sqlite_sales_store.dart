@@ -59,6 +59,19 @@ JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
 ORDER BY s.sold_at_utc DESC, s.document_id
 ''');
     final sales = <ConfirmedSale>[];
+    final settlementRows = await txn.rawQuery('''
+SELECT r.origin_document_id, a.amount_minor FROM receivable_settlements a
+JOIN customer_receivables r ON r.id = a.receivable_id
+JOIN business_documents d ON d.id = a.collection_id AND d.status = 'posted'
+JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
+''');
+    final collectedBySale = <String, BigInt>{};
+    for (final row in settlementRows) {
+      final saleId = row['origin_document_id'] as String;
+      collectedBySale[saleId] =
+          (collectedBySale[saleId] ?? BigInt.zero) +
+          BigInt.from(row['amount_minor'] as int);
+    }
     for (final row in salesRows) {
       final lines = await txn.query(
         'sale_lines',
@@ -76,6 +89,10 @@ ORDER BY s.sold_at_utc DESC, s.document_id
           dueDate: row['due_date'] as String,
           totalMinor: row['receivable_minor'] as int,
           totalCostMinor: row['total_cost_minor'] as int,
+          paidMinor: _int64(
+            collectedBySale[row['document_id']] ?? BigInt.zero,
+            'Cobros de venta',
+          ),
           lines: lines
               .map(
                 (line) => ConfirmedSaleLine(
@@ -257,6 +274,16 @@ ORDER BY s.sold_at_utc DESC, s.document_id
       )).isNotEmpty) {
         throw const SalesValidationException(
           'El identificador ya corresponde a otro comando.',
+        );
+      }
+      if ((await txn.query(
+        'collection_requests',
+        columns: ['command_id'],
+        where: 'command_id = ?',
+        whereArgs: [commandId],
+      )).isNotEmpty) {
+        throw const SalesValidationException(
+          'El identificador ya corresponde a una solicitud de cobro.',
         );
       }
       final rows = await txn.query(

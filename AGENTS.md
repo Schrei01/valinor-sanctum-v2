@@ -29,6 +29,10 @@ Incremento 03 completado y validado en 0.3.0/esquema v3: 157 pruebas aprobadas, 
 
 ## Reglas del producto
 
+Incremento 04 autorizado por «Vamos con el otro incremento entonces»: cuentas y medios de pago locales, cobros/abonos totales o parciales de las ventas, saldos registrados y recuperación durable de confirmaciones. Esquema v4 con migraciones respaldadas de bases propias. Cobrar no vuelve a crear ingreso comercial, costo ni salida de stock. Rechazar sobrepagos y conservar snapshots. Sin conexiones bancarias, aperturas inventadas, pagos a proveedores, caja/arqueo, importación ni producción en este incremento. La autorización previa de subir cambios a Git permanece vigente.
+
+Incremento 04 completado en 0.4.0/esquema v4: 202 pruebas aprobadas, tres omitidas por permisos de symlinks, formato/análisis limpios y flujo de 27 comprobaciones. Abono de 40 a venta de 100, reapertura con pendiente 60 y pago restante por dos medios; reintento conserva respuesta original y no repite dinero/venta/stock/costo. Windows sintético mostró historial/saldos/diagnóstico; bundle final sin defines publicado, acceso estable con cuatro Correcto y respaldo v3 propio, sin ingresar datos de negocio. Ventanas cerradas. Evidencia en docs/17-incremento-04.md y docs/evidence/increment-04.json. Pendientes: pagos a proveedores, aperturas, gastos/transferencias/capital, arqueos, ajustes/reversas, restauración, usuarios/importación y producción. Los formularios no preparados permanecen solo en memoria; solicitudes guardadas sí se recuperan.
+
 - Flutter Desktop + SQLite offline como propuesta inicial; sin servicios externos obligatorios.
 - Dinero en enteros con escala explícita; nunca `double` para cálculos financieros o persistencia monetaria.
 - Operaciones que afectan venta, pagos, stock y libro financiero deben ser atómicas e idempotentes.

@@ -6,6 +6,8 @@ import '../features/inventory/presentation/catalog_page.dart';
 import '../features/inventory/presentation/purchases_page.dart';
 import '../features/sales/application/sales_controller.dart';
 import '../features/sales/presentation/sales_page.dart';
+import '../features/collections/application/collections_controller.dart';
+import '../features/collections/presentation/collections_page.dart';
 
 const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
@@ -49,18 +51,21 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   int _section = 0;
   InventoryController? _inventory;
   SalesController? _sales;
+  CollectionsController? _collections;
 
   void _selectSection(int index) {
     setState(() => _section = index);
     if (widget.controller.profile == null) return;
     if (index == 1 || index == 2) unawaited(_inventory?.load());
     if (index == 3) unawaited(_sales?.load());
+    if (index == 4) unawaited(_collections?.load());
   }
 
   @override
   void dispose() {
     _inventory?.dispose();
     _sales?.dispose();
+    _collections?.dispose();
     super.dispose();
   }
 
@@ -92,6 +97,20 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
           !_sales!.loading &&
           _sales!.loadError == null) {
         unawaited(_sales!.load());
+      }
+      final collectionsStore = controller.collectionsStore;
+      if (!identical(_collections?.store, collectionsStore)) {
+        _collections?.dispose();
+        _collections = collectionsStore == null
+            ? null
+            : CollectionsController(store: collectionsStore);
+      }
+      if (_collections != null &&
+          controller.profile != null &&
+          _collections!.snapshot == null &&
+          !_collections!.loading &&
+          _collections!.loadError == null) {
+        unawaited(_collections!.load());
       }
       if (controller.state == WorkspaceState.loading) {
         return const Scaffold(
@@ -211,6 +230,18 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                 wide,
                               ),
                               _scrollPage(
+                                controller.profile == null
+                                    ? const _ConfigureFirst()
+                                    : _collections == null
+                                    ? const _ModuleUnavailable()
+                                    : CollectionsPage(
+                                        key: ObjectKey(_collections),
+                                        controller: _collections!,
+                                        profile: controller.profile!,
+                                      ),
+                                wide,
+                              ),
+                              _scrollPage(
                                 _System(controller: controller),
                                 wide,
                               ),
@@ -246,6 +277,10 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                         label: 'Ventas',
                       ),
                       NavigationDestination(
+                        icon: Icon(Icons.payments_outlined),
+                        label: 'Cobros',
+                      ),
+                      NavigationDestination(
                         icon: Icon(Icons.settings_outlined),
                         label: 'Sistema',
                       ),
@@ -276,7 +311,7 @@ class _ConfigureFirst extends StatelessWidget {
     child: Padding(
       padding: EdgeInsets.all(28),
       child: Text(
-        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras y ventas.',
+        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras, ventas y cobros.',
       ),
     ),
   );
@@ -335,7 +370,8 @@ class _Sidebar extends StatelessWidget {
               (1, Icons.inventory_2_outlined, 'Catálogo'),
               (2, Icons.local_shipping_outlined, 'Compras'),
               (3, Icons.point_of_sale_outlined, 'Ventas'),
-              (4, Icons.settings_outlined, 'Sistema'),
+              (4, Icons.payments_outlined, 'Cobros'),
+              (5, Icons.settings_outlined, 'Sistema'),
             ])
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -369,7 +405,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.3.0',
+                    'Versión 0.4.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -471,7 +507,7 @@ class _Home extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   const Text(
-                    'Ya puedes organizar el catálogo, recibir compras y confirmar ventas a crédito desde el menú.',
+                    'Ya puedes organizar el catálogo, recibir compras, confirmar ventas a crédito y registrar cobros desde el menú.',
                     style: TextStyle(color: Color(0xFF65716A)),
                   ),
                 ],
@@ -499,8 +535,8 @@ class _Home extends StatelessWidget {
                   (
                     Icons.point_of_sale_outlined,
                     'Ventas y cuentas abiertas',
-                    'Cuentas guardadas y entregas a crédito. Cobros pendientes.',
-                    'Disponible · crédito',
+                    'Cuentas guardadas, entregas a crédito, cobros completos y abonos.',
+                    'Disponible',
                   ),
                   (
                     Icons.account_balance_wallet_outlined,
@@ -766,7 +802,7 @@ class _System extends StatelessWidget {
       ),
       const SizedBox(height: 24),
       const Text(
-        'Entorno de desarrollo. Catálogo, compras y ventas a crédito disponibles. Cobros, pagos, usuarios e importación aún están pendientes.',
+        'Entorno de desarrollo. Catálogo, compras, ventas a crédito y cobros disponibles. Pagos a proveedores, arqueo, usuarios e importación aún están pendientes.',
         style: TextStyle(color: Color(0xFF65716A), height: 1.5),
       ),
     ],

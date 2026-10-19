@@ -1,0 +1,55 @@
+{
+  "verifiedAtUtc": "2026-10-19T21:13:12.6063804Z",
+  "version": "0.4.0+4",
+  "schemaVersion": 4,
+  "checks": {
+    "testsPassed": 202,
+    "testsSkipped": 3,
+    "skippedReason": "Host cannot create symbolic links",
+    "dartFormatFiles": 55,
+    "dartFormatClean": true,
+    "analyzeClean": true,
+    "syntheticFlowChecksPassed": 27,
+    "newCollectionWidgetsPassed": 5
+  },
+  "build": {
+    "smokeSeconds": 60.8,
+    "finalSeconds": 61.1,
+    "finalHasNoSanctumOverrides": true,
+    "smokeAndFinalAotDiffer": true,
+    "nativePartialAndFullHistoryObserved": true,
+    "nativeMoneyBalancesObserved": true,
+    "fourCorrectIndicatorsInSmokeAndFinalObserved": true,
+    "nativeMethod": "Accessibility and keyboard",
+    "manualNativePaymentEntryPerformed": false,
+    "nativeWindowsClosed": true,
+    "imageIsWidgetRender": true
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.4.0-windows-x64.zip",
+    "bytes": 14494599,
+    "files": 17,
+    "sha256": "E8042C7F598B7641EC71792B081664405FDBC0B0C823B8E5E6E147D4A7EE35DB",
+    "version": "0.4.0+4",
+    "allFilesMatch": true,
+    "includesRuntimeDatabase": false,
+    "smokeAotSha256": "BE02658B62E2B5275FDECB41E9BA378F5423055E217DDDF9250ED23563BF6EC2",
+    "finalAotSha256": "93E8B6EB37F686F0BE6BDC8D044D726793CE7F69E9C264F5E6FCD4EAE5EDC016",
+    "currentAliasPublished": true
+  },
+  "developmentMigration": {
+    "ownDevelopmentBackupCreated": true,
+    "backupName": "sanctum2.v3.1792444337553108-6fcba3d8.sqlite3",
+    "businessDataEntered": false
+  },
+  "packageHashUnchangedAfterNativeTest": true,
+  "databaseResetOrDowngradePerformed": false,
+  "originalPosOpenedOrModifiedByAgent": false,
+  "productionEnabled": false,
+  "remoteWorkflowResultInspected": false,
+  "evidenceFiles": [
+    "collections-flow.json",
+    "collections-native-observations.json",
+    "collections-final-observations.json"
+  ]
+}

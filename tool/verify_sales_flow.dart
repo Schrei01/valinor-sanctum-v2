@@ -216,8 +216,8 @@ Future<void> main(List<String> arguments) async {
     );
     final health = await app.readHealth();
     check(
-      'schemaThreeHealthy',
-      health['schemaVersion'] == 3 &&
+      'currentSchemaHealthy',
+      health['schemaVersion'] == AppDatabase.schemaVersion &&
           health['integrityOk'] == true &&
           health['foreignKeyViolations'] == 0 &&
           health['schemaChecksumVerified'] == true &&

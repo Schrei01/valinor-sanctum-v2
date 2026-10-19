@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 3;
+  static const int version = 4;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -19,10 +19,15 @@ abstract final class DatabaseSchema {
   static String get migration3Checksum =>
       checksum(migration3Statements.join('\n;\n'));
 
+  static const String migration4Name = 'customer_collections_v4';
+  static String get migration4Checksum =>
+      checksum(migration4Statements.join('\n;\n'));
+
   static String nameForVersion(int version) => switch (version) {
     1 => migrationName,
     2 => migration2Name,
     3 => migration3Name,
+    4 => migration4Name,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -30,6 +35,7 @@ abstract final class DatabaseSchema {
     1 => migrationChecksum,
     2 => migration2Checksum,
     3 => migration3Checksum,
+    4 => migration4Checksum,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -1004,6 +1010,470 @@ OR (existing.document_id = NEW.document_id AND existing.sequence = NEW.sequence)
     ),
     ..._freezeSaleJournal(),
   ]);
+
+  /// V1 through V3 remain historical inputs. Collections append new facts only.
+  static final List<String> migration4Statements = List<String>.unmodifiable([
+    '''
+CREATE TABLE collection_requests (
+  command_id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(command_id)) > 0),
+  canonical_payload TEXT NOT NULL CHECK (length(trim(canonical_payload)) > 0),
+  receivable_id TEXT NOT NULL REFERENCES customer_receivables(id) ON DELETE RESTRICT,
+  occurred_at_utc TEXT NOT NULL CHECK (${_collectionUtc('occurred_at_utc')}),
+  prepared_at_utc TEXT NOT NULL CHECK (${_collectionUtc('prepared_at_utc')}),
+  status TEXT NOT NULL CHECK (status IN ('prepared', 'rejected', 'cancelled', 'confirmed')),
+  rejection_reason TEXT,
+  CHECK ((status IN ('prepared', 'confirmed') AND rejection_reason IS NULL)
+    OR (status IN ('rejected', 'cancelled') AND rejection_reason IS NOT NULL
+      AND length(trim(rejection_reason)) > 0))
+)
+''',
+    '''
+CREATE TABLE collections (
+  document_id TEXT PRIMARY KEY NOT NULL REFERENCES business_documents(id) ON DELETE RESTRICT,
+  receivable_id TEXT NOT NULL REFERENCES customer_receivables(id) ON DELETE RESTRICT,
+  sale_label_snapshot TEXT NOT NULL CHECK (length(trim(sale_label_snapshot)) BETWEEN 1 AND 160),
+  customer_name_snapshot TEXT NOT NULL CHECK (length(trim(customer_name_snapshot)) BETWEEN 1 AND 160),
+  collected_at_utc TEXT NOT NULL CHECK (${_collectionUtc('collected_at_utc')}),
+  total_minor INTEGER NOT NULL CHECK (typeof(total_minor) = 'integer' AND total_minor > 0),
+  remaining_minor INTEGER NOT NULL CHECK (typeof(remaining_minor) = 'integer' AND remaining_minor >= 0)
+)
+''',
+    '''
+CREATE TABLE collection_parts (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  collection_id TEXT NOT NULL REFERENCES collections(document_id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  cash_account_id TEXT NOT NULL REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  payment_method_id TEXT NOT NULL REFERENCES payment_methods(id) ON DELETE RESTRICT,
+  cash_account_name_snapshot TEXT NOT NULL CHECK (length(trim(cash_account_name_snapshot)) BETWEEN 1 AND 160),
+  cash_account_kind_snapshot TEXT NOT NULL CHECK (cash_account_kind_snapshot IN ('cash', 'bank', 'mobile', 'clearing')),
+  payment_method_code_snapshot TEXT NOT NULL CHECK (length(trim(payment_method_code_snapshot)) BETWEEN 1 AND 32),
+  payment_method_name_snapshot TEXT NOT NULL CHECK (length(trim(payment_method_name_snapshot)) BETWEEN 1 AND 160),
+  amount_minor INTEGER NOT NULL CHECK (typeof(amount_minor) = 'integer' AND amount_minor > 0),
+  UNIQUE (collection_id, sequence)
+)
+''',
+    '''
+CREATE TABLE receivable_settlements (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  receivable_id TEXT NOT NULL REFERENCES customer_receivables(id) ON DELETE RESTRICT,
+  collection_id TEXT NOT NULL UNIQUE REFERENCES collections(document_id) ON DELETE RESTRICT,
+  amount_minor INTEGER NOT NULL CHECK (typeof(amount_minor) = 'integer' AND amount_minor > 0)
+)
+''',
+    'CREATE INDEX idx_collections_receivable ON collections(receivable_id)',
+    'CREATE INDEX idx_collection_parts_cash ON collection_parts(cash_account_id)',
+    'CREATE INDEX idx_settlements_receivable ON receivable_settlements(receivable_id)',
+    '''
+CREATE TRIGGER collection_requests_validate_insert
+BEFORE INSERT ON collection_requests
+BEGIN
+  SELECT CASE WHEN NEW.status <> 'prepared'
+    OR EXISTS (SELECT 1 FROM collection_requests WHERE command_id = NEW.command_id)
+    OR EXISTS (SELECT 1 FROM command_log WHERE id = NEW.command_id)
+    OR EXISTS (SELECT 1 FROM sale_confirmations WHERE command_id = NEW.command_id)
+    THEN RAISE(ABORT, 'Create a unique prepared collection request') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM customer_receivables r
+    JOIN business_documents d ON d.id = r.origin_document_id
+    JOIN journal_entries j ON j.document_id = d.id
+    WHERE r.id = NEW.receivable_id AND d.status = 'posted' AND j.status = 'posted')
+    THEN RAISE(ABORT, 'A collection request requires a confirmed customer receivable') END;
+END
+''',
+    '''
+CREATE TRIGGER collection_requests_validate_update
+BEFORE UPDATE ON collection_requests
+BEGIN
+  SELECT CASE WHEN NEW.command_id <> OLD.command_id
+    OR NEW.canonical_payload <> OLD.canonical_payload
+    OR NEW.receivable_id <> OLD.receivable_id
+    OR NEW.occurred_at_utc <> OLD.occurred_at_utc
+    OR NEW.prepared_at_utc <> OLD.prepared_at_utc
+    THEN RAISE(ABORT, 'Prepared collection input is immutable') END;
+  SELECT CASE WHEN NOT ((OLD.status = 'prepared' AND NEW.status IN ('rejected', 'confirmed'))
+    OR (OLD.status = 'rejected' AND NEW.status = 'cancelled'))
+    THEN RAISE(ABORT, 'Invalid collection request transition') END;
+  SELECT CASE WHEN NEW.status IN ('rejected', 'cancelled')
+    AND EXISTS (SELECT 1 FROM command_log WHERE id = OLD.command_id)
+    THEN RAISE(ABORT, 'A committed collection cannot be rejected or cancelled') END;
+  SELECT CASE WHEN NEW.status = 'cancelled' AND NEW.rejection_reason IS NOT OLD.rejection_reason
+    THEN RAISE(ABORT, 'The collection rejection reason is historical') END;
+  SELECT CASE WHEN NEW.status = 'confirmed' AND NOT EXISTS (
+    SELECT 1 FROM business_documents d JOIN collections c ON c.document_id = d.id
+    JOIN journal_entries j ON j.document_id = d.id
+    WHERE d.command_id = OLD.command_id AND c.receivable_id = OLD.receivable_id
+      AND d.type = 'customer_collection' AND d.status = 'posted' AND j.status = 'posted')
+    THEN RAISE(ABORT, 'Post a collection and its journal before completing its request') END;
+END
+''',
+    '''
+CREATE TRIGGER collection_requests_no_delete
+BEFORE DELETE ON collection_requests
+BEGIN
+  SELECT RAISE(ABORT, 'Prepared collection inputs cannot be deleted');
+END
+''',
+    '''
+CREATE TRIGGER collection_requests_reserve_command_id
+BEFORE INSERT ON command_log
+WHEN EXISTS (SELECT 1 FROM collection_requests c WHERE c.command_id = NEW.id
+  AND (NEW.command_type <> 'collect_receivable' OR c.status <> 'prepared'))
+BEGIN
+  SELECT RAISE(ABORT, 'A prepared collection command identifier is reserved for its collection');
+END
+''',
+    '''
+CREATE TRIGGER sale_confirmations_reject_collection_command
+BEFORE INSERT ON sale_confirmations
+WHEN EXISTS (SELECT 1 FROM collection_requests WHERE command_id = NEW.command_id)
+BEGIN
+  SELECT RAISE(ABORT, 'Collection request command identifiers cannot be reused for sales');
+END
+''',
+    '''
+CREATE TRIGGER command_log_no_replace_v4
+BEFORE INSERT ON command_log
+WHEN EXISTS (SELECT 1 FROM command_log WHERE id = NEW.id)
+BEGIN
+  SELECT RAISE(ABORT, 'Committed command results cannot be replaced');
+END
+''',
+    '''
+CREATE TRIGGER collections_documents_insert_as_draft
+BEFORE INSERT ON business_documents
+WHEN NEW.type = 'customer_collection' AND NEW.status <> 'draft'
+BEGIN
+  SELECT RAISE(ABORT, 'Create a collection document as draft before posting');
+END
+''',
+    '''
+CREATE TRIGGER collections_documents_no_replace
+BEFORE INSERT ON business_documents
+WHEN EXISTS (SELECT 1 FROM business_documents d
+  WHERE (d.id = NEW.id OR (d.command_id = NEW.command_id AND d.command_sequence = NEW.command_sequence))
+    AND d.type = 'customer_collection' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed collection documents cannot be replaced');
+END
+''',
+    '''
+CREATE TRIGGER collections_documents_no_conflicting_update
+BEFORE UPDATE ON business_documents
+WHEN EXISTS (SELECT 1 FROM business_documents d
+  WHERE d.id <> OLD.id AND (d.id = NEW.id OR
+    (d.command_id = NEW.command_id AND d.command_sequence = NEW.command_sequence))
+    AND d.type = 'customer_collection' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed collection documents cannot be replaced through an update');
+END
+''',
+    '''
+CREATE TRIGGER collections_require_draft_document
+BEFORE INSERT ON collections
+WHEN NOT EXISTS (SELECT 1 FROM business_documents WHERE id = NEW.document_id
+  AND type = 'customer_collection' AND status = 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'A collection requires a draft collection document');
+END
+''',
+    '''
+CREATE TRIGGER collections_validate_document_posting
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status = 'draft' AND NEW.status = 'posted' AND
+  (NEW.type = 'customer_collection' OR EXISTS (SELECT 1 FROM collections WHERE document_id = NEW.id))
+BEGIN
+  SELECT CASE WHEN NEW.type <> 'customer_collection' OR NEW.command_sequence <> 0
+    OR NOT EXISTS (SELECT 1 FROM command_log c WHERE c.id = NEW.command_id
+      AND c.command_type = 'collect_receivable' AND c.actor_id = NEW.actor_id
+      AND c.authorization_policy_version = 'development-single-user-v1')
+    THEN RAISE(ABORT, 'Invalid collection command or document type') END;
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM collections c JOIN customer_receivables r ON r.id = c.receivable_id
+    JOIN sales s ON s.document_id = r.origin_document_id
+    JOIN business_documents sale_doc ON sale_doc.id = s.document_id
+    JOIN journal_entries sale_entry ON sale_entry.document_id = sale_doc.id
+    JOIN ledger_accounts a ON a.id = r.control_account_id
+    JOIN collection_requests request ON request.command_id = NEW.command_id
+    WHERE c.document_id = NEW.id AND request.status = 'prepared'
+      AND request.receivable_id = c.receivable_id
+      AND c.sale_label_snapshot = s.label_snapshot
+      AND c.customer_name_snapshot = r.customer_name_snapshot
+      AND c.collected_at_utc = request.occurred_at_utc
+      AND c.collected_at_utc = NEW.occurred_at_utc
+      AND ${_utcSortKey('c.collected_at_utc')} >= ${_utcSortKey('r.issued_at_utc')}
+      AND date(NEW.occurred_at_utc, '-5 hours') = NEW.business_date
+      AND sale_doc.status = 'posted' AND sale_entry.status = 'posted'
+      AND a.class = 'asset' AND a.role = 'customer_receivable' AND a.is_active = 1)
+    THEN RAISE(ABORT, 'A collection must match its prepared request and confirmed receivable') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM collections current
+    JOIN collections previous ON previous.receivable_id = current.receivable_id
+    JOIN business_documents d ON d.id = previous.document_id
+    WHERE current.document_id = NEW.id AND previous.document_id <> NEW.id AND d.status <> 'draft'
+      AND ${_utcSortKey('previous.collected_at_utc')} > ${_utcSortKey('current.collected_at_utc')})
+    THEN RAISE(ABORT, 'A collection cannot predate the latest confirmed collection') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM collection_parts WHERE collection_id = NEW.id)
+    OR (SELECT sum(amount_minor) FROM collection_parts WHERE collection_id = NEW.id)
+      <> (SELECT total_minor FROM collections WHERE document_id = NEW.id)
+    OR (SELECT min(sequence) FROM collection_parts WHERE collection_id = NEW.id) <> 0
+    OR (SELECT max(sequence) + 1 FROM collection_parts WHERE collection_id = NEW.id)
+      <> (SELECT count(*) FROM collection_parts WHERE collection_id = NEW.id)
+    OR EXISTS (SELECT 1 FROM collection_parts p
+      JOIN cash_accounts cash ON cash.id = p.cash_account_id
+      JOIN ledger_accounts a ON a.id = cash.ledger_account_id
+      JOIN payment_methods method ON method.id = p.payment_method_id
+      WHERE p.collection_id = NEW.id AND (cash.is_active <> 1 OR p.cash_account_kind_snapshot <> cash.kind
+        OR a.is_active <> 1 OR a.class <> 'asset' OR a.role <> 'cash'
+        OR method.is_active <> 1 OR p.payment_method_code_snapshot <> method.code))
+    THEN RAISE(ABORT, 'Collection parts must sum exactly and use active money accounts and methods') END;
+  SELECT CASE WHEN (SELECT count(*) FROM receivable_settlements WHERE collection_id = NEW.id) <> 1
+    OR NOT EXISTS (SELECT 1 FROM receivable_settlements settlement
+      JOIN collections c ON c.document_id = settlement.collection_id
+      JOIN customer_receivables r ON r.id = c.receivable_id
+      WHERE c.document_id = NEW.id AND settlement.receivable_id = c.receivable_id
+        AND settlement.amount_minor = c.total_minor
+        AND c.total_minor <= r.initial_minor - coalesce((
+          SELECT sum(previous.amount_minor) FROM receivable_settlements previous
+          JOIN business_documents d ON d.id = previous.collection_id
+          WHERE previous.receivable_id = r.id AND previous.collection_id <> NEW.id AND d.status <> 'draft'), 0)
+        AND c.remaining_minor = r.initial_minor - c.total_minor - coalesce((
+          SELECT sum(previous.amount_minor) FROM receivable_settlements previous
+          JOIN business_documents d ON d.id = previous.collection_id
+          WHERE previous.receivable_id = r.id AND previous.collection_id <> NEW.id AND d.status <> 'draft'), 0))
+    THEN RAISE(ABORT, 'A settlement must apply the exact collection without overpaying its receivable') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM journal_entries e
+    WHERE e.document_id = NEW.id AND e.status = 'draft' AND e.cost_completeness = 'not_applicable')
+    THEN RAISE(ABORT, 'Prepare the collection journal before posting') END;
+  SELECT CASE WHEN (SELECT count(*) FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+      WHERE e.document_id = NEW.id) <> 1 + (SELECT count(DISTINCT a.ledger_account_id)
+        FROM collection_parts p JOIN cash_accounts a ON a.id = p.cash_account_id
+        WHERE p.collection_id = NEW.id)
+    OR NOT EXISTS (SELECT 1 FROM journal_lines l
+    JOIN journal_entries e ON e.id = l.entry_id
+    JOIN collections c ON c.document_id = e.document_id
+    JOIN customer_receivables r ON r.id = c.receivable_id
+    WHERE e.document_id = NEW.id AND l.account_id = r.control_account_id
+      AND l.credit_minor = c.total_minor AND l.debit_minor = 0)
+    OR EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+      JOIN collections c ON c.document_id = e.document_id
+      JOIN customer_receivables r ON r.id = c.receivable_id
+      WHERE e.document_id = NEW.id AND NOT (
+        (l.account_id = r.control_account_id AND l.credit_minor = c.total_minor AND l.debit_minor = 0)
+        OR (l.credit_minor = 0 AND l.debit_minor > 0 AND EXISTS (
+          SELECT 1 FROM collection_parts p JOIN cash_accounts a ON a.id = p.cash_account_id
+          WHERE p.collection_id = NEW.id AND a.ledger_account_id = l.account_id))))
+    OR EXISTS (SELECT 1 FROM collection_parts p JOIN cash_accounts a ON a.id = p.cash_account_id
+      WHERE p.collection_id = NEW.id AND (SELECT coalesce(sum(l.debit_minor), 0)
+        FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+        WHERE e.document_id = NEW.id AND l.account_id = a.ledger_account_id)
+        <> (SELECT sum(part.amount_minor) FROM collection_parts part
+          JOIN cash_accounts other ON other.id = part.cash_account_id
+          WHERE part.collection_id = NEW.id AND other.ledger_account_id = a.ledger_account_id))
+    OR (SELECT sum(l.credit_minor) FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+      WHERE e.document_id = NEW.id) <> (SELECT total_minor FROM collections WHERE document_id = NEW.id)
+    THEN RAISE(ABORT, 'A collection must debit its exact money accounts and credit only its receivable') END;
+END
+''',
+    ..._freezeCollectionFacts(
+      'collections',
+      'document_id',
+      'existing.document_id = NEW.document_id',
+    ),
+    ..._freezeCollectionFacts(
+      'collection_parts',
+      'collection_id',
+      'existing.id = NEW.id OR (existing.collection_id = NEW.collection_id AND existing.sequence = NEW.sequence)',
+    ),
+    ..._freezeCollectionFacts(
+      'receivable_settlements',
+      'collection_id',
+      'existing.id = NEW.id OR existing.collection_id = NEW.collection_id',
+    ),
+    ..._freezeCollectionJournal(),
+    ..._freezeCollectionCatalogs(),
+  ]);
+
+  static String _collectionUtc(String column) =>
+      "length($column) IN (24, 27) AND substr($column, 20, 1) = '.' "
+      "AND substr($column, -1) = 'Z' "
+      "AND substr($column, 21, length($column) - 21) NOT GLOB '*[^0-9]*' "
+      "AND strftime('%Y-%m-%dT%H:%M:%S', substr($column, 1, 19) || 'Z') IS NOT NULL "
+      "AND strftime('%Y-%m-%dT%H:%M:%S', substr($column, 1, 19) || 'Z') = substr($column, 1, 19)";
+
+  static List<String> _freezeCollectionFacts(
+    String table,
+    String documentColumn,
+    String conflicts,
+  ) {
+    String confirmed(String row) =>
+        '''EXISTS (SELECT 1 FROM business_documents d
+WHERE d.id = $row.$documentColumn AND d.status <> 'draft')''';
+    final insertGuard = '''(${confirmed('NEW')} OR EXISTS (
+SELECT 1 FROM $table existing WHERE ($conflicts) AND ${confirmed('existing')}))''';
+    return [
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER ${table}_confirmed_no_${action.toLowerCase()}
+BEFORE $action ON $table
+WHEN ${action == 'INSERT'
+            ? insertGuard
+            : action == 'DELETE'
+            ? confirmed('OLD')
+            : '(${confirmed('OLD')} OR $insertGuard)'}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed collection history is immutable');
+END
+''',
+    ];
+  }
+
+  static List<String> _freezeCollectionJournal() {
+    String confirmed(String row) =>
+        '''EXISTS (SELECT 1 FROM business_documents d
+WHERE d.id = $row.document_id AND d.type = 'customer_collection' AND d.status <> 'draft')''';
+    String linesConfirmed(String row) =>
+        '''EXISTS (SELECT 1 FROM journal_entries e
+JOIN business_documents d ON d.id = e.document_id
+WHERE e.id = $row.entry_id AND d.type = 'customer_collection' AND d.status <> 'draft')''';
+    return [
+      '''
+CREATE TRIGGER collection_entries_confirmed_no_delete
+BEFORE DELETE ON journal_entries
+WHEN ${confirmed('OLD')}
+BEGIN
+  SELECT RAISE(ABORT, 'A confirmed collection requires its journal entry');
+END
+''',
+      '''
+CREATE TRIGGER collection_entries_confirmed_no_rewrite
+BEFORE UPDATE ON journal_entries
+WHEN ${confirmed('OLD')}
+  AND (NEW.id <> OLD.id OR NEW.document_id <> OLD.document_id
+    OR NEW.cost_completeness <> OLD.cost_completeness
+    OR NEW.reversal_of_id IS NOT OLD.reversal_of_id OR NEW.status <> 'posted')
+BEGIN
+  SELECT RAISE(ABORT, 'Only posting is allowed on a confirmed collection journal');
+END
+''',
+      '''
+CREATE TRIGGER collection_entries_confirmed_no_replace
+BEFORE INSERT ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries e JOIN business_documents d ON d.id = e.document_id
+  WHERE (e.id = NEW.id OR e.document_id = NEW.document_id)
+    AND d.type = 'customer_collection' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed collection journal entries cannot be replaced');
+END
+''',
+      '''
+CREATE TRIGGER collection_entries_confirmed_no_conflicting_update
+BEFORE UPDATE ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries e JOIN business_documents d ON d.id = e.document_id
+  WHERE e.id <> OLD.id AND (e.id = NEW.id OR e.document_id = NEW.document_id)
+    AND d.type = 'customer_collection' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed collection journal entries cannot be replaced through an update');
+END
+''',
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER collection_journal_lines_confirmed_no_${action.toLowerCase()}
+BEFORE $action ON journal_lines
+WHEN ${action == 'INSERT'
+            ? linesConfirmed('NEW')
+            : action == 'DELETE'
+            ? linesConfirmed('OLD')
+            : '(${linesConfirmed('OLD')} OR ${linesConfirmed('NEW')})'}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed collection journal lines are immutable');
+END
+''',
+      '''
+CREATE TRIGGER collection_journal_lines_confirmed_no_replace
+BEFORE INSERT ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+  JOIN business_documents d ON d.id = e.document_id
+  WHERE (l.id = NEW.id OR (l.entry_id = NEW.entry_id AND l.sequence = NEW.sequence))
+    AND d.type = 'customer_collection' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed collection journal lines cannot be replaced');
+END
+''',
+      '''
+CREATE TRIGGER collection_journal_lines_confirmed_no_conflicting_update
+BEFORE UPDATE ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+  JOIN business_documents d ON d.id = e.document_id
+  WHERE l.id <> OLD.id AND (l.id = NEW.id OR (l.entry_id = NEW.entry_id AND l.sequence = NEW.sequence))
+    AND d.type = 'customer_collection' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed collection journal lines cannot be replaced through an update');
+END
+''',
+    ];
+  }
+
+  static List<String> _freezeCollectionCatalogs() {
+    String ledgerUsed(String alias) =>
+        '''(EXISTS (SELECT 1 FROM cash_accounts WHERE ledger_account_id = $alias.id)
+OR EXISTS (SELECT 1 FROM journal_lines WHERE account_id = $alias.id)
+OR EXISTS (SELECT 1 FROM customer_receivables WHERE control_account_id = $alias.id)
+OR EXISTS (SELECT 1 FROM obligations WHERE control_account_id = $alias.id))''';
+    return [
+      '''
+CREATE TRIGGER ledger_accounts_used_identity_immutable_v4
+BEFORE UPDATE ON ledger_accounts
+WHEN ${ledgerUsed('OLD')} AND (NEW.id <> OLD.id OR NEW.code <> OLD.code
+  OR NEW.class <> OLD.class OR NEW.role <> OLD.role)
+BEGIN
+  SELECT RAISE(ABORT, 'Configured or used ledger account identity and role are immutable');
+END
+''',
+      '''
+CREATE TRIGGER ledger_accounts_used_no_replace_v4
+BEFORE INSERT ON ledger_accounts
+WHEN EXISTS (SELECT 1 FROM ledger_accounts existing
+  WHERE (existing.id = NEW.id OR existing.code = NEW.code) AND ${ledgerUsed('existing')})
+BEGIN
+  SELECT RAISE(ABORT, 'Configured or used ledger accounts cannot be replaced');
+END
+''',
+      '''
+CREATE TRIGGER ledger_accounts_used_no_conflicting_update_v4
+BEFORE UPDATE ON ledger_accounts
+WHEN EXISTS (SELECT 1 FROM ledger_accounts existing WHERE existing.id <> OLD.id
+  AND (existing.id = NEW.id OR existing.code = NEW.code) AND ${ledgerUsed('existing')})
+BEGIN
+  SELECT RAISE(ABORT, 'Configured or used ledger accounts cannot be replaced through an update');
+END
+''',
+      for (final table in ['cash_accounts', 'payment_methods']) ...[
+        '''
+CREATE TRIGGER ${table}_identity_immutable_v4
+BEFORE UPDATE ON $table
+WHEN NEW.id <> OLD.id OR ${table == 'cash_accounts' ? 'NEW.ledger_account_id <> OLD.ledger_account_id OR NEW.kind <> OLD.kind' : 'NEW.code <> OLD.code'}
+BEGIN
+  SELECT RAISE(ABORT, 'Configured payment identity is immutable; archive it instead');
+END
+''',
+        '''
+CREATE TRIGGER ${table}_no_replace_v4
+BEFORE INSERT ON $table
+WHEN EXISTS (SELECT 1 FROM $table existing WHERE existing.id = NEW.id OR
+  ${table == 'cash_accounts' ? 'existing.ledger_account_id = NEW.ledger_account_id' : 'existing.code = NEW.code'})
+BEGIN
+  SELECT RAISE(ABORT, 'Configured payment catalogs cannot be replaced');
+END
+''',
+        '''
+CREATE TRIGGER ${table}_no_delete_v4
+BEFORE DELETE ON $table
+BEGIN
+  SELECT RAISE(ABORT, 'Configured payment catalogs must be archived instead of deleted');
+END
+''',
+      ],
+    ];
+  }
 
   // Dart emits three or six fractional digits. Padding to microseconds keeps
   // chronological ordering exact without SQLite's millisecond date rounding.

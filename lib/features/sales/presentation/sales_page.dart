@@ -155,7 +155,7 @@ class _SalesPageState extends State<SalesPage> {
               InventoryPageHeading(
                 title: 'Ventas y cuentas abiertas',
                 subtitle:
-                    'Guarda una cuenta mientras la preparas. Confirmar la entrega a crédito descuenta mercancía y crea una cuenta por cobrar; el cobro se registrará en una próxima entrega.',
+                    'Guarda una cuenta mientras la preparas. Confirmar la entrega a crédito descuenta mercancía y crea una cuenta por cobrar. Registra el dinero recibido desde Cobros.',
                 busy: controller.busy,
                 onRefresh: controller.load,
               ),
@@ -366,7 +366,7 @@ class _SalesPageState extends State<SalesPage> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'Entregas confirmadas con precios, cliente y costo histórico conservados. Los cobros todavía no están disponibles.',
+                  'Entregas confirmadas con precios, cliente y costo histórico conservados. Los cobros registrados reducen el saldo pendiente.',
                 ),
                 const SizedBox(height: 16),
                 _history(data),
@@ -751,7 +751,10 @@ class _SalesPageState extends State<SalesPage> {
                         'Venta: ${inventoryMoney(sale.totalMinor, widget.profile)}',
                       ),
                       Text(
-                        'Por cobrar: ${inventoryMoney(sale.totalMinor, widget.profile)}',
+                        'Por cobrar: ${inventoryMoney(sale.remainingMinor, widget.profile)}',
+                      ),
+                      Text(
+                        'Cobrado: ${inventoryMoney(sale.paidMinor, widget.profile)}',
                       ),
                       Text(
                         'Costo histórico: ${inventoryMoney(sale.totalCostMinor, widget.profile)}',
