@@ -21,7 +21,10 @@ Future<void> main(List<String> arguments) async {
     await _guardPath(databasePath, mustExist: true, extension: '.sqlite3');
     await _guardPath(outputPath, mustExist: false, extension: '.json');
     if (await File(outputPath).exists()) {
-      throw FileSystemException('The report already exists; choose a new output.', outputPath);
+      throw FileSystemException(
+        'The report already exists; choose a new output.',
+        outputPath,
+      );
     }
 
     Map<String, Object?> report;

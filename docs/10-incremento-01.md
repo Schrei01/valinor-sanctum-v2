@@ -2,6 +2,8 @@
 
 Fecha: 18 de octubre de 2026, America/Bogota. Diseño aprobado expresamente por el propietario: «Sí lo apruebo».
 
+Registro histórico del corte anterior. La instalación autorizada de C++, compilación nativa y comprobaciones posteriores se documentan en [validación Windows](11-validacion-windows.md).
+
 ## Resultado entregado
 
 Implementada la primera estructura de la aplicación 0.1.0, con soporte de proyecto Windows y un núcleo ejecutado por el motor de pruebas Flutter. El bundle Dart y assets para windows-x64 se generó correctamente. **El ejecutable nativo .exe no se ha generado**: la máquina carece de las herramientas C++ de Visual Studio.

@@ -1,6 +1,6 @@
 # Plan de implementación y estrategia de validación
 
-Estado: diseño aprobado y etapa 3 implementada y probada en su fundación. El bundle Flutter se genera; el .exe Windows sigue pendiente por falta de Visual Studio C++. Las etapas comerciales continúan pendientes. Resultados ejecutados en [incremento 01](10-incremento-01.md).
+Estado: diseño aprobado y etapa 3 de fundación completada, con ejecutable Windows y paquete completo generados. Se confirmó el guardado manual, se observó la recuperación del perfil al reabrir y dos lecturas SQLite produjeron la misma huella. El paquete final abrió/cerró con espacio vacío y cuatro indicadores correctos. Las etapas comerciales continúan pendientes. Resultados históricos en [incremento 01](10-incremento-01.md) y actuales en [validación Windows](11-validacion-windows.md).
 
 ## 1. Prioridades y puertas de avance
 
@@ -10,7 +10,7 @@ P0 en este plan significa requisito previo al uso operativo, no severidad de un 
 |---|---|---|---|
 | 1. Auditoría | Inventario funcional/técnico, esquema y migraciones, riesgos, reutilización | Fuente inspeccionada y evidencias enlazadas; original sin cambios | Completada por análisis estático |
 | 2. Diseño | Arquitectura, datos, matriz negocio, importador futuro y plan | Propietario aprueba enfoque y decisiones de núcleo | Aprobado el 18/10/2026 |
-| 3. Proyecto nuevo | Flutter Windows mínimo, Git propio, composición, configuración y SQLite exclusivos, migración inicial | Arranca/cierra/reabre perfil sintético; rutas originales inaccesibles para escritura; pruebas de esquema | Fundación probada; .exe pendiente de toolchain |
+| 3. Proyecto nuevo | Flutter Windows mínimo, Git propio, composición, configuración y SQLite exclusivos, migración inicial | Arranca/cierra/reabre perfil sintético; rutas originales inaccesibles para escritura; pruebas de esquema | Completada para la fundación 0.1.0: perfil persistido, reapertura y diagnóstico del bundle final verificados |
 | 4A. Catálogo/entradas | Productos/categorías, compras/proveedores, recepción y capas, ajustes | Stock y valoración reconstruibles; compras diferenciadas de gastos | Pendiente |
 | 4B. Venta/pago | Cuenta persistida, venta confirmada, precio/costo histórico, cobro y obligaciones | Venta completa atómica, doble clic/reintento seguro, cierre/reapertura sin pérdida | Pendiente |
 | 4C. Tesorería | Cuentas/medios, apertura, gastos, transferencias, capital, abonos, arqueo | Saldos desde libro y conciliación; transferencias no alteran resultado | Pendiente |
@@ -119,4 +119,4 @@ Antes de considerarlo utilizable:
 - Riesgos, limitaciones y siguientes funcionalidades.
 - Confirmación de no escritura en el original cuando se lo haya consultado.
 
-El [registro de verificación](09-verificacion.md) documenta únicamente lo realizado en este incremento.
+El [registro documental inicial](09-verificacion.md) conserva la auditoría histórica; la [validación Windows](11-validacion-windows.md) documenta la compilación y las comprobaciones de la fundación 0.1.0.

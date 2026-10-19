@@ -2,9 +2,11 @@
 
 Repositorio independiente para la nueva aplicación de gestión comercial de Valinor.
 
-**Estado: diseño aprobado y primera fundación implementada (0.1.0).** Configuración de perfil, SQLite independiente, dinero exacto, FIFO y pruebas ya disponibles. El bundle Flutter para Windows se genera; el .exe nativo está pendiente de instalar las herramientas C++ de Visual Studio con autorización específica.
+**Estado: primera fundación compilada, empaquetada y validada para Windows (0.1.0).** Configuración de perfil, SQLite independiente, dinero exacto, FIFO y pruebas ya disponibles. Se instaló el toolchain C++ con autorización expresa. El propietario confirmó la creación del perfil sintético y cuatro indicadores correctos; se comprobó su recuperación al reabrir y su persistencia con dos inspecciones SQLite de solo lectura. El ejecutable del paquete final también abrió con un espacio vacío y diagnóstico correcto.
 
-Consulta [el incremento 01 y sus verificaciones](docs/10-incremento-01.md), o la [vista previa de la interfaz](docs/images/bootstrap.png).
+Consulta [la validación Windows y los artefactos](docs/11-validacion-windows.md), [el incremento 01 histórico](docs/10-incremento-01.md), o la [vista previa renderizada mediante pruebas](docs/images/bootstrap.png).
+
+Para abrir esta entrega usa `dist/ValinorSanctum2/valinor_sanctum_2.exe`. El paquete completo está en `dist/valinor-sanctum-2-0.1.0-windows-x64.zip`; conserva las DLL y la carpeta data junto al ejecutable. Esta versión de desarrollo guarda sus datos dentro de `C:/proyectos/valinor_sanctum_2` y no está habilitada para producción.
 
 ## Separación de proyectos
 
@@ -26,7 +28,8 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 7. [Compatibilidad e importación futura](docs/07-migracion.md).
 8. [Prioridades, pruebas y criterios de aceptación](docs/08-plan-validacion.md).
 9. [Evidencia y límites de la verificación](docs/09-verificacion.md).
-10. [Fundación implementada, comandos y bloqueo de compilación Windows](docs/10-incremento-01.md).
+10. [Fundación implementada y verificaciones del corte anterior](docs/10-incremento-01.md).
+11. [Toolchain instalado, ejecutable Windows y paquete completo](docs/11-validacion-windows.md).
 
 ## Decisiones aprobadas
 
@@ -49,8 +52,9 @@ El SDK portable y sus cachés están en .tooling, ignorados por Git. Los scripts
 ./scripts/flutter.ps1 pub get --enforce-lockfile
 ./scripts/flutter.ps1 analyze
 ./scripts/flutter.ps1 test --reporter expanded
-# Requiere tener instalado Visual Studio C++:
 ./scripts/flutter.ps1 run -d windows
+./scripts/flutter.ps1 build windows --release --no-pub
+./scripts/package-windows.ps1
 ~~~
 
-Resultados: 59 pruebas aprobadas y tres omitidas por falta de permiso del host para crear enlaces simbólicos. No se ha ejecutado un .exe. Los módulos operativos permanecen pendientes según el plan.
+Resultados: 63 pruebas aprobadas y tres omitidas por falta de permiso del host para crear enlaces simbólicos; análisis y formato limpios. Guardado y reapertura del perfil sintético verificados, con huellas coincidentes y cero cambios durante la segunda lectura. El paquete final se reconstruyó sin overrides de prueba, se verificaron sus 17 archivos y se abrió/cerró correctamente con sus cuatro indicadores en Correcto. Se usó confirmación manual del propietario y observación por accesibilidad; la captura de imagen falló y no se presenta como prueba visual automática. Los módulos operativos permanecen pendientes según el plan.

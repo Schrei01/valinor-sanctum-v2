@@ -1,4 +1,7 @@
-param([string]$Version = '')
+param(
+    [string]$Version = '',
+    [string]$ReleasePath = 'build\windows\x64\runner\Release'
+)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 function Assert-ProjectPath([string]$Candidate) {
@@ -25,12 +28,20 @@ function Get-BundleFiles([string]$BundleRoot) {
         foreach ($item in Get-ChildItem -LiteralPath $queue.Dequeue() -Force) {
             $relative = $item.FullName.Substring($BundleRoot.Length + 1)
             if ($relative -match '^data[\\/](development|test)([\\/]|$)') { continue }
+            # A prior `build bundle --debug` can leave these in shared assets.
+            # The Release engine uses data/app.so instead of JIT snapshots.
+            if ($relative -match '^data[\\/]flutter_assets[\\/](kernel_blob\.bin|isolate_snapshot_data|vm_snapshot_data|\.last_build_id)$') { continue }
             Assert-ProjectPath $item.FullName
             if ($item.PSIsContainer) { $queue.Enqueue($item.FullName) } else { $item }
         }
     }
 }
-$releaseDirectory = Join-Path $projectRoot 'build\windows\x64\runner\Release'
+$releaseDirectory = if ([IO.Path]::IsPathRooted($ReleasePath)) {
+    [IO.Path]::GetFullPath($ReleasePath)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $projectRoot $ReleasePath))
+}
+$releaseDirectory = $releaseDirectory.TrimEnd('\', '/')
 Assert-ProjectPath $releaseDirectory
 foreach ($required in @('valinor_sanctum_2.exe', 'flutter_windows.dll', 'sqlite3.dll', 'data\app.so', 'data\icudtl.dat', 'data\flutter_assets')) {
     if (-not (Test-Path -LiteralPath (Join-Path $releaseDirectory $required))) { throw ('Falta un archivo del bundle nativo: ' + $required) }
@@ -94,4 +105,5 @@ Compress-Archive -LiteralPath $bundleDirectory -DestinationPath $zipPath -Compre
     bytes = (Get-Item -LiteralPath $zipPath).Length
     sha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
     includes_synthetic_profiles = $false
+    excludes_flutter_debug_artifacts = $true
 } | ConvertTo-Json

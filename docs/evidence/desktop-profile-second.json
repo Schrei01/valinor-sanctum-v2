@@ -1,0 +1,185 @@
+{
+  "reportVersion": 1,
+  "passed": true,
+  "quality": "verified_synthetic_profile",
+  "verifiedAtUtc": "2026-10-19T16:06:56.524252Z",
+  "databasePath": "C:\\proyectos\\valinor_sanctum_2\\tmp\\desktop-smoke\\smoke-98115880\\sanctum2.sqlite3",
+  "readOnlyConnection": true,
+  "closedConnection": true,
+  "checks": {
+    "queryOnly": {
+      "passed": true,
+      "actual": 1,
+      "expected": 1
+    },
+    "foreignKeys": {
+      "passed": true,
+      "actual": 1,
+      "expected": 1
+    },
+    "userVersion": {
+      "passed": true,
+      "actual": 1,
+      "expected": 1
+    },
+    "applicationId": {
+      "passed": true,
+      "actual": 1448292912,
+      "expected": 1448292912
+    },
+    "quickCheck": {
+      "passed": true,
+      "actual": "ok",
+      "expected": "ok"
+    },
+    "foreignKeyViolationCount": {
+      "passed": true,
+      "actual": 0,
+      "expected": 0
+    },
+    "migrationCount": {
+      "passed": true,
+      "actual": 1,
+      "expected": 1
+    },
+    "migrationVersion": {
+      "passed": true,
+      "actual": 1,
+      "expected": 1
+    },
+    "migrationName": {
+      "passed": true,
+      "actual": "foundation_v1",
+      "expected": "foundation_v1"
+    },
+    "migrationChecksum": {
+      "passed": true,
+      "actual": "fnv1a64:2b8aa24f7fdff6d1",
+      "expected": "fnv1a64:2b8aa24f7fdff6d1"
+    },
+    "schemaChecksum": {
+      "passed": true,
+      "actual": "fnv1a64:897fbe6bf2401dc4",
+      "expected": "fnv1a64:897fbe6bf2401dc4"
+    },
+    "profileCount": {
+      "passed": true,
+      "actual": 1,
+      "expected": 1
+    },
+    "profilePrimaryKey": {
+      "passed": true,
+      "actual": 1,
+      "expected": 1
+    },
+    "profileId": {
+      "passed": true,
+      "actual": "smoke-98115880",
+      "expected": "smoke-98115880"
+    },
+    "businessName": {
+      "passed": true,
+      "actual": "Ludoteca sintética 2.0",
+      "expected": "Ludoteca sintética 2.0"
+    },
+    "currency": {
+      "passed": true,
+      "actual": "COP",
+      "expected": "COP"
+    },
+    "moneyScale": {
+      "passed": true,
+      "actual": 2,
+      "expected": 2
+    },
+    "timezone": {
+      "passed": true,
+      "actual": "America/Bogota",
+      "expected": "America/Bogota"
+    },
+    "command_logCount": {
+      "passed": true,
+      "actual": 0,
+      "expected": 0
+    },
+    "business_documentsCount": {
+      "passed": true,
+      "actual": 0,
+      "expected": 0
+    },
+    "journal_entriesCount": {
+      "passed": true,
+      "actual": 0,
+      "expected": 0
+    },
+    "journal_linesCount": {
+      "passed": true,
+      "actual": 0,
+      "expected": 0
+    },
+    "cash_accountsCount": {
+      "passed": true,
+      "actual": 0,
+      "expected": 0
+    },
+    "payment_methodsCount": {
+      "passed": true,
+      "actual": 0,
+      "expected": 0
+    },
+    "journalDebitSum": {
+      "passed": true,
+      "actual": 0,
+      "expected": 0
+    },
+    "journalCreditSum": {
+      "passed": true,
+      "actual": 0,
+      "expected": 0
+    },
+    "databaseSizeUnchanged": {
+      "passed": true,
+      "actual": 143360,
+      "expected": 143360
+    },
+    "databaseModifiedAtUnchanged": {
+      "passed": true,
+      "actual": "2026-10-19T16:04:41.299218Z",
+      "expected": "2026-10-19T16:04:41.299218Z"
+    }
+  },
+  "profile": {
+    "id": 1,
+    "profile_id": "smoke-98115880",
+    "business_name": "Ludoteca sintética 2.0",
+    "currency_code": "COP",
+    "money_scale": 2,
+    "business_timezone": "America/Bogota",
+    "created_at_utc": "2026-10-19T16:04:41.289116Z"
+  },
+  "migration": {
+    "version": 1,
+    "name": "foundation_v1",
+    "migration_checksum": "fnv1a64:2b8aa24f7fdff6d1",
+    "schema_checksum": "fnv1a64:897fbe6bf2401dc4",
+    "applied_at_utc": "2026-10-19T14:55:07.851154Z"
+  },
+  "emptyTableCounts": {
+    "command_log": 0,
+    "business_documents": 0,
+    "journal_entries": 0,
+    "journal_lines": 0,
+    "cash_accounts": 0,
+    "payment_methods": 0
+  },
+  "journalSums": {
+    "debit_minor": 0,
+    "credit_minor": 0
+  },
+  "reopenFingerprint": "fnv1a64:8fe8dfebc223383e",
+  "fingerprintAlgorithm": "fnv1a64; accidental-change detection, not a security signature",
+  "databaseFile": {
+    "sizeBytes": 143360,
+    "modifiedAtUtc": "2026-10-19T16:04:41.299218Z"
+  }
+}

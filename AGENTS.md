@@ -15,6 +15,8 @@ Diseño aprobado expresamente por el propietario el 18 de octubre de 2026, Ameri
 
 Fundación implementada y probada. El propietario autorizó expresamente instalar Visual Studio Build Tools con C++ mediante «Sí autorizo», en respuesta a la explicación de que modifica componentes compartidos y registro de Windows fuera del nuevo directorio. Está autorizado ejecutar scripts/install-build-tools.ps1 -Install, comprobar Flutter y compilar/validar el ejecutable con datos sintéticos. La excepción se limita a las herramientas de desarrollo necesarias; el POS original y sus datos siguen siendo solo lectura. No reiniciar Windows automáticamente.
 
+Etapa 3 de fundación 0.1.0 completada el 19/10/2026: Build Tools instalado, ejecutable y ZIP generados, guardado confirmado manualmente por el propietario y perfil recuperado al reabrir, con dos verificaciones de solo lectura coincidentes. El bundle final de dist abrió un espacio vacío y mostró cuatro indicadores Correcto; se cerraron ambas aplicaciones. Consultar docs/11-validacion-windows.md y docs/evidence/windows-validation.json. La captura de imagen falló; las observaciones del agente se hicieron por accesibilidad y teclado. No confundir la compilación smoke de build con el bundle final de dist. Los módulos comerciales y la transición a producción siguen pendientes.
+
 ## Reglas del producto
 
 - Flutter Desktop + SQLite offline como propuesta inicial; sin servicios externos obligatorios.
