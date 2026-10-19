@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../domain/business_profile.dart';
 import '../domain/workspace_store.dart';
+import '../../inventory/domain/inventory_store.dart';
 
 enum WorkspaceState { loading, ready, failed }
 
@@ -17,6 +18,7 @@ class WorkspaceController extends ChangeNotifier {
   bool _disposed = false;
   String get databasePath => _session?.databasePath ?? '';
   String get profileId => _session?.profileId ?? '';
+  InventoryStore? get inventoryStore => _session?.inventoryStore;
 
   Future<void> initialize() async {
     if (busy || _disposed || state == WorkspaceState.ready) return;

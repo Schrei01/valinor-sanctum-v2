@@ -7,6 +7,7 @@ import 'core/infrastructure/storage_paths.dart';
 import 'features/workspace/application/workspace_controller.dart';
 import 'features/workspace/data/sqlite_workspace_store.dart';
 import 'features/workspace/domain/workspace_store.dart';
+import 'features/inventory/data/sqlite_inventory_store.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +20,10 @@ void main() {
         store: SqliteWorkspaceStore(database),
         databasePath: paths.databasePath,
         profileId: config.profileId,
+        inventoryStore: SqliteInventoryStore(
+          database,
+          synthetic: config.environment == AppEnvironment.test,
+        ),
       );
     },
   );

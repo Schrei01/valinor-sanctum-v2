@@ -17,6 +17,10 @@ Fundación implementada y probada. El propietario autorizó expresamente instala
 
 Etapa 3 de fundación 0.1.0 completada el 19/10/2026: Build Tools instalado, ejecutable y ZIP generados, guardado confirmado manualmente por el propietario y perfil recuperado al reabrir, con dos verificaciones de solo lectura coincidentes. El bundle final de dist abrió un espacio vacío y mostró cuatro indicadores Correcto; se cerraron ambas aplicaciones. Consultar docs/11-validacion-windows.md y docs/evidence/windows-validation.json. La captura de imagen falló; las observaciones del agente se hicieron por accesibilidad y teclado. No confundir la compilación smoke de build con el bundle final de dist. Los módulos comerciales y la transición a producción siguen pendientes.
 
+El propietario indicó «Sube los cambios a git y continua» el 19/10/2026. La validación de la fundación se subió a origin/main en 45eb2bd. Continuar con un incremento verificable de etapa 4A: catálogo, categorías, proveedores y recepción de compras a crédito con inventario, costo y deuda atómicos. Pagos, ventas, ajustes y producción quedan fuera de este incremento. Se permite actualizar exclusivamente las bases propias de desarrollo/prueba con migración validada y respaldo previo; nunca las del original.
+
+Incremento 02 implementado y verificado: versión 0.2.0, esquema v2, catálogo y recepción a crédito, 114 pruebas aprobadas y tres omitidas por permisos de symlinks del host. Se validaron migración/respaldo, atomicidad, idempotencia, inmutabilidad y UI. El ejecutable sintético mostró stock/historial/diagnóstico; la compra se cargó por CLI y los formularios se ejercitaron en widgets. El bundle final sin overrides abrió/cerró y migró la base propia de desarrollo v1 a v2 con respaldo, sin crear datos de negocio. Evidencia en docs/13-incremento-02.md y docs/evidence/increment-02.json. La etapa 4A es parcial: ajustes, pagos y ventas siguen pendientes; no atribuir soporte productivo ni recuperación persistente de solicitudes inciertas del cliente.
+
 ## Reglas del producto
 
 - Flutter Desktop + SQLite offline como propuesta inicial; sin servicios externos obligatorios.

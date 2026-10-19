@@ -1,0 +1,33 @@
+{
+  "verifiedAtUtc": "2026-10-19T16:26:43.358109Z",
+  "passed": true,
+  "syntheticOnly": true,
+  "dataRoot": "C:\\proyectos\\valinor_sanctum_2\\tmp\\inventory-3a6933049a72d3d494db09cb3b655647",
+  "profileId": "inventory-smoke",
+  "databasePath": "C:\\proyectos\\valinor_sanctum_2\\tmp\\inventory-3a6933049a72d3d494db09cb3b655647\\inventory-smoke\\sanctum2.sqlite3",
+  "reportPath": "C:\\proyectos\\valinor_sanctum_2\\tmp\\inventory-3a6933049a72d3d494db09cb3b655647\\inventory-smoke\\verification.json",
+  "documentId": "cac2d674e8660861e04eed725004a1b3",
+  "receiptTotalMinor": 14001,
+  "checks": {
+    "idempotentResult": true,
+    "exactReceiptTotal": true,
+    "historicalProductName": true,
+    "historicalCost": true,
+    "historicalSupplierName": true,
+    "oneReceiptAfterRetry": true,
+    "reopenedStockA": true,
+    "reopenedStockB": true,
+    "supplierDebt": true,
+    "balancedJournal": true,
+    "noCashMovement": true,
+    "noExpenseAccount": true,
+    "syntheticProvenance": true,
+    "identityVerified": true,
+    "foreignKeysEnabled": true,
+    "integrityOk": true,
+    "migrationChecksumVerified": true,
+    "schemaChecksumVerified": true,
+    "foreignKeyViolations": true
+  },
+  "databaseSha256Note": "No whole-file hash computed; checks inspect committed synthetic facts."
+}

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -9,13 +10,14 @@ import 'schema.dart';
 
 /// Owns one explicit FFI connection, without changing the global DB factory.
 ///
-/// V1 only creates an empty foundation. Upgrades and their required backups are
-/// deliberately unsupported until a separately tested migration is supplied.
+/// Upgrades validate the old format and preserve a verified SQLite snapshot.
 class AppDatabase {
-  AppDatabase._(this._database);
+  AppDatabase._(this._database, this._path);
 
   static const int schemaVersion = DatabaseSchema.version;
   final Database _database;
+  final String _path;
+  static Future<Map<int, String>>? _expectedChecksums;
 
   Database get database => _database;
 
@@ -54,7 +56,7 @@ class AppDatabase {
         },
       ),
     );
-    final instance = AppDatabase._(database);
+    final instance = AppDatabase._(database, path);
     try {
       await instance._initialize();
       return instance;
@@ -129,14 +131,36 @@ class AppDatabase {
   }
 
   Future<void> _initialize() async {
-    // Schema, identity, migration metadata and user_version commit together.
+    final version = await _pragmaInt(_database, 'user_version');
+    if (version > schemaVersion) {
+      throw UnsupportedSchemaVersionException(version, schemaVersion);
+    }
+    if (version == 1) {
+      // VACUUM INTO cannot run inside a transaction. Validate before snapshot,
+      // then compare its complete content under the exclusive migration lock.
+      await _database.transaction<void>(
+        (transaction) => _assertHealthy(transaction, 1),
+        exclusive: true,
+      );
+      final backupFingerprint = await _createVerifiedBackup();
+      await _database.transaction<void>((transaction) async {
+        await _assertHealthy(transaction, 1);
+        if (await _contentChecksum(transaction) != backupFingerprint) {
+          throw const DatabaseValidationException(
+            'The database changed after its backup; reopen to retry safely',
+          );
+        }
+        await _applyMigration2(transaction);
+        await _assertHealthy(transaction, schemaVersion);
+      }, exclusive: true);
+      return;
+    }
+
+    // Schema, identity, complete history and user_version commit together.
     await _database.transaction<void>((transaction) async {
-      final version = await _pragmaInt(transaction, 'user_version');
-      if (version > schemaVersion) {
-        throw UnsupportedSchemaVersionException(version, schemaVersion);
-      }
+      final lockedVersion = await _pragmaInt(transaction, 'user_version');
       final applicationId = await _pragmaInt(transaction, 'application_id');
-      if (version == 0) {
+      if (lockedVersion == 0) {
         final objects = await _schemaObjects(transaction);
         if (applicationId != 0 || objects.isNotEmpty) {
           throw const DatabaseValidationException(
@@ -149,58 +173,145 @@ class AppDatabase {
         await transaction.execute(
           'PRAGMA application_id = ${DatabaseSchema.applicationId}',
         );
-        await transaction.execute('PRAGMA user_version = $schemaVersion');
-        await transaction.insert('schema_migrations', <String, Object?>{
-          'version': schemaVersion,
-          'name': DatabaseSchema.migrationName,
-          'migration_checksum': DatabaseSchema.migrationChecksum,
-          'schema_checksum': await _schemaChecksum(transaction),
-          'applied_at_utc': DateTime.now().toUtc().toIso8601String(),
-        });
-      } else if (version != schemaVersion ||
+        await transaction.execute('PRAGMA user_version = 1');
+        await _recordMigration(transaction, 1);
+        await _applyMigration2(transaction);
+      } else if (lockedVersion != schemaVersion ||
           applicationId != DatabaseSchema.applicationId) {
         throw const DatabaseValidationException(
           'Database identity or schema version is not supported',
         );
       }
 
-      final health = await _readHealth(transaction);
-      if (health['identityVerified'] != true ||
-          health['foreignKeysEnabled'] != true ||
-          health['integrityOk'] != true ||
-          health['foreignKeyViolations'] != 0 ||
-          health['migrationChecksumVerified'] != true ||
-          health['schemaChecksumVerified'] != true) {
-        throw const DatabaseValidationException(
-          'Schema metadata, structure or integrity validation failed',
-        );
-      }
+      await _assertHealthy(transaction, schemaVersion);
     }, exclusive: true);
+  }
+
+  static Future<void> _applyMigration2(DatabaseExecutor executor) async {
+    for (final statement in DatabaseSchema.migration2Statements) {
+      await executor.execute(statement);
+    }
+    await executor.execute('PRAGMA user_version = 2');
+    await _recordMigration(executor, 2);
+  }
+
+  static Future<void> _recordMigration(
+    DatabaseExecutor executor,
+    int version,
+  ) async {
+    await executor.insert('schema_migrations', <String, Object?>{
+      'version': version,
+      'name': DatabaseSchema.nameForVersion(version),
+      'migration_checksum': DatabaseSchema.checksumForVersion(version),
+      'schema_checksum': await _schemaChecksum(executor),
+      'applied_at_utc': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<String> _createVerifiedBackup() async {
+    if (_path == inMemoryDatabasePath) {
+      throw const DatabaseValidationException(
+        'An existing schema needs a file-backed backup before migration',
+      );
+    }
+    final backupDirectory = Directory(p.join(p.dirname(_path), 'backups'));
+    final suffix = Random.secure().nextInt(0x7fffffff).toRadixString(16);
+    final backupPath = p.join(
+      backupDirectory.path,
+      '${p.basenameWithoutExtension(_path)}.v1.'
+      '${DateTime.now().toUtc().microsecondsSinceEpoch}-$suffix.sqlite3',
+    );
+    await _validateDatabasePath(backupPath);
+    await backupDirectory.create(recursive: true);
+    await _validateDatabasePath(backupPath);
+    // SQLite itself creates a transactionally consistent, standalone snapshot,
+    // including committed WAL pages; no live database file is copied directly.
+    await _database.execute('VACUUM main INTO ?', <Object?>[backupPath]);
+    await _validateDatabasePath(backupPath);
+    final backup = await databaseFactoryFfi.openDatabase(
+      backupPath,
+      options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+    );
+    try {
+      await backup.execute('PRAGMA foreign_keys = ON');
+      await backup.execute('PRAGMA query_only = ON');
+      await _assertHealthy(backup, 1);
+      return await _contentChecksum(backup);
+    } finally {
+      await backup.close();
+    }
+  }
+
+  static Future<void> _assertHealthy(
+    DatabaseExecutor executor,
+    int version,
+  ) async {
+    if (await _pragmaInt(executor, 'user_version') != version ||
+        await _pragmaInt(executor, 'application_id') !=
+            DatabaseSchema.applicationId) {
+      throw const DatabaseValidationException(
+        'Database identity or schema version is not supported',
+      );
+    }
+    final health = await _readHealth(executor, expectedVersion: version);
+    if (health['identityVerified'] != true ||
+        health['foreignKeysEnabled'] != true ||
+        health['integrityOk'] != true ||
+        health['foreignKeyViolations'] != 0 ||
+        health['migrationChecksumVerified'] != true ||
+        health['schemaChecksumVerified'] != true) {
+      throw const DatabaseValidationException(
+        'Schema metadata, structure or integrity validation failed',
+      );
+    }
   }
 
   /// Reads a consistent health snapshot. No financial rows are seeded.
   Future<Map<String, Object?>> readHealth() {
-    return _database.transaction<Map<String, Object?>>(_readHealth);
+    return _database.transaction<Map<String, Object?>>(
+      (transaction) => _readHealth(transaction),
+    );
   }
 
   static Future<Map<String, Object?>> _readHealth(
-    DatabaseExecutor executor,
-  ) async {
+    DatabaseExecutor executor, {
+    int expectedVersion = schemaVersion,
+  }) async {
     final version = await _pragmaInt(executor, 'user_version');
     final applicationId = await _pragmaInt(executor, 'application_id');
     final foreignKeys = await _pragmaInt(executor, 'foreign_keys');
     final check = await executor.rawQuery('PRAGMA quick_check');
     final violations = await executor.rawQuery('PRAGMA foreign_key_check');
-    final migrations = await executor.query('schema_migrations');
-    final migration = migrations.length == 1 ? migrations.single : null;
-    final migrationVerified =
-        migration != null &&
-        migration['version'] == schemaVersion &&
-        migration['name'] == DatabaseSchema.migrationName &&
-        migration['migration_checksum'] == DatabaseSchema.migrationChecksum;
+    final migrations = await executor.query(
+      'schema_migrations',
+      orderBy: 'version',
+    );
+    final expectedSchemas = await (_expectedChecksums ??=
+        _deriveExpectedSchemaChecksums());
+    var migrationVerified = migrations.length == expectedVersion;
+    var historicalSchemasVerified = migrationVerified;
+    for (var index = 0; index < migrations.length; index++) {
+      final migrationVersion = index + 1;
+      if (migrationVersion > schemaVersion) {
+        migrationVerified = false;
+        historicalSchemasVerified = false;
+        continue;
+      }
+      final migration = migrations[index];
+      migrationVerified =
+          migrationVerified &&
+          migration['version'] == migrationVersion &&
+          migration['name'] ==
+              DatabaseSchema.nameForVersion(migrationVersion) &&
+          migration['migration_checksum'] ==
+              DatabaseSchema.checksumForVersion(migrationVersion);
+      historicalSchemasVerified =
+          historicalSchemasVerified &&
+          migration['schema_checksum'] == expectedSchemas[migrationVersion];
+    }
     final schemaVerified =
-        migration != null &&
-        migration['schema_checksum'] == await _schemaChecksum(executor);
+        historicalSchemasVerified &&
+        expectedSchemas[expectedVersion] == await _schemaChecksum(executor);
     final profiles = await executor.rawQuery(
       'SELECT count(*) AS profile_count FROM app_profile',
     );
@@ -208,7 +319,7 @@ class AppDatabase {
       'schemaVersion': version,
       'applicationId': applicationId,
       'identityVerified':
-          version == schemaVersion &&
+          version == expectedVersion &&
           applicationId == DatabaseSchema.applicationId,
       'foreignKeysEnabled': foreignKeys == 1,
       'integrityOk': check.length == 1 && check.single.values.single == 'ok',
@@ -216,8 +327,42 @@ class AppDatabase {
       'migrationChecksumVerified': migrationVerified,
       'schemaChecksumVerified': schemaVerified,
       'configured': profiles.single['profile_count'] == 1,
-      'migrationBackupsSupported': false,
+      'migrationBackupsSupported': true,
     };
+  }
+
+  static Future<Map<int, String>> _deriveExpectedSchemaChecksums() async {
+    final reference = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    try {
+      for (final statement in DatabaseSchema.statements) {
+        await reference.execute(statement);
+      }
+      final version1 = await _schemaChecksum(reference);
+      for (final statement in DatabaseSchema.migration2Statements) {
+        await reference.execute(statement);
+      }
+      return <int, String>{1: version1, 2: await _schemaChecksum(reference)};
+    } finally {
+      await reference.close();
+    }
+  }
+
+  static Future<String> _contentChecksum(DatabaseExecutor executor) async {
+    final tables = await executor.rawQuery('''
+SELECT name FROM sqlite_master WHERE type = 'table'
+AND substr(name, 1, 7) <> 'sqlite_' ORDER BY name
+''');
+    final content = <Object?>[];
+    for (final table in tables) {
+      final name = table['name']! as String;
+      final rows = await executor.query(name);
+      final canonicalRows = rows.map(jsonEncode).toList()..sort();
+      content.add(<Object?>[name, canonicalRows]);
+    }
+    return DatabaseSchema.checksum(jsonEncode(content));
   }
 
   static Future<int> _pragmaInt(DatabaseExecutor executor, String name) async {

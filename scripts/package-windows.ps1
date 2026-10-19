@@ -84,12 +84,13 @@ foreach ($file in Get-BundleFiles $releaseDirectory) {
     $copiedFiles++
 }
 $instructions = @'
-Valinor Sanctum 2.0 - Fundación de desarrollo
+Valinor Sanctum 2.0 - Versión de desarrollo
 
 Extrae la carpeta completa y abre valinor_sanctum_2.exe.
 Conserva las DLL y la carpeta data junto al ejecutable.
-Este incremento configura un perfil vacío y verifica SQLite.
-Catálogo, ventas, compras y demás módulos comerciales siguen pendientes.
+Configura tu perfil, categorías, proveedores y catálogo de productos.
+Registra compras recibidas a crédito con su inventario, costo y deuda.
+Los pagos, ventas y ajustes de inventario siguen pendientes.
 No contiene datos del POS original ni está habilitado para producción.
 El almacenamiento de desarrollo permanece limitado al repositorio autorizado
 C:\proyectos\valinor_sanctum_2; ejecuta el bundle dentro de ese proyecto.

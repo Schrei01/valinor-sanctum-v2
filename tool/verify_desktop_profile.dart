@@ -7,6 +7,7 @@ import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/database/schema.dart';
 
 /// Inspects only an explicitly selected synthetic desktop profile, read-only.
+/// This historical verifier targets foundation v1; it refuses v2 databases.
 ///
 /// Run twice with distinct output files and compare `reopenFingerprint` to
 /// confirm that a desktop restart preserved configuration and empty ledgers.

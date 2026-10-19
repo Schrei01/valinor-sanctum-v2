@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -42,7 +43,7 @@ void main() {
       addTearDown(app.close);
 
       final health = await app.readHealth();
-      expect(health['schemaVersion'], 1);
+      expect(health['schemaVersion'], 2);
       expect(health['applicationId'], DatabaseSchema.applicationId);
       expect(health['foreignKeysEnabled'], isTrue);
       expect(health['integrityOk'], isTrue);
@@ -50,7 +51,7 @@ void main() {
       expect(health['migrationChecksumVerified'], isTrue);
       expect(health['schemaChecksumVerified'], isTrue);
       expect(health['configured'], isFalse);
-      expect(health['migrationBackupsSupported'], isFalse);
+      expect(health['migrationBackupsSupported'], isTrue);
 
       for (final table in <String>[
         'actors',
@@ -62,10 +63,18 @@ void main() {
         'journal_lines',
         'cash_accounts',
         'payment_methods',
+        'categories',
+        'counterparties',
+        'catalog_items',
+        'purchases',
+        'purchase_lines',
+        'inventory_movements',
+        'cost_layers',
+        'obligations',
       ]) {
         expect(await app.database.query(table), isEmpty, reason: table);
       }
-      expect(await app.database.query('schema_migrations'), hasLength(1));
+      expect(await app.database.query('schema_migrations'), hasLength(2));
     },
   );
 
@@ -319,6 +328,742 @@ void main() {
       );
     },
   );
+
+  test('v1 DDL remains byte-for-byte compatible with released checksums', () {
+    expect(DatabaseSchema.migrationChecksum, 'fnv1a64:2b8aa24f7fdff6d1');
+  });
+
+  test(
+    'v1 migrates with a verified backup and preserves all history',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'upgrade.sqlite3');
+      final old = await _createVersion1(path);
+      await _insertDraftEntry(old);
+      await old.insert('journal_lines', _line(debit: 100, credit: 0));
+      await old.insert('journal_lines', <String, Object?>{
+        ..._line(debit: 0, credit: 100),
+        'id': 'line-credit',
+        'sequence': 1,
+      });
+      await _postEntry(old);
+      final originalRows = await _foundationRows(old);
+      final originalMigration = await old.query('schema_migrations');
+      await old.close();
+
+      final app = await AppDatabase.open(path: path);
+      final health = await app.readHealth();
+      expect(health['schemaVersion'], 2);
+      expect(health['migrationChecksumVerified'], isTrue);
+      expect(health['schemaChecksumVerified'], isTrue);
+      final migratedRows = await _foundationRows(app.database);
+      for (final table in originalRows.keys) {
+        if (table == 'command_log') continue;
+        expect(migratedRows[table], originalRows[table], reason: table);
+      }
+      expect(migratedRows['command_log']!.single, <String, Object?>{
+        ...originalRows['command_log']!.single,
+        'authorization_policy_version': 'foundation-v1',
+      });
+      final history = await app.database.query(
+        'schema_migrations',
+        orderBy: 'version',
+      );
+      expect(history, hasLength(2));
+      expect(history.first, originalMigration.single);
+      await app.close();
+
+      final backups = await Directory(
+        p.join(fixtureDirectory.path, 'backups'),
+      ).list().where((entry) => entry is File).toList();
+      expect(backups, hasLength(1));
+      final backup = await databaseFactoryFfi.openDatabase(
+        backups.single.path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      expect(await backup.getVersion(), 1);
+      expect(await _foundationRows(backup), originalRows);
+      expect(await backup.query('schema_migrations'), originalMigration);
+      expect(
+        (await backup.rawQuery('PRAGMA quick_check')).single.values.single,
+        'ok',
+      );
+      expect(await backup.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      await backup.close();
+
+      final reopened = await AppDatabase.open(path: path);
+      await reopened.close();
+      expect(
+        await Directory(p.join(fixtureDirectory.path, 'backups')).list().length,
+        1,
+      );
+    },
+  );
+
+  test('migration snapshot includes committed WAL data', () async {
+    final path = p.join(fixtureDirectory.path, 'wal.sqlite3');
+    final old = await _createVersion1(path);
+    addTearDown(old.close);
+    await old.rawQuery('PRAGMA journal_mode = WAL');
+    await _insertActor(old);
+    expect(await File('$path-wal').exists(), isTrue);
+    final app = await AppDatabase.open(path: path);
+    addTearDown(app.close);
+    expect(await app.database.query('actors'), hasLength(1));
+    final backups = await Directory(
+      p.join(fixtureDirectory.path, 'backups'),
+    ).list().toList();
+    expect(backups, hasLength(1));
+    final backup = await databaseFactoryFfi.openDatabase(
+      backups.single.path,
+      options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+    );
+    expect((await backup.query('actors')).single['id'], 'synthetic-actor');
+    await backup.close();
+  });
+
+  test('a backup path failure leaves v1 intact and does not migrate', () async {
+    final path = p.join(fixtureDirectory.path, 'no_backup.sqlite3');
+    final old = await _createVersion1(path);
+    await _insertActor(old);
+    await old.close();
+    await File(p.join(fixtureDirectory.path, 'backups')).writeAsString('keep');
+    final before = await File(path).readAsBytes();
+    await expectLater(
+      AppDatabase.open(path: path),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await File(path).readAsBytes(), before);
+    final check = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+    );
+    expect(await check.getVersion(), 1);
+    expect(await check.query('schema_migrations'), hasLength(1));
+    expect(await check.query('actors'), hasLength(1));
+    await check.close();
+  });
+
+  test(
+    'drifted v1 is refused before backup even with rewritten metadata',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'tampered_v1.sqlite3');
+      final old = await _createVersion1(path);
+      await old.execute('ALTER TABLE actors ADD COLUMN unapproved TEXT');
+      await old.update('schema_migrations', <String, Object?>{
+        'schema_checksum': await _testSchemaChecksum(old),
+      });
+      await old.close();
+      await expectLater(
+        AppDatabase.open(path: path),
+        throwsA(isA<DatabaseValidationException>()),
+      );
+      expect(
+        await Directory(p.join(fixtureDirectory.path, 'backups')).exists(),
+        isFalse,
+      );
+      final check = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      expect(await check.getVersion(), 1);
+      await check.close();
+    },
+  );
+
+  test(
+    'v2 validates historical v1 checksum as well as current schema',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'history.sqlite3');
+      final app = await AppDatabase.open(path: path);
+      await app.database.update('schema_migrations', <String, Object?>{
+        'schema_checksum': 'fnv1a64:historical-drift',
+      }, where: 'version = 1');
+      await app.close();
+      await expectLater(
+        AppDatabase.open(path: path),
+        throwsA(isA<DatabaseValidationException>()),
+      );
+    },
+  );
+
+  test('purchase posting requires matching stock, debt and journal', () async {
+    final app = await AppDatabase.open(path: inMemoryDatabasePath);
+    addTearDown(app.close);
+    await _insertPurchaseDraft(app.database);
+    await app.database.update('cost_layers', <String, Object?>{
+      'total_cost_minor': 99,
+    });
+    await expectLater(
+      _postPurchaseDocument(app.database),
+      throwsA(isA<DatabaseException>()),
+    );
+    await app.database.update('cost_layers', <String, Object?>{
+      'total_cost_minor': 100,
+    });
+    await app.database.update('obligations', <String, Object?>{
+      'initial_minor': 99,
+    });
+    await expectLater(
+      _postPurchaseDocument(app.database),
+      throwsA(isA<DatabaseException>()),
+    );
+    await app.database.update('obligations', <String, Object?>{
+      'initial_minor': 100,
+    });
+    await app.database.update(
+      'journal_lines',
+      <String, Object?>{'debit_minor': 99},
+      where: 'id = ?',
+      whereArgs: ['purchase-debit'],
+    );
+    await expectLater(
+      _postPurchaseDocument(app.database),
+      throwsA(isA<DatabaseException>()),
+    );
+    await app.database.update(
+      'journal_lines',
+      <String, Object?>{'debit_minor': 100},
+      where: 'id = ?',
+      whereArgs: ['purchase-debit'],
+    );
+    await _postPurchaseDocument(app.database);
+    await app.database.update('journal_entries', <String, Object?>{
+      'status': 'posted',
+      'posted_at_utc': _timestamp,
+    });
+    expect(
+      (await app.database.query('business_documents')).single['status'],
+      'posted',
+    );
+  });
+
+  test(
+    'confirmed purchase lines, movements, layers and debt are immutable',
+    () async {
+      final app = await AppDatabase.open(path: inMemoryDatabasePath);
+      addTearDown(app.close);
+      await _insertPurchaseDraft(app.database);
+      await _postPurchaseDocument(app.database);
+      for (final table in [
+        'purchases',
+        'purchase_lines',
+        'inventory_movements',
+        'cost_layers',
+        'obligations',
+      ]) {
+        final original = (await app.database.query(table)).single;
+        await expectLater(
+          app.database.update(table, original),
+          throwsA(isA<DatabaseException>()),
+          reason: table,
+        );
+        await expectLater(
+          app.database.delete(table),
+          throwsA(isA<DatabaseException>()),
+          reason: table,
+        );
+        // REPLACE must not bypass the confirmed-history INSERT guard.
+        await expectLater(
+          app.database.insert(
+            table,
+            original,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          ),
+          throwsA(isA<DatabaseException>()),
+          reason: table,
+        );
+      }
+      await expectLater(
+        app.database.update(
+          'journal_lines',
+          <String, Object?>{'debit_minor': 200},
+          where: 'id = ?',
+          whereArgs: ['purchase-debit'],
+        ),
+        throwsA(isA<DatabaseException>()),
+      );
+    },
+  );
+
+  test(
+    'catalog money quantities and SKU uniqueness are enforced by SQLite',
+    () async {
+      final app = await AppDatabase.open(path: inMemoryDatabasePath);
+      addTearDown(app.close);
+      await _insertPurchaseDraft(app.database);
+      await expectLater(
+        app.database.update('catalog_items', <String, Object?>{
+          'list_price_minor': 1.5,
+        }),
+        throwsA(isA<DatabaseException>()),
+      );
+      await expectLater(
+        app.database.update('purchase_lines', <String, Object?>{
+          'quantity': 1.5,
+        }),
+        throwsA(isA<DatabaseException>()),
+      );
+      final duplicate = <String, Object?>{
+        ...(await app.database.query('catalog_items')).single,
+        'id': 'another-product',
+        'sku': 'sku-one',
+      };
+      await expectLater(
+        app.database.insert('catalog_items', duplicate),
+        throwsA(isA<DatabaseException>()),
+      );
+    },
+  );
+
+  test(
+    'REPLACE cannot rewrite confirmed command, document or draft journal',
+    () async {
+      final app = await AppDatabase.open(path: inMemoryDatabasePath);
+      addTearDown(app.close);
+      await _insertPurchaseDraft(app.database);
+      await _postPurchaseDocument(app.database);
+      final command = (await app.database.query('command_log')).single;
+      await expectLater(
+        app.database.insert('command_log', {
+          ...command,
+          'response_json': '{"changed":true}',
+        }, conflictAlgorithm: ConflictAlgorithm.replace),
+        throwsA(isA<DatabaseException>()),
+      );
+      final document = (await app.database.query('business_documents')).single;
+      await expectLater(
+        app.database.insert('business_documents', {
+          ...document,
+          'type': 'generic_test',
+          'status': 'draft',
+        }, conflictAlgorithm: ConflictAlgorithm.replace),
+        throwsA(isA<DatabaseException>()),
+      );
+      final entry = (await app.database.query('journal_entries')).single;
+      await expectLater(
+        app.database.insert(
+          'journal_entries',
+          entry,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        ),
+        throwsA(isA<DatabaseException>()),
+      );
+      await expectLater(
+        app.database.delete('journal_entries'),
+        throwsA(isA<DatabaseException>()),
+      );
+      await expectLater(
+        app.database.update('journal_entries', {
+          'cost_completeness': 'unknown',
+        }),
+        throwsA(isA<DatabaseException>()),
+      );
+    },
+  );
+
+  test(
+    'purchase posting checks active category and actual Bogotá dates',
+    () async {
+      final app = await AppDatabase.open(path: inMemoryDatabasePath);
+      addTearDown(app.close);
+      await _insertPurchaseDraft(app.database);
+      await app.database.update('categories', {'is_active': 0});
+      await expectLater(
+        _postPurchaseDocument(app.database),
+        throwsA(isA<DatabaseException>()),
+      );
+      await app.database.update('categories', {'is_active': 1});
+      await app.database.update('business_documents', {
+        'business_date': '2025-12-31',
+      });
+      await expectLater(
+        _postPurchaseDocument(app.database),
+        throwsA(isA<DatabaseException>()),
+      );
+      await app.database.update('business_documents', {
+        'business_date': '2026-01-01',
+      });
+      await app.database.update('purchases', {'due_date': '2026-02-30'});
+      await app.database.update('obligations', {'due_date': '2026-02-30'});
+      await expectLater(
+        _postPurchaseDocument(app.database),
+        throwsA(isA<DatabaseException>()),
+      );
+    },
+  );
+
+  for (final replacement
+      in <
+        ({
+          String description,
+          String table,
+          String draftId,
+          Map<String, Object?> changes,
+        })
+      >[
+        (
+          description: 'cost layer ID',
+          table: 'cost_layers',
+          draftId: 'second-layer',
+          changes: {'id': 'layer'},
+        ),
+        (
+          description: 'cost layer FIFO sequence',
+          table: 'cost_layers',
+          draftId: 'second-layer',
+          changes: {'fifo_sequence': 1},
+        ),
+        (
+          description: 'supplier obligation ID',
+          table: 'obligations',
+          draftId: 'second-obligation',
+          changes: {'id': 'obligation'},
+        ),
+        (
+          description: 'journal line ID',
+          table: 'journal_lines',
+          draftId: 'second-debit',
+          changes: {'id': 'purchase-debit'},
+        ),
+        (
+          description: 'movement stock sequence',
+          table: 'inventory_movements',
+          draftId: 'second-movement',
+          changes: {'stock_sequence': 1},
+        ),
+        (
+          description: 'journal entry ID',
+          table: 'journal_entries',
+          draftId: 'second-entry',
+          changes: {'id': 'purchase-entry'},
+        ),
+        (
+          description: 'document ID',
+          table: 'business_documents',
+          draftId: 'second-document',
+          changes: {'id': 'purchase-document'},
+        ),
+        (
+          description: 'document command sequence',
+          table: 'business_documents',
+          draftId: 'second-document',
+          changes: {'command_id': 'synthetic-command', 'command_sequence': 0},
+        ),
+      ]) {
+    test(
+      'UPDATE OR REPLACE cannot consume a confirmed ${replacement.description}',
+      () async {
+        final app = await AppDatabase.open(path: inMemoryDatabasePath);
+        addTearDown(app.close);
+        await _insertPurchaseDraft(app.database);
+        await _insertSecondPurchaseDraft(app.database);
+        await _postPurchaseDocument(app.database);
+        await app.database.update(
+          'journal_entries',
+          {'status': 'posted', 'posted_at_utc': _timestamp},
+          where: 'id = ?',
+          whereArgs: ['purchase-entry'],
+        );
+        // REPLACE's implicit delete does not run DELETE triggers in this mode.
+        // Protection must therefore inspect the conflicting confirmed row.
+        await app.database.execute('PRAGMA recursive_triggers = OFF');
+        final before = await app.database.query(
+          replacement.table,
+          orderBy: 'id',
+        );
+        await expectLater(
+          app.database.update(
+            replacement.table,
+            replacement.changes,
+            where: 'id = ?',
+            whereArgs: [replacement.draftId],
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          ),
+          throwsA(isA<DatabaseException>()),
+        );
+        expect(
+          await app.database.query(replacement.table, orderBy: 'id'),
+          before,
+        );
+        expect(
+          await app.database.rawQuery('PRAGMA foreign_key_check'),
+          isEmpty,
+        );
+      },
+    );
+  }
+}
+
+Future<Database> _createVersion1(String path) async {
+  sqfliteFfiInit();
+  final db = await databaseFactoryFfi.openDatabase(
+    path,
+    options: OpenDatabaseOptions(singleInstance: false),
+  );
+  await db.execute('PRAGMA foreign_keys = ON');
+  for (final statement in DatabaseSchema.statements) {
+    await db.execute(statement);
+  }
+  final schemaChecksum = await _testSchemaChecksum(db);
+  expect(schemaChecksum, 'fnv1a64:897fbe6bf2401dc4');
+  await db.execute('PRAGMA application_id = ${DatabaseSchema.applicationId}');
+  await db.execute('PRAGMA user_version = 1');
+  await db.insert('schema_migrations', <String, Object?>{
+    'version': 1,
+    'name': DatabaseSchema.migrationName,
+    'migration_checksum': DatabaseSchema.migrationChecksum,
+    'schema_checksum': schemaChecksum,
+    'applied_at_utc': _timestamp,
+  });
+  return db;
+}
+
+Future<String> _testSchemaChecksum(DatabaseExecutor executor) async {
+  final objects = await executor.rawQuery('''
+SELECT type, name, tbl_name, sql FROM sqlite_master
+WHERE substr(name, 1, 7) <> 'sqlite_' ORDER BY type, name
+''');
+  return DatabaseSchema.checksum(
+    jsonEncode(
+      objects
+          .map(
+            (object) => <Object?>[
+              object['type'],
+              object['name'],
+              object['tbl_name'],
+              object['sql'],
+            ],
+          )
+          .toList(),
+    ),
+  );
+}
+
+Future<Map<String, List<Map<String, Object?>>>> _foundationRows(
+  DatabaseExecutor executor,
+) async {
+  return <String, List<Map<String, Object?>>>{
+    for (final table in [
+      'actors',
+      'app_profile',
+      'command_log',
+      'business_documents',
+      'ledger_accounts',
+      'journal_entries',
+      'journal_lines',
+      'cash_accounts',
+      'payment_methods',
+    ])
+      table: await executor.query(table),
+  };
+}
+
+Future<void> _insertPurchaseDraft(DatabaseExecutor db) async {
+  await _insertActor(db);
+  await db.insert('app_profile', <String, Object?>{
+    'id': 1,
+    'profile_id': 'synthetic-profile',
+    'business_name': 'Synthetic business',
+    'currency_code': 'COP',
+    'money_scale': 2,
+    'business_timezone': 'America/Bogota',
+    'created_at_utc': _timestamp,
+  });
+  await db.insert('command_log', <String, Object?>{
+    ..._command(),
+    'command_type': 'receive_purchase',
+    'authorization_policy_version': 'development-single-user-v1',
+  });
+  await db.insert('business_documents', <String, Object?>{
+    'id': 'purchase-document',
+    'command_id': 'synthetic-command',
+    'command_sequence': 0,
+    'profile_id': 'synthetic-profile',
+    'actor_id': 'synthetic-actor',
+    'type': 'purchase_receipt',
+    'status': 'draft',
+    'occurred_at_utc': _timestamp,
+    'business_date': '2026-01-01',
+    'recorded_at_utc': _timestamp,
+    'source_kind': 'synthetic',
+    'date_quality': 'documented',
+  });
+  await db.insert('categories', {
+    'id': 'category',
+    'name': 'Synthetic category',
+    'is_active': 1,
+  });
+  await db.insert('counterparties', {
+    'id': 'supplier',
+    'name': 'Synthetic supplier',
+    'is_customer': 0,
+    'is_supplier': 1,
+    'is_active': 1,
+  });
+  await db.insert('catalog_items', {
+    'id': 'product',
+    'sku': 'SKU-ONE',
+    'name': 'Synthetic product',
+    'kind': 'product',
+    'category_id': 'category',
+    'unit_code': 'unit',
+    'quantity_scale': 0,
+    'list_price_minor': 150,
+    'is_active': 1,
+  });
+  await db.insert('purchases', {
+    'document_id': 'purchase-document',
+    'supplier_id': 'supplier',
+    'supplier_name_snapshot': 'Synthetic supplier',
+    'received_at_utc': _timestamp,
+    'due_date': '2026-01-10',
+    'payable_minor': 100,
+    'terms': 'credit',
+  });
+  await db.insert('purchase_lines', {
+    'id': 'purchase-line',
+    'purchase_id': 'purchase-document',
+    'sequence': 0,
+    'product_id': 'product',
+    'name_snapshot': 'Synthetic product',
+    'quantity': 2,
+    'acquisition_total_minor': 100,
+    'cost_quality': 'documented',
+  });
+  await db.insert('inventory_movements', {
+    'id': 'movement',
+    'document_id': 'purchase-document',
+    'sequence': 0,
+    'stock_sequence': 1,
+    'product_id': 'product',
+    'kind': 'purchase',
+    'quantity_delta': 2,
+    'value_delta_minor': 100,
+    'purchase_line_id': 'purchase-line',
+  });
+  await db.insert('cost_layers', {
+    'id': 'layer',
+    'inbound_movement_id': 'movement',
+    'product_id': 'product',
+    'initial_quantity': 2,
+    'total_cost_minor': 100,
+    'cost_quality': 'documented',
+    'fifo_sequence': 1,
+    'acquired_at_utc': _timestamp,
+  });
+  await db.insert('ledger_accounts', {
+    'id': 'inventory-account',
+    'code': 'INVENTORY',
+    'name': 'Inventory',
+    'class': 'asset',
+    'role': 'inventory',
+    'is_active': 1,
+  });
+  await db.insert('ledger_accounts', {
+    'id': 'payable-account',
+    'code': 'PAYABLE',
+    'name': 'Supplier payable',
+    'class': 'liability',
+    'role': 'supplier_payable',
+    'is_active': 1,
+  });
+  await db.insert('obligations', {
+    'id': 'obligation',
+    'origin_document_id': 'purchase-document',
+    'sequence': 0,
+    'counterparty_id': 'supplier',
+    'kind': 'supplier_payable',
+    'control_account_id': 'payable-account',
+    'initial_minor': 100,
+    'issued_at_utc': _timestamp,
+    'due_date': '2026-01-10',
+  });
+  await db.insert('journal_entries', {
+    'id': 'purchase-entry',
+    'document_id': 'purchase-document',
+    'status': 'draft',
+    'cost_completeness': 'complete',
+  });
+  await db.insert('journal_lines', {
+    'id': 'purchase-debit',
+    'entry_id': 'purchase-entry',
+    'sequence': 0,
+    'account_id': 'inventory-account',
+    'debit_minor': 100,
+    'credit_minor': 0,
+  });
+  await db.insert('journal_lines', {
+    'id': 'purchase-credit',
+    'entry_id': 'purchase-entry',
+    'sequence': 1,
+    'account_id': 'payable-account',
+    'debit_minor': 0,
+    'credit_minor': 100,
+  });
+}
+
+Future<int> _postPurchaseDocument(DatabaseExecutor db) => db.update(
+  'business_documents',
+  {'status': 'posted'},
+  where: 'id = ?',
+  whereArgs: ['purchase-document'],
+);
+
+Future<void> _insertSecondPurchaseDraft(DatabaseExecutor db) async {
+  Future<void> clone(
+    String table,
+    String key,
+    String original,
+    String target,
+    Map<String, Object?> changes,
+  ) async {
+    final row = (await db.query(
+      table,
+      where: '$key = ?',
+      whereArgs: [original],
+    )).single;
+    await db.insert(table, {...row, key: target, ...changes});
+  }
+
+  await clone('command_log', 'id', 'synthetic-command', 'second-command', {});
+  await clone(
+    'business_documents',
+    'id',
+    'purchase-document',
+    'second-document',
+    {'command_id': 'second-command'},
+  );
+  await clone(
+    'purchases',
+    'document_id',
+    'purchase-document',
+    'second-document',
+    {},
+  );
+  await clone('purchase_lines', 'id', 'purchase-line', 'second-line', {
+    'purchase_id': 'second-document',
+  });
+  await clone('inventory_movements', 'id', 'movement', 'second-movement', {
+    'document_id': 'second-document',
+    'stock_sequence': 2,
+    'purchase_line_id': 'second-line',
+  });
+  await clone('cost_layers', 'id', 'layer', 'second-layer', {
+    'inbound_movement_id': 'second-movement',
+    'fifo_sequence': 2,
+  });
+  await clone('obligations', 'id', 'obligation', 'second-obligation', {
+    'origin_document_id': 'second-document',
+  });
+  await clone('journal_entries', 'id', 'purchase-entry', 'second-entry', {
+    'document_id': 'second-document',
+  });
+  await clone('journal_lines', 'id', 'purchase-debit', 'second-debit', {
+    'entry_id': 'second-entry',
+  });
+  await clone('journal_lines', 'id', 'purchase-credit', 'second-credit', {
+    'entry_id': 'second-entry',
+  });
 }
 
 const _timestamp = '2026-01-01T12:00:00.000Z';

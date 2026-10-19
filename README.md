@@ -2,11 +2,11 @@
 
 Repositorio independiente para la nueva aplicación de gestión comercial de Valinor.
 
-**Estado: primera fundación compilada, empaquetada y validada para Windows (0.1.0).** Configuración de perfil, SQLite independiente, dinero exacto, FIFO y pruebas ya disponibles. Se instaló el toolchain C++ con autorización expresa. El propietario confirmó la creación del perfil sintético y cuatro indicadores correctos; se comprobó su recuperación al reabrir y su persistencia con dos inspecciones SQLite de solo lectura. El ejecutable del paquete final también abrió con un espacio vacío y diagnóstico correcto.
+**Estado: catálogo y recepción de compras a crédito implementados (0.2.0, esquema v2).** Categorías, proveedores, productos, stock/costo por movimientos y compras atómicas con deuda y asiento balanceado. La fundación 0.1.0 y su validación se conservan como antecedentes. Pagos, ventas y ajustes siguen pendientes; producción permanece deshabilitada.
 
-Consulta [la validación Windows y los artefactos](docs/11-validacion-windows.md), [el incremento 01 histórico](docs/10-incremento-01.md), o la [vista previa renderizada mediante pruebas](docs/images/bootstrap.png).
+Consulta [el incremento 02 y sus verificaciones](docs/13-incremento-02.md), [el catálogo renderizado mediante pruebas](docs/images/inventory-catalog.png), o [el historial de compras renderizado](docs/images/inventory-purchases.png). La [validación Windows de la fundación](docs/11-validacion-windows.md) conserva el corte anterior.
 
-Para abrir esta entrega usa `dist/ValinorSanctum2/valinor_sanctum_2.exe`. El paquete completo está en `dist/valinor-sanctum-2-0.1.0-windows-x64.zip`; conserva las DLL y la carpeta data junto al ejecutable. Esta versión de desarrollo guarda sus datos dentro de `C:/proyectos/valinor_sanctum_2` y no está habilitada para producción.
+Para abrir esta entrega usa `dist/0.2.0/ValinorSanctum2/valinor_sanctum_2.exe`. El paquete completo está en `dist/valinor-sanctum-2-0.2.0-windows-x64.zip`; conserva las DLL y la carpeta data junto al ejecutable. Esta versión de desarrollo guarda sus datos dentro de `C:/proyectos/valinor_sanctum_2` y no está habilitada para producción. Las bases propias v1 se actualizan con respaldo SQLite previo; la versión anterior no puede abrir v2.
 
 ## Separación de proyectos
 
@@ -30,6 +30,8 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 9. [Evidencia y límites de la verificación](docs/09-verificacion.md).
 10. [Fundación implementada y verificaciones del corte anterior](docs/10-incremento-01.md).
 11. [Toolchain instalado, ejecutable Windows y paquete completo](docs/11-validacion-windows.md).
+12. [Contrato del incremento de catálogo y recepción](docs/12-contrato-incremento-02.md).
+13. [Catálogo, compras a crédito y validación 0.2.0](docs/13-incremento-02.md).
 
 ## Decisiones aprobadas
 
@@ -57,4 +59,4 @@ El SDK portable y sus cachés están en .tooling, ignorados por Git. Los scripts
 ./scripts/package-windows.ps1
 ~~~
 
-Resultados: 63 pruebas aprobadas y tres omitidas por falta de permiso del host para crear enlaces simbólicos; análisis y formato limpios. Guardado y reapertura del perfil sintético verificados, con huellas coincidentes y cero cambios durante la segunda lectura. El paquete final se reconstruyó sin overrides de prueba, se verificaron sus 17 archivos y se abrió/cerró correctamente con sus cuatro indicadores en Correcto. Se usó confirmación manual del propietario y observación por accesibilidad; la captura de imagen falló y no se presenta como prueba visual automática. Los módulos operativos permanecen pendientes según el plan.
+Resultados 0.2.0: 114 pruebas aprobadas y tres omitidas por falta de permiso del host para crear enlaces simbólicos; análisis y formato limpios. El flujo sintético verifica recepción/reintento, stock/costo y deuda al reabrir, balance y snapshots históricos. En Windows se observaron catálogo, historial y diagnóstico v2 mediante accesibilidad y teclado; los formularios se ejercitaron en pruebas de widgets. No se presenta esa observación como entrada manual nativa de compras. Los límites y artefactos están en el informe del incremento.

@@ -1,0 +1,69 @@
+{
+  "verifiedAtUtc": "2026-10-19T16:23:51.6106304Z",
+  "root": "C:\\proyectos\\valinor_ludoteca",
+  "baseline": "C:\\proyectos\\valinor_sanctum_2\\docs\\evidence\\original-manifest-before.json",
+  "baselineSha256": "F34C7D0DDB3EBBF2011A4E9EB5442F458E3AEA5605B05F1073A3F1F5DC94E43A",
+  "algorithm": "SHA-256",
+  "method": "Read-only enumeration and content hashes; Git status with --no-optional-locks. No original files were written or restored.",
+  "scope": "All regular files including .git; content only, not access timestamps",
+  "baselineFileCount": 193,
+  "currentFileCount": 193,
+  "unchangedFileCount": 191,
+  "unchangedNonGitFileCount": 163,
+  "differenceCount": 4,
+  "codexTurnDiffRefDifferenceCount": 4,
+  "otherDifferenceCount": 0,
+  "fullTreeUnchanged": false,
+  "unchangedExcludingCodexTurnDiffRefs": true,
+  "skippedReparsePoints": [],
+  "codexTurnDiffRefDifferences": [
+    {
+      "path": ".git/refs/codex/turn-diffs/captures/1792379021883/37244b47-2ae2-4be8-ae25-ae1b591411f8/base",
+      "kind": "removed",
+      "isCodexTurnDiffRef": true,
+      "before": {
+        "Path": ".git\\refs\\codex\\turn-diffs\\captures\\1792379021883\\37244b47-2ae2-4be8-ae25-ae1b591411f8\\base",
+        "Length": 41,
+        "Sha256": "7AAC786058B52B7A3EA00152B43C2D18BBE59358BF55A166EACCB669A6CF97FF"
+      },
+      "current": null
+    },
+    {
+      "path": ".git/refs/codex/turn-diffs/captures/1792426230847/9a7dd649-5050-4617-92f5-4770e3f2ab45/base",
+      "kind": "added",
+      "isCodexTurnDiffRef": true,
+      "before": null,
+      "current": {
+        "Path": ".git/refs/codex/turn-diffs/captures/1792426230847/9a7dd649-5050-4617-92f5-4770e3f2ab45/base",
+        "Length": 41,
+        "Sha256": "7AAC786058B52B7A3EA00152B43C2D18BBE59358BF55A166EACCB669A6CF97FF"
+      }
+    },
+    {
+      "path": ".git/refs/codex/turn-diffs/checkpoints/4bf5fc4b72386320c65b06632ced6247/c81521ca2707fe0a652efcb4798d15d5/1792377071417/5e80984d-d877-4637-87a5-6b1da0163e1b",
+      "kind": "removed",
+      "isCodexTurnDiffRef": true,
+      "before": {
+        "Path": ".git\\refs\\codex\\turn-diffs\\checkpoints\\4bf5fc4b72386320c65b06632ced6247\\c81521ca2707fe0a652efcb4798d15d5\\1792377071417\\5e80984d-d877-4637-87a5-6b1da0163e1b",
+        "Length": 41,
+        "Sha256": "7AAC786058B52B7A3EA00152B43C2D18BBE59358BF55A166EACCB669A6CF97FF"
+      },
+      "current": null
+    },
+    {
+      "path": ".git/refs/codex/turn-diffs/checkpoints/4bf5fc4b72386320c65b06632ced6247/e4e1c9ea23a0758bebd3d52ce00275a1/1792426164773/0f12fd27-cfd5-4ac9-ac3e-b3519c99c30f",
+      "kind": "added",
+      "isCodexTurnDiffRef": true,
+      "before": null,
+      "current": {
+        "Path": ".git/refs/codex/turn-diffs/checkpoints/4bf5fc4b72386320c65b06632ced6247/e4e1c9ea23a0758bebd3d52ce00275a1/1792426164773/0f12fd27-cfd5-4ac9-ac3e-b3519c99c30f",
+        "Length": 41,
+        "Sha256": "7AAC786058B52B7A3EA00152B43C2D18BBE59358BF55A166EACCB669A6CF97FF"
+      }
+    }
+  ],
+  "otherDifferences": [],
+  "gitStatusExitCode": 0,
+  "gitStatusPorcelain": [],
+  "gitWorkingTreeClean": true
+}

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:valinor_sanctum_2/core/infrastructure/database/schema.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/workspace_store.dart';
 
@@ -34,7 +35,7 @@ class FakeWorkspaceStore implements WorkspaceStore {
       throw healthFailureAfterSave!;
     }
     return {
-      'schemaVersion': 1,
+      'schemaVersion': DatabaseSchema.version,
       'identityVerified': identityVerified,
       'integrityOk': healthy,
       'foreignKeysEnabled': true,

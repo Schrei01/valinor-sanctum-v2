@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../features/workspace/application/workspace_controller.dart';
+import '../features/inventory/application/inventory_controller.dart';
+import '../features/inventory/presentation/catalog_page.dart';
+import '../features/inventory/presentation/purchases_page.dart';
 
 const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
@@ -41,12 +45,31 @@ class _WorkspaceShell extends StatefulWidget {
 
 class _WorkspaceShellState extends State<_WorkspaceShell> {
   int _section = 0;
+  InventoryController? _inventory;
+
+  @override
+  void dispose() {
+    _inventory?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
     builder: (context, _) {
       final controller = widget.controller;
+      final store = controller.inventoryStore;
+      if (!identical(_inventory?.store, store)) {
+        _inventory?.dispose();
+        _inventory = store == null ? null : InventoryController(store: store);
+      }
+      if (_inventory != null &&
+          controller.profile != null &&
+          _inventory!.snapshot == null &&
+          !_inventory!.loading &&
+          _inventory!.loadError == null) {
+        unawaited(_inventory!.load());
+      }
       if (controller.state == WorkspaceState.loading) {
         return const Scaffold(
           body: Center(
@@ -123,19 +146,40 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                       children: [
                         _Header(businessName: controller.profile?.businessName),
                         Expanded(
-                          child: SingleChildScrollView(
-                            padding: EdgeInsets.all(wide ? 36 : 20),
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 1050,
-                                ),
-                                child: _section == 0
-                                    ? _Home(controller: controller)
-                                    : _System(controller: controller),
+                          child: IndexedStack(
+                            index: _section,
+                            alignment: Alignment.topCenter,
+                            children: [
+                              _scrollPage(_Home(controller: controller), wide),
+                              _scrollPage(
+                                controller.profile == null
+                                    ? const _ConfigureFirst()
+                                    : _inventory == null
+                                    ? const _ModuleUnavailable()
+                                    : CatalogPage(
+                                        key: ObjectKey(_inventory),
+                                        controller: _inventory!,
+                                        profile: controller.profile!,
+                                      ),
+                                wide,
                               ),
-                            ),
+                              _scrollPage(
+                                controller.profile == null
+                                    ? const _ConfigureFirst()
+                                    : _inventory == null
+                                    ? const _ModuleUnavailable()
+                                    : PurchasesPage(
+                                        key: ObjectKey(_inventory),
+                                        controller: _inventory!,
+                                        profile: controller.profile!,
+                                      ),
+                                wide,
+                              ),
+                              _scrollPage(
+                                _System(controller: controller),
+                                wide,
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -156,6 +200,14 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                         label: 'Inicio',
                       ),
                       NavigationDestination(
+                        icon: Icon(Icons.inventory_2_outlined),
+                        label: 'Catálogo',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.local_shipping_outlined),
+                        label: 'Compras',
+                      ),
+                      NavigationDestination(
                         icon: Icon(Icons.settings_outlined),
                         label: 'Sistema',
                       ),
@@ -166,6 +218,37 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
       );
     },
   );
+
+  Widget _scrollPage(Widget child, bool wide) => SingleChildScrollView(
+    padding: EdgeInsets.all(wide ? 36 : 20),
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1050),
+        child: child,
+      ),
+    ),
+  );
+}
+
+class _ConfigureFirst extends StatelessWidget {
+  const _ConfigureFirst();
+  @override
+  Widget build(BuildContext context) => const Card(
+    child: Padding(
+      padding: EdgeInsets.all(28),
+      child: Text(
+        'Primero configura tu espacio de trabajo en Inicio para abrir el catálogo y las compras.',
+      ),
+    ),
+  );
+}
+
+class _ModuleUnavailable extends StatelessWidget {
+  const _ModuleUnavailable();
+  @override
+  Widget build(BuildContext context) =>
+      const Text('El módulo no está disponible en esta sesión.');
 }
 
 class _Sidebar extends StatelessWidget {
@@ -211,7 +294,9 @@ class _Sidebar extends StatelessWidget {
             const SizedBox(height: 44),
             for (final entry in [
               (0, Icons.home_outlined, 'Inicio'),
-              (1, Icons.settings_outlined, 'Sistema'),
+              (1, Icons.inventory_2_outlined, 'Catálogo'),
+              (2, Icons.local_shipping_outlined, 'Compras'),
+              (3, Icons.settings_outlined, 'Sistema'),
             ])
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -245,7 +330,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.1.0',
+                    'Versión 0.2.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -347,7 +432,7 @@ class _Home extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   const Text(
-                    'Los módulos operativos se habilitarán en los siguientes incrementos.',
+                    'Ya puedes organizar el catálogo y recibir compras a crédito desde el menú.',
                     style: TextStyle(color: Color(0xFF65716A)),
                   ),
                 ],
@@ -355,7 +440,7 @@ class _Home extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 30),
-        const _Eyebrow('PRÓXIMOS MÓDULOS'),
+        const _Eyebrow('MÓDULOS'),
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -369,22 +454,26 @@ class _Home extends StatelessWidget {
                   (
                     Icons.inventory_2_outlined,
                     'Catálogo e inventario',
-                    'Productos, entradas y costos históricos.',
+                    'Productos, proveedores y recepción de compras a crédito. Ajustes pendientes.',
+                    'Disponible',
                   ),
                   (
                     Icons.point_of_sale_outlined,
                     'Ventas y cuentas abiertas',
                     'Entregas, cobros y pendientes por separado.',
+                    'Pendiente',
                   ),
                   (
                     Icons.account_balance_wallet_outlined,
                     'Caja y movimientos',
                     'Gastos, transferencias y conciliación.',
+                    'Pendiente',
                   ),
                   (
                     Icons.insights_outlined,
                     'Reportes y análisis',
                     'Indicadores sustentados en operaciones.',
+                    'Pendiente',
                   ),
                 ])
                   SizedBox(
@@ -413,9 +502,9 @@ class _Home extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              'Pendiente',
-                              style: TextStyle(
+                            Text(
+                              module.$4,
+                              style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF65716A),
                               ),
@@ -638,7 +727,7 @@ class _System extends StatelessWidget {
       ),
       const SizedBox(height: 24),
       const Text(
-        'Entorno de desarrollo. Los flujos de operación, usuarios e importación aún están pendientes.',
+        'Entorno de desarrollo. Catálogo y compras a crédito disponibles. Ventas, pagos, usuarios e importación aún están pendientes.',
         style: TextStyle(color: Color(0xFF65716A), height: 1.5),
       ),
     ],
