@@ -100,6 +100,7 @@ $zipPath = Join-Path $distributionDirectory ('valinor-sanctum-2-' + $Version + '
 Assert-ProjectPath $zipPath
 if (Test-Path -LiteralPath $zipPath) { throw 'El ZIP ya existe; usa otra versión o conserva la entrega previa.' }
 Compress-Archive -LiteralPath $bundleDirectory -DestinationPath $zipPath -CompressionLevel Optimal
+& (Join-Path $PSScriptRoot 'publish-local-bundle.ps1') -ArchivePath $zipPath | Out-Null
 [pscustomobject]@{
     archive = $zipPath
     files = $copiedFiles + 1
@@ -107,4 +108,5 @@ Compress-Archive -LiteralPath $bundleDirectory -DestinationPath $zipPath -Compre
     sha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
     includes_synthetic_profiles = $false
     excludes_flutter_debug_artifacts = $true
+    current_executable = (Join-Path $distributionDirectory 'ValinorSanctum2\valinor_sanctum_2.exe')
 } | ConvertTo-Json

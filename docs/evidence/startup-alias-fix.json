@@ -1,0 +1,22 @@
+{
+  "verifiedAtUtc": "2026-10-19T20:09:18.5373247Z",
+  "cause": "Unversioned dist/ValinorSanctum2 still held 0.1.0 while own development database had schema v2",
+  "previousVersion": "0.1.0+1",
+  "archivedOldVersionBundle": "C:\\proyectos\\valinor_sanctum_2\\tmp\\local-bundles\\3b87c23ba3bb43eda13aef310e89c2c6\\previous\\ValinorSanctum2",
+  "currentVersion": "0.2.0+2",
+  "currentExecutable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe",
+  "currentFiles": 17,
+  "allCurrentFilesMatchVersionedBundle": true,
+  "archiveSha256": "91241E4B3EE0771BD827CC2566E2908F841BC3BDB8A521D76473687BC6E6AF20",
+  "launcher": "Iniciar Valinor Sanctum.cmd",
+  "launcherExecuted": true,
+  "nativeVersion020ObservedByAccessibility": true,
+  "nativeInitialSetupObserved": true,
+  "nativeUnsupportedSchemaErrorAbsent": true,
+  "nativeTestWindowClosed": true,
+  "oldBundleRejectedBeforeChangingCurrent": true,
+  "databaseHashUnchangedDuringPublication": true,
+  "applicationSchemaCodeChanged": false,
+  "databaseResetOrDowngradePerformed": false,
+  "originalPosModifiedByAgent": false
+}

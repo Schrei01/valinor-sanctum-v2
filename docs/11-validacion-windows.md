@@ -2,6 +2,8 @@
 
 Fecha: 19 de octubre de 2026, America/Bogota. Continúa la fundación del [incremento 01](10-incremento-01.md); ese informe y su JSON se conservan como registro histórico del corte anterior.
 
+Este informe describe la entrega histórica 0.1.0. La ruta sin versión `dist/ValinorSanctum2` ahora contiene la versión vigente y el bundle anterior se conserva bajo tmp al publicar. Para iniciar la aplicación actual utiliza `Iniciar Valinor Sanctum.cmd` en la raíz. No ejecutes 0.1.0 contra una base actualizada a v2.
+
 ## Entorno y compilación
 
 Con la autorización expresa «Sí autorizo» se ejecutó `scripts/install-build-tools.ps1 -Install`. Visual Studio Build Tools 2022 17.14.42 quedó instalado en `.tooling/visual-studio`, con herramientas C++ x64, CMake y Windows SDK 10.0.26100.0. El instalador terminó con código 0; `vswhere` informa instalación completa y ningún reinicio pendiente. Flutter doctor reconoce el toolchain Windows.

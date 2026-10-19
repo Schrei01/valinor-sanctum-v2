@@ -21,6 +21,8 @@ El propietario indicó «Sube los cambios a git y continua» el 19/10/2026. La v
 
 Incremento 02 implementado y verificado: versión 0.2.0, esquema v2, catálogo y recepción a crédito, 114 pruebas aprobadas y tres omitidas por permisos de symlinks del host. Se validaron migración/respaldo, atomicidad, idempotencia, inmutabilidad y UI. El ejecutable sintético mostró stock/historial/diagnóstico; la compra se cargó por CLI y los formularios se ejercitaron en widgets. El bundle final sin overrides abrió/cerró y migró la base propia de desarrollo v1 a v2 con respaldo, sin crear datos de negocio. Evidencia en docs/13-incremento-02.md y docs/evidence/increment-02.json. La etapa 4A es parcial: ajustes, pagos y ventas siguen pendientes; no atribuir soporte productivo ni recuperación persistente de solicitudes inciertas del cliente.
 
+Arranque estable: `Iniciar Valinor Sanctum.cmd` apunta a dist/ValinorSanctum2. package-windows.ps1 publica allí el bundle completo mediante publish-local-bundle.ps1, conservando el anterior dentro de tmp y rechazando retrocesos de versión. Se corrigió que esa ruta aún contenía 0.1.0 después de actualizar la base a v2; no resolver errores de ejecutables antiguos mediante downgrade/reset de datos.
+
 ## Reglas del producto
 
 - Flutter Desktop + SQLite offline como propuesta inicial; sin servicios externos obligatorios.
