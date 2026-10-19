@@ -4,6 +4,8 @@ import '../features/workspace/application/workspace_controller.dart';
 import '../features/inventory/application/inventory_controller.dart';
 import '../features/inventory/presentation/catalog_page.dart';
 import '../features/inventory/presentation/purchases_page.dart';
+import '../features/sales/application/sales_controller.dart';
+import '../features/sales/presentation/sales_page.dart';
 
 const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
@@ -46,10 +48,19 @@ class _WorkspaceShell extends StatefulWidget {
 class _WorkspaceShellState extends State<_WorkspaceShell> {
   int _section = 0;
   InventoryController? _inventory;
+  SalesController? _sales;
+
+  void _selectSection(int index) {
+    setState(() => _section = index);
+    if (widget.controller.profile == null) return;
+    if (index == 1 || index == 2) unawaited(_inventory?.load());
+    if (index == 3) unawaited(_sales?.load());
+  }
 
   @override
   void dispose() {
     _inventory?.dispose();
+    _sales?.dispose();
     super.dispose();
   }
 
@@ -69,6 +80,18 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
           !_inventory!.loading &&
           _inventory!.loadError == null) {
         unawaited(_inventory!.load());
+      }
+      final salesStore = controller.salesStore;
+      if (!identical(_sales?.store, salesStore)) {
+        _sales?.dispose();
+        _sales = salesStore == null ? null : SalesController(store: salesStore);
+      }
+      if (_sales != null &&
+          controller.profile != null &&
+          _sales!.snapshot == null &&
+          !_sales!.loading &&
+          _sales!.loadError == null) {
+        unawaited(_sales!.load());
       }
       if (controller.state == WorkspaceState.loading) {
         return const Scaffold(
@@ -137,7 +160,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                     width: 230,
                     child: _Sidebar(
                       selected: _section,
-                      onSelected: (index) => setState(() => _section = index),
+                      onSelected: _selectSection,
                     ),
                   ),
                 Expanded(
@@ -176,6 +199,18 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                 wide,
                               ),
                               _scrollPage(
+                                controller.profile == null
+                                    ? const _ConfigureFirst()
+                                    : _sales == null
+                                    ? const _ModuleUnavailable()
+                                    : SalesPage(
+                                        key: ObjectKey(_sales),
+                                        controller: _sales!,
+                                        profile: controller.profile!,
+                                      ),
+                                wide,
+                              ),
+                              _scrollPage(
                                 _System(controller: controller),
                                 wide,
                               ),
@@ -192,8 +227,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                 ? null
                 : NavigationBar(
                     selectedIndex: _section,
-                    onDestinationSelected: (index) =>
-                        setState(() => _section = index),
+                    onDestinationSelected: _selectSection,
                     destinations: const [
                       NavigationDestination(
                         icon: Icon(Icons.home_outlined),
@@ -206,6 +240,10 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                       NavigationDestination(
                         icon: Icon(Icons.local_shipping_outlined),
                         label: 'Compras',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.point_of_sale_outlined),
+                        label: 'Ventas',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.settings_outlined),
@@ -238,7 +276,7 @@ class _ConfigureFirst extends StatelessWidget {
     child: Padding(
       padding: EdgeInsets.all(28),
       child: Text(
-        'Primero configura tu espacio de trabajo en Inicio para abrir el catálogo y las compras.',
+        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras y ventas.',
       ),
     ),
   );
@@ -296,7 +334,8 @@ class _Sidebar extends StatelessWidget {
               (0, Icons.home_outlined, 'Inicio'),
               (1, Icons.inventory_2_outlined, 'Catálogo'),
               (2, Icons.local_shipping_outlined, 'Compras'),
-              (3, Icons.settings_outlined, 'Sistema'),
+              (3, Icons.point_of_sale_outlined, 'Ventas'),
+              (4, Icons.settings_outlined, 'Sistema'),
             ])
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -330,7 +369,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.2.0',
+                    'Versión 0.3.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -432,7 +471,7 @@ class _Home extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   const Text(
-                    'Ya puedes organizar el catálogo y recibir compras a crédito desde el menú.',
+                    'Ya puedes organizar el catálogo, recibir compras y confirmar ventas a crédito desde el menú.',
                     style: TextStyle(color: Color(0xFF65716A)),
                   ),
                 ],
@@ -460,8 +499,8 @@ class _Home extends StatelessWidget {
                   (
                     Icons.point_of_sale_outlined,
                     'Ventas y cuentas abiertas',
-                    'Entregas, cobros y pendientes por separado.',
-                    'Pendiente',
+                    'Cuentas guardadas y entregas a crédito. Cobros pendientes.',
+                    'Disponible · crédito',
                   ),
                   (
                     Icons.account_balance_wallet_outlined,
@@ -727,7 +766,7 @@ class _System extends StatelessWidget {
       ),
       const SizedBox(height: 24),
       const Text(
-        'Entorno de desarrollo. Catálogo y compras a crédito disponibles. Ventas, pagos, usuarios e importación aún están pendientes.',
+        'Entorno de desarrollo. Catálogo, compras y ventas a crédito disponibles. Cobros, pagos, usuarios e importación aún están pendientes.',
         style: TextStyle(color: Color(0xFF65716A), height: 1.5),
       ),
     ],

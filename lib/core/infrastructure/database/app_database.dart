@@ -135,22 +135,24 @@ class AppDatabase {
     if (version > schemaVersion) {
       throw UnsupportedSchemaVersionException(version, schemaVersion);
     }
-    if (version == 1) {
+    if (version > 0 && version < schemaVersion) {
       // VACUUM INTO cannot run inside a transaction. Validate before snapshot,
       // then compare its complete content under the exclusive migration lock.
       await _database.transaction<void>(
-        (transaction) => _assertHealthy(transaction, 1),
+        (transaction) => _assertHealthy(transaction, version),
         exclusive: true,
       );
-      final backupFingerprint = await _createVerifiedBackup();
+      final backupFingerprint = await _createVerifiedBackup(version);
       await _database.transaction<void>((transaction) async {
-        await _assertHealthy(transaction, 1);
+        await _assertHealthy(transaction, version);
         if (await _contentChecksum(transaction) != backupFingerprint) {
           throw const DatabaseValidationException(
             'The database changed after its backup; reopen to retry safely',
           );
         }
-        await _applyMigration2(transaction);
+        for (var next = version + 1; next <= schemaVersion; next++) {
+          await _applyMigration(transaction, next);
+        }
         await _assertHealthy(transaction, schemaVersion);
       }, exclusive: true);
       return;
@@ -175,7 +177,9 @@ class AppDatabase {
         );
         await transaction.execute('PRAGMA user_version = 1');
         await _recordMigration(transaction, 1);
-        await _applyMigration2(transaction);
+        for (var next = 2; next <= schemaVersion; next++) {
+          await _applyMigration(transaction, next);
+        }
       } else if (lockedVersion != schemaVersion ||
           applicationId != DatabaseSchema.applicationId) {
         throw const DatabaseValidationException(
@@ -187,12 +191,22 @@ class AppDatabase {
     }, exclusive: true);
   }
 
-  static Future<void> _applyMigration2(DatabaseExecutor executor) async {
-    for (final statement in DatabaseSchema.migration2Statements) {
+  static List<String> _migrationStatements(int version) => switch (version) {
+    1 => DatabaseSchema.statements,
+    2 => DatabaseSchema.migration2Statements,
+    3 => DatabaseSchema.migration3Statements,
+    _ => throw ArgumentError.value(version, 'version'),
+  };
+
+  static Future<void> _applyMigration(
+    DatabaseExecutor executor,
+    int version,
+  ) async {
+    for (final statement in _migrationStatements(version)) {
       await executor.execute(statement);
     }
-    await executor.execute('PRAGMA user_version = 2');
-    await _recordMigration(executor, 2);
+    await executor.execute('PRAGMA user_version = $version');
+    await _recordMigration(executor, version);
   }
 
   static Future<void> _recordMigration(
@@ -208,7 +222,7 @@ class AppDatabase {
     });
   }
 
-  Future<String> _createVerifiedBackup() async {
+  Future<String> _createVerifiedBackup(int version) async {
     if (_path == inMemoryDatabasePath) {
       throw const DatabaseValidationException(
         'An existing schema needs a file-backed backup before migration',
@@ -218,7 +232,7 @@ class AppDatabase {
     final suffix = Random.secure().nextInt(0x7fffffff).toRadixString(16);
     final backupPath = p.join(
       backupDirectory.path,
-      '${p.basenameWithoutExtension(_path)}.v1.'
+      '${p.basenameWithoutExtension(_path)}.v$version.'
       '${DateTime.now().toUtc().microsecondsSinceEpoch}-$suffix.sqlite3',
     );
     await _validateDatabasePath(backupPath);
@@ -235,7 +249,7 @@ class AppDatabase {
     try {
       await backup.execute('PRAGMA foreign_keys = ON');
       await backup.execute('PRAGMA query_only = ON');
-      await _assertHealthy(backup, 1);
+      await _assertHealthy(backup, version);
       return await _contentChecksum(backup);
     } finally {
       await backup.close();
@@ -337,14 +351,14 @@ class AppDatabase {
       options: OpenDatabaseOptions(singleInstance: false),
     );
     try {
-      for (final statement in DatabaseSchema.statements) {
-        await reference.execute(statement);
+      final checksums = <int, String>{};
+      for (var version = 1; version <= schemaVersion; version++) {
+        for (final statement in _migrationStatements(version)) {
+          await reference.execute(statement);
+        }
+        checksums[version] = await _schemaChecksum(reference);
       }
-      final version1 = await _schemaChecksum(reference);
-      for (final statement in DatabaseSchema.migration2Statements) {
-        await reference.execute(statement);
-      }
-      return <int, String>{1: version1, 2: await _schemaChecksum(reference)};
+      return checksums;
     } finally {
       await reference.close();
     }

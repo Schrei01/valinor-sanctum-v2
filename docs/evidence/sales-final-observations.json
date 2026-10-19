@@ -1,0 +1,13 @@
+{
+  "observedAtUtc": "2026-10-19T20:45:51.167Z",
+  "launcher": "Iniciar Valinor Sanctum.cmd",
+  "version": "0.3.0+3",
+  "schemaVersion": 3,
+  "fourCorrectIndicatorsObserved": true,
+  "initialSetupObserved": true,
+  "businessDataEntered": false,
+  "windowClosed": true,
+  "nativeScreenshotError": "FrameArrived timed out: timed out waiting on channel",
+  "observationMethod": "Windows accessibility and keyboard",
+  "systemTree": "Window: \"Valinor Sanctum 2.0\", App: valinor_sanctum_2.exe.\n\t0 ventana Valinor Sanctum 2.0 Secondary Actions: Raise\n\t\t7 panel\n\t\t\t4877 grupo\n\t\t\t\t4878 grupo\n\t\t\t\t\t4879 grupo\n\t\t\t\t\t\t4880 grupo\n\t\t\t\t\t\t\t4881 texto Valinor Sanctum 2.0\n\t\t\t\t\t\t\t4882 texto Desarrollo\n\t\t\t\t\t\t\t4883 texto VALINOR SANCTUM\n\t\t\t\t\t\t\t4884 texto GESTIÓN COMERCIAL · 2.0\n\t\t\t\t\t\t\t4885 botón Inicio\n\t\t\t\t\t\t\t4886 botón Catálogo\n\t\t\t\t\t\t\t4887 botón Compras\n\t\t\t\t\t\t\t4888 botón Ventas\n\t\t\t\t\t\t\t4889 botón Sistema\n\t\t\t\t\t\t\t4890 texto EN DESARROLLO\n\t\t\t\t\t\t\t4891 texto Versión 0.3.0\n\t\t\t\t\t\t\t4892 grupo\n\t\t\t\t\t\t\t\t4893 texto SISTEMA\n\t\t\t\t\t\t\t\t4894 texto Almacenamiento y diagnóstico\n\t\t\t\t\t\t\t\t4895 texto Comprueba el estado del archivo exclusivo de este espacio.\n\t\t\t\t\t\t\t\t4896 grupo (settable, string) Perfil: development Ubicación de la base de datos Integridad SQLite Correcto Relaciones protegidas Correcto Esquema verificado Correcto Migración verificada Correcto Versión del esquema: 3 Value: C:\\proyectos\\valinor_sanctum_2\\data\\development\\development\\sanctum2.sqlite3\n\t\t\t\t\t\t\t\t\t4897 botón Volver a verificar\n\t\t\t\t\t\t\t\t4898 texto Entorno de desarrollo. Catálogo, compras y ventas a crédito disponibles. Cobros, pagos, usuarios e importación aún están pendientes.\n\t\t1 barra de título (settable, string) Value: Valinor Sanctum 2.0\n\t\t\t2 barra de menús Sistema ID: MenuBar\n\t\t\t\t3 elemento de menú Sistema\n\t\t\t4 botón Minimizar\n\t\t\t5 botón Maximizar\n\t\t\t6 botón Cerrar\n\nThe focused UI element is 4889 botón Sistema."
+}

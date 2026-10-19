@@ -23,6 +23,10 @@ Incremento 02 implementado y verificado: versión 0.2.0, esquema v2, catálogo y
 
 Arranque estable: `Iniciar Valinor Sanctum.cmd` apunta a dist/ValinorSanctum2. package-windows.ps1 publica allí el bundle completo mediante publish-local-bundle.ps1, conservando el anterior dentro de tmp y rechazando retrocesos de versión. Se corrigió que esa ruta aún contenía 0.1.0 después de actualizar la base a v2; no resolver errores de ejecutables antiguos mediante downgrade/reset de datos.
 
+El propietario autorizó el siguiente incremento mediante «Entonces continúa», después de acordar cuentas abiertas persistentes y confirmación de ventas a crédito como primera entrega; cobros en una entrega posterior. Incremento 03 en desarrollo: borrador sin reserva ni descuento de stock; venta confirmada con salida FIFO, costo histórico, cuenta por cobrar y asiento atómicos; confirmación preparada persistida para recuperar reintentos tras cierre. Solo datos propios sintéticos y migraciones respaldadas de v1/v2 a v3. No ampliar a cobros, pagos, producción o importaciones en este incremento.
+
+Incremento 03 completado y validado en 0.3.0/esquema v3: 157 pruebas aprobadas, tres omitidas por permisos de symlinks, formato/análisis limpios y flujo sintético de 27 comprobaciones. Compilación sintética mostró recuperación preparada e historial; la final sin defines se publicó y el acceso estable mostró cuatro Correcto y esquema 3, creando respaldo v2 propio sin ingresar datos de negocio. Ventanas de prueba cerradas. Artefactos/límites en docs/15-incremento-03.md y docs/evidence/increment-03.json. Costeo comercial versionado fifo-front-remainder-v1, sin salidas históricas anteriores. Rechazar entradas/ventas retroactivas por producto. La recuperación durable es para confirmaciones de venta; compras mantienen el límite en memoria previo. Cobros, pagos, ajustes, reversas y producción siguen pendientes.
+
 ## Reglas del producto
 
 - Flutter Desktop + SQLite offline como propuesta inicial; sin servicios externos obligatorios.

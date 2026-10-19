@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 2;
+  static const int version = 3;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -15,15 +15,21 @@ abstract final class DatabaseSchema {
   static String get migration2Checksum =>
       checksum(migration2Statements.join('\n;\n'));
 
+  static const String migration3Name = 'open_tabs_credit_sales_fifo_v3';
+  static String get migration3Checksum =>
+      checksum(migration3Statements.join('\n;\n'));
+
   static String nameForVersion(int version) => switch (version) {
     1 => migrationName,
     2 => migration2Name,
+    3 => migration3Name,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
   static String checksumForVersion(int version) => switch (version) {
     1 => migrationChecksum,
     2 => migration2Checksum,
+    3 => migration3Checksum,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -554,6 +560,595 @@ END
     ),
     ..._freezePurchaseJournalLines(),
   ]);
+
+  /// V2 facts remain intact. Sale outflows and receivables are additional facts;
+  /// stock is received quantities/costs less their confirmed sale outflows.
+  static final List<String> migration3Statements = List<String>.unmodifiable([
+    '''
+CREATE TABLE sales_drafts (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  label TEXT NOT NULL CHECK (length(trim(label)) BETWEEN 1 AND 160),
+  customer_name TEXT NOT NULL CHECK (length(trim(customer_name)) BETWEEN 1 AND 160),
+  revision INTEGER NOT NULL CHECK (typeof(revision) = 'integer' AND revision > 0),
+  status TEXT NOT NULL CHECK (status IN ('open', 'prepared', 'confirmed')),
+  updated_at_utc TEXT NOT NULL CHECK (length(updated_at_utc) > 0),
+  confirmed_document_id TEXT UNIQUE REFERENCES business_documents(id) ON DELETE RESTRICT,
+  CHECK ((status = 'confirmed') = (confirmed_document_id IS NOT NULL))
+)
+''',
+    '''
+CREATE TABLE sales_draft_lines (
+  draft_id TEXT NOT NULL REFERENCES sales_drafts(id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  product_id TEXT NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+  quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+  unit_price_minor INTEGER NOT NULL CHECK (typeof(unit_price_minor) = 'integer' AND unit_price_minor >= 0),
+  PRIMARY KEY (draft_id, sequence),
+  UNIQUE (draft_id, product_id)
+)
+''',
+    '''
+CREATE TABLE sale_confirmations (
+  command_id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(command_id)) > 0),
+  draft_id TEXT NOT NULL REFERENCES sales_drafts(id) ON DELETE RESTRICT,
+  draft_revision INTEGER NOT NULL CHECK (typeof(draft_revision) = 'integer' AND draft_revision > 0),
+  canonical_payload TEXT NOT NULL CHECK (length(trim(canonical_payload)) > 0),
+  occurred_at_utc TEXT NOT NULL CHECK (length(occurred_at_utc) > 0),
+  due_date TEXT NOT NULL CHECK (length(due_date) = 10),
+  prepared_at_utc TEXT NOT NULL CHECK (length(prepared_at_utc) > 0),
+  status TEXT NOT NULL CHECK (status IN ('prepared', 'rejected', 'cancelled', 'confirmed')),
+  rejection_reason TEXT,
+  CHECK ((status IN ('prepared', 'confirmed') AND rejection_reason IS NULL)
+    OR (status IN ('rejected', 'cancelled') AND rejection_reason IS NOT NULL
+      AND length(trim(rejection_reason)) > 0))
+)
+''',
+    '''
+CREATE UNIQUE INDEX idx_confirmations_active_draft ON sale_confirmations(draft_id)
+WHERE status <> 'cancelled'
+''',
+    '''
+CREATE TABLE sales (
+  document_id TEXT PRIMARY KEY NOT NULL REFERENCES business_documents(id) ON DELETE RESTRICT,
+  draft_id TEXT NOT NULL UNIQUE REFERENCES sales_drafts(id) ON DELETE RESTRICT,
+  customer_name_snapshot TEXT NOT NULL CHECK (length(trim(customer_name_snapshot)) BETWEEN 1 AND 160),
+  label_snapshot TEXT NOT NULL CHECK (length(trim(label_snapshot)) BETWEEN 1 AND 160),
+  sold_at_utc TEXT NOT NULL CHECK (length(sold_at_utc) > 0),
+  due_date TEXT NOT NULL CHECK (length(due_date) = 10),
+  receivable_minor INTEGER NOT NULL CHECK (typeof(receivable_minor) = 'integer' AND receivable_minor > 0),
+  total_cost_minor INTEGER NOT NULL CHECK (typeof(total_cost_minor) = 'integer' AND total_cost_minor >= 0),
+  terms TEXT NOT NULL CHECK (terms = 'credit'),
+  cost_policy TEXT NOT NULL CHECK (cost_policy = 'fifo-front-remainder-v1')
+)
+''',
+    '''
+CREATE TABLE sale_lines (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  sale_id TEXT NOT NULL REFERENCES sales(document_id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  product_id TEXT NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+  name_snapshot TEXT NOT NULL CHECK (length(trim(name_snapshot)) BETWEEN 1 AND 160),
+  quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+  unit_price_minor INTEGER NOT NULL CHECK (typeof(unit_price_minor) = 'integer' AND unit_price_minor >= 0),
+  total_minor INTEGER NOT NULL CHECK (typeof(total_minor) = 'integer' AND total_minor >= 0),
+  total_cost_minor INTEGER NOT NULL CHECK (typeof(total_cost_minor) = 'integer' AND total_cost_minor >= 0),
+  CHECK (quantity * unit_price_minor = total_minor
+    AND typeof(quantity * unit_price_minor) = 'integer'),
+  UNIQUE (sale_id, sequence),
+  UNIQUE (sale_id, product_id)
+)
+''',
+    '''
+CREATE TABLE sale_outflows (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  document_id TEXT NOT NULL REFERENCES sales(document_id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  product_id TEXT NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+  sale_line_id TEXT NOT NULL UNIQUE REFERENCES sale_lines(id) ON DELETE RESTRICT,
+  quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+  cost_minor INTEGER NOT NULL CHECK (typeof(cost_minor) = 'integer' AND cost_minor >= 0),
+  UNIQUE (document_id, sequence)
+)
+''',
+    '''
+CREATE TABLE sale_cost_allocations (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  sale_line_id TEXT NOT NULL REFERENCES sale_lines(id) ON DELETE RESTRICT,
+  cost_layer_id TEXT NOT NULL REFERENCES cost_layers(id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+  cost_minor INTEGER NOT NULL CHECK (typeof(cost_minor) = 'integer' AND cost_minor >= 0),
+  UNIQUE (sale_line_id, sequence),
+  UNIQUE (sale_line_id, cost_layer_id)
+)
+''',
+    '''
+CREATE TABLE customer_receivables (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  origin_document_id TEXT NOT NULL UNIQUE REFERENCES sales(document_id) ON DELETE RESTRICT,
+  customer_name_snapshot TEXT NOT NULL CHECK (length(trim(customer_name_snapshot)) BETWEEN 1 AND 160),
+  control_account_id TEXT NOT NULL REFERENCES ledger_accounts(id) ON DELETE RESTRICT,
+  initial_minor INTEGER NOT NULL CHECK (typeof(initial_minor) = 'integer' AND initial_minor > 0),
+  issued_at_utc TEXT NOT NULL CHECK (length(issued_at_utc) > 0),
+  due_date TEXT NOT NULL CHECK (length(due_date) = 10)
+)
+''',
+    'CREATE INDEX idx_sale_lines_product ON sale_lines(product_id)',
+    'CREATE INDEX idx_outflows_product ON sale_outflows(product_id)',
+    'CREATE INDEX idx_allocations_layer ON sale_cost_allocations(cost_layer_id)',
+    '''
+CREATE TRIGGER sale_confirmations_reserve_command_id
+BEFORE INSERT ON command_log
+WHEN EXISTS (SELECT 1 FROM sale_confirmations c WHERE c.command_id = NEW.id
+  AND (NEW.command_type <> 'confirm_sale' OR c.status <> 'prepared'))
+BEGIN
+  SELECT RAISE(ABORT, 'A prepared sale command identifier is reserved for its confirmation');
+END
+''',
+    '''
+CREATE TRIGGER purchases_validate_sale_chronology
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status = 'draft' AND NEW.status = 'posted' AND NEW.type = 'purchase_receipt'
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM purchase_lines p
+    JOIN purchases receipt ON receipt.document_id = p.purchase_id
+    JOIN sale_lines l ON l.product_id = p.product_id
+    JOIN sales s ON s.document_id = l.sale_id
+    JOIN business_documents d ON d.id = s.document_id
+    JOIN journal_entries j ON j.document_id = d.id
+    WHERE p.purchase_id = NEW.id AND d.status = 'posted' AND j.status = 'posted'
+      AND ${_utcSortKey('receipt.received_at_utc')} < ${_utcSortKey('s.sold_at_utc')})
+    THEN RAISE(ABORT, 'A receipt cannot predate a confirmed sale of the same product') END;
+END
+''',
+    '''
+CREATE TRIGGER sales_drafts_insert_open
+BEFORE INSERT ON sales_drafts
+WHEN NEW.status <> 'open' OR EXISTS (SELECT 1 FROM sales_drafts WHERE id = NEW.id)
+BEGIN
+  SELECT RAISE(ABORT, 'Create a new sale account as open; accounts cannot be replaced');
+END
+''',
+    '''
+CREATE TRIGGER sales_drafts_validate_update
+BEFORE UPDATE ON sales_drafts
+BEGIN
+  SELECT CASE WHEN NEW.id <> OLD.id OR OLD.status = 'confirmed'
+    THEN RAISE(ABORT, 'Confirmed sale accounts are immutable') END;
+  SELECT CASE WHEN OLD.status = 'open' AND NEW.status = 'open' AND (
+    NEW.revision <> OLD.revision + 1 OR EXISTS (
+      SELECT 1 FROM sale_confirmations WHERE draft_id = OLD.id AND status <> 'cancelled'))
+    THEN RAISE(ABORT, 'Edit only the latest open account without a pending confirmation') END;
+  SELECT CASE WHEN OLD.status = 'open' AND NEW.status = 'prepared' AND (
+    NEW.revision <> OLD.revision OR NEW.label <> OLD.label OR NEW.customer_name <> OLD.customer_name
+    OR NOT EXISTS (SELECT 1 FROM sale_confirmations WHERE draft_id = OLD.id
+      AND draft_revision = OLD.revision AND status = 'prepared'))
+    THEN RAISE(ABORT, 'Prepare the exact saved sale account') END;
+  SELECT CASE WHEN OLD.status = 'prepared' AND NEW.status = 'open' AND (
+    NEW.revision <> OLD.revision + 1 OR NEW.label <> OLD.label OR NEW.customer_name <> OLD.customer_name
+    OR EXISTS (SELECT 1 FROM sale_confirmations WHERE draft_id = OLD.id AND status <> 'cancelled'))
+    THEN RAISE(ABORT, 'Only a cancelled rejection may reopen its sale account') END;
+  SELECT CASE WHEN NEW.status = 'confirmed' AND (
+    OLD.status <> 'prepared' OR NEW.revision <> OLD.revision OR NEW.label <> OLD.label
+    OR NEW.customer_name <> OLD.customer_name OR NOT EXISTS (
+      SELECT 1 FROM sales s JOIN business_documents d ON d.id = s.document_id
+      JOIN journal_entries j ON j.document_id = d.id
+      JOIN sale_confirmations c ON c.command_id = d.command_id
+      WHERE s.draft_id = OLD.id AND s.document_id = NEW.confirmed_document_id
+        AND d.status = 'posted' AND j.status = 'posted' AND c.status = 'confirmed'))
+    THEN RAISE(ABORT, 'Confirm the sale and its journal before closing its account') END;
+  SELECT CASE WHEN OLD.status = 'prepared' AND NEW.status = 'prepared'
+    THEN RAISE(ABORT, 'Prepared sale accounts are locked') END;
+  SELECT CASE WHEN OLD.status = 'open' AND NEW.status = 'confirmed'
+    THEN RAISE(ABORT, 'Prepare a sale account before confirmation') END;
+END
+''',
+    '''
+CREATE TRIGGER sales_drafts_no_delete
+BEFORE DELETE ON sales_drafts
+BEGIN
+  SELECT RAISE(ABORT, 'Saved sale accounts cannot be deleted');
+END
+''',
+    ..._freezeSaleDraftLines(),
+    '''
+CREATE TRIGGER sale_confirmations_validate_insert
+BEFORE INSERT ON sale_confirmations
+BEGIN
+  SELECT CASE WHEN NEW.status <> 'prepared' OR EXISTS (
+    SELECT 1 FROM sale_confirmations WHERE command_id = NEW.command_id
+      OR (draft_id = NEW.draft_id AND status <> 'cancelled'))
+    OR EXISTS (SELECT 1 FROM command_log WHERE id = NEW.command_id)
+    THEN RAISE(ABORT, 'Create a unique prepared sale confirmation') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM sales_drafts WHERE id = NEW.draft_id
+    AND status = 'open' AND revision = NEW.draft_revision)
+    OR NOT EXISTS (SELECT 1 FROM sales_draft_lines WHERE draft_id = NEW.draft_id)
+    THEN RAISE(ABORT, 'A confirmation requires the current saved open account') END;
+END
+''',
+    '''
+CREATE TRIGGER sale_confirmations_validate_update
+BEFORE UPDATE ON sale_confirmations
+BEGIN
+  SELECT CASE WHEN NEW.command_id <> OLD.command_id OR NEW.draft_id <> OLD.draft_id
+    OR NEW.draft_revision <> OLD.draft_revision OR NEW.canonical_payload <> OLD.canonical_payload
+    OR NEW.occurred_at_utc <> OLD.occurred_at_utc OR NEW.due_date <> OLD.due_date
+    OR NEW.prepared_at_utc <> OLD.prepared_at_utc
+    THEN RAISE(ABORT, 'Prepared sale input is immutable') END;
+  SELECT CASE WHEN NOT ((OLD.status = 'prepared' AND NEW.status IN ('rejected', 'confirmed'))
+    OR (OLD.status = 'rejected' AND NEW.status = 'cancelled'))
+    THEN RAISE(ABORT, 'Invalid sale confirmation transition') END;
+  SELECT CASE WHEN NEW.status IN ('rejected', 'cancelled')
+    AND EXISTS (SELECT 1 FROM command_log WHERE id = OLD.command_id)
+    THEN RAISE(ABORT, 'A committed sale cannot be rejected or cancelled') END;
+  SELECT CASE WHEN NEW.status = 'cancelled' AND NEW.rejection_reason IS NOT OLD.rejection_reason
+    THEN RAISE(ABORT, 'The sale rejection reason is historical') END;
+  SELECT CASE WHEN NEW.status = 'confirmed' AND NOT EXISTS (
+    SELECT 1 FROM business_documents d JOIN sales s ON s.document_id = d.id
+    JOIN journal_entries j ON j.document_id = d.id
+    WHERE d.command_id = OLD.command_id AND s.draft_id = OLD.draft_id
+      AND d.status = 'posted' AND j.status = 'posted')
+    THEN RAISE(ABORT, 'Post a sale and its journal before completing confirmation') END;
+END
+''',
+    '''
+CREATE TRIGGER sale_confirmations_no_delete
+BEFORE DELETE ON sale_confirmations
+BEGIN
+  SELECT RAISE(ABORT, 'Prepared sale inputs cannot be deleted');
+END
+''',
+    '''
+CREATE TRIGGER sales_documents_insert_as_draft
+BEFORE INSERT ON business_documents
+WHEN NEW.type = 'credit_sale' AND NEW.status <> 'draft'
+BEGIN
+  SELECT RAISE(ABORT, 'Create a sale document as draft before posting');
+END
+''',
+    '''
+CREATE TRIGGER sales_require_draft_document
+BEFORE INSERT ON sales
+WHEN NOT EXISTS (SELECT 1 FROM business_documents WHERE id = NEW.document_id
+  AND type = 'credit_sale' AND status = 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'A sale requires a draft credit sale document');
+END
+''',
+    '''
+CREATE TRIGGER sale_cost_allocations_validate_insert
+BEFORE INSERT ON sale_cost_allocations
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM sale_cost_allocations WHERE id = NEW.id
+    OR (sale_line_id = NEW.sale_line_id AND sequence = NEW.sequence)
+    OR (sale_line_id = NEW.sale_line_id AND cost_layer_id = NEW.cost_layer_id))
+    THEN RAISE(ABORT, 'Cost allocations cannot be replaced') END;
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM sale_lines l JOIN sales s ON s.document_id = l.sale_id
+    JOIN business_documents d ON d.id = s.document_id
+    JOIN cost_layers c ON c.id = NEW.cost_layer_id
+    JOIN inventory_movements m ON m.id = c.inbound_movement_id
+    JOIN business_documents p ON p.id = m.document_id
+    JOIN journal_entries j ON j.document_id = p.id
+    WHERE l.id = NEW.sale_line_id AND l.product_id = c.product_id
+      AND d.type = 'credit_sale' AND d.status = 'draft'
+      AND ${_utcSortKey('c.acquired_at_utc')} <= ${_utcSortKey('s.sold_at_utc')}
+      AND p.status = 'posted' AND j.status = 'posted')
+    THEN RAISE(ABORT, 'Allocate only a matching confirmed inbound cost layer') END;
+  SELECT CASE WHEN NEW.sequence <> (
+    SELECT count(*) FROM sale_cost_allocations WHERE sale_line_id = NEW.sale_line_id)
+    OR NEW.quantity > (SELECT l.quantity - coalesce((
+      SELECT sum(a.quantity) FROM sale_cost_allocations a WHERE a.sale_line_id = l.id), 0)
+      FROM sale_lines l WHERE l.id = NEW.sale_line_id)
+    OR NEW.quantity > (SELECT c.initial_quantity - coalesce((
+      SELECT sum(a.quantity) FROM sale_cost_allocations a WHERE a.cost_layer_id = c.id), 0)
+      FROM cost_layers c WHERE c.id = NEW.cost_layer_id)
+    THEN RAISE(ABORT, 'A cost allocation cannot exceed remaining sale or layer quantities') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM cost_layers older JOIN cost_layers chosen ON chosen.id = NEW.cost_layer_id
+    JOIN sale_lines l ON l.id = NEW.sale_line_id
+    JOIN sales s ON s.document_id = l.sale_id
+    JOIN inventory_movements m ON m.id = older.inbound_movement_id
+    JOIN business_documents d ON d.id = m.document_id
+    JOIN journal_entries j ON j.document_id = d.id
+    WHERE older.product_id = chosen.product_id AND older.fifo_sequence < chosen.fifo_sequence
+      AND ${_utcSortKey('older.acquired_at_utc')} <= ${_utcSortKey('s.sold_at_utc')}
+      AND d.status = 'posted' AND j.status = 'posted'
+      AND older.initial_quantity > coalesce((SELECT sum(a.quantity)
+        FROM sale_cost_allocations a WHERE a.cost_layer_id = older.id), 0))
+    THEN RAISE(ABORT, 'Consume the oldest available cost layer first') END;
+  SELECT CASE WHEN NEW.cost_minor <> (SELECT
+    NEW.quantity * (c.total_cost_minor / c.initial_quantity)
+      + min(NEW.quantity, max(0, c.total_cost_minor % c.initial_quantity - coalesce((
+        SELECT sum(a.quantity) FROM sale_cost_allocations a WHERE a.cost_layer_id = c.id), 0)))
+    FROM cost_layers c WHERE c.id = NEW.cost_layer_id)
+    THEN RAISE(ABORT, 'A FIFO allocation must preserve exact documented cost') END;
+END
+''',
+    for (final action in ['UPDATE', 'DELETE'])
+      '''
+CREATE TRIGGER sale_cost_allocations_no_${action.toLowerCase()}
+BEFORE $action ON sale_cost_allocations
+BEGIN
+  SELECT RAISE(ABORT, 'FIFO allocations are immutable; roll back an unfinished operation');
+END
+''',
+    '''
+CREATE TRIGGER sales_validate_document_posting
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status = 'draft' AND NEW.status = 'posted' AND
+  (NEW.type = 'credit_sale' OR EXISTS (SELECT 1 FROM sales WHERE document_id = NEW.id))
+BEGIN
+  SELECT CASE WHEN NEW.type <> 'credit_sale' OR NEW.command_sequence <> 0
+    OR NOT EXISTS (SELECT 1 FROM command_log c WHERE c.id = NEW.command_id
+      AND c.command_type = 'confirm_sale' AND c.actor_id = NEW.actor_id
+      AND c.authorization_policy_version = 'development-single-user-v1')
+    THEN RAISE(ABORT, 'Invalid sale command or document type') END;
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM sales s JOIN sales_drafts a ON a.id = s.draft_id
+    JOIN sale_confirmations c ON c.command_id = NEW.command_id
+    WHERE s.document_id = NEW.id AND a.status = 'prepared' AND c.status = 'prepared'
+      AND c.draft_id = a.id AND c.draft_revision = a.revision
+      AND s.label_snapshot = a.label AND s.customer_name_snapshot = a.customer_name
+      AND s.sold_at_utc = NEW.occurred_at_utc AND s.sold_at_utc = c.occurred_at_utc
+      AND s.due_date = c.due_date AND s.due_date >= NEW.business_date
+      AND date(s.due_date) = s.due_date
+      AND date(NEW.occurred_at_utc, '-5 hours') = NEW.business_date)
+    THEN RAISE(ABORT, 'Sale header must match the durable saved account confirmation') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM sale_lines incoming
+    JOIN sales current ON current.document_id = incoming.sale_id
+    JOIN sale_lines previous ON previous.product_id = incoming.product_id
+    JOIN sales earlier ON earlier.document_id = previous.sale_id
+    JOIN business_documents d ON d.id = earlier.document_id
+    JOIN journal_entries j ON j.document_id = d.id
+    WHERE incoming.sale_id = NEW.id AND earlier.document_id <> NEW.id
+      AND d.status = 'posted' AND j.status = 'posted'
+      AND ${_utcSortKey('earlier.sold_at_utc')} > ${_utcSortKey('current.sold_at_utc')})
+    THEN RAISE(ABORT, 'A sale cannot predate a confirmed sale of the same product') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM sale_lines WHERE sale_id = NEW.id)
+    OR (SELECT count(*) FROM sale_lines WHERE sale_id = NEW.id) <>
+      (SELECT count(*) FROM sales_draft_lines l JOIN sales s ON s.draft_id = l.draft_id
+        WHERE s.document_id = NEW.id)
+    OR EXISTS (SELECT 1 FROM sale_lines l JOIN catalog_items p ON p.id = l.product_id
+      LEFT JOIN categories g ON g.id = p.category_id WHERE l.sale_id = NEW.id AND (
+        p.is_active <> 1 OR l.name_snapshot <> p.name
+        OR (p.category_id IS NOT NULL AND g.is_active <> 1)
+        OR NOT EXISTS (SELECT 1 FROM sales_draft_lines d JOIN sales s ON s.draft_id = d.draft_id
+          WHERE s.document_id = NEW.id AND d.product_id = l.product_id
+            AND d.sequence = l.sequence AND d.quantity = l.quantity
+            AND d.unit_price_minor = l.unit_price_minor)))
+    THEN RAISE(ABORT, 'Sale lines must match saved quantities, prices and active catalog snapshots') END;
+  SELECT CASE WHEN (SELECT sum(total_minor) FROM sale_lines WHERE sale_id = NEW.id)
+      <> (SELECT receivable_minor FROM sales WHERE document_id = NEW.id)
+    OR (SELECT sum(total_cost_minor) FROM sale_lines WHERE sale_id = NEW.id)
+      <> (SELECT total_cost_minor FROM sales WHERE document_id = NEW.id)
+    THEN RAISE(ABORT, 'Sale totals must equal their immutable lines') END;
+  SELECT CASE WHEN (SELECT count(*) FROM sale_outflows WHERE document_id = NEW.id)
+      <> (SELECT count(*) FROM sale_lines WHERE sale_id = NEW.id)
+    OR EXISTS (SELECT 1 FROM sale_lines l WHERE l.sale_id = NEW.id AND (
+      NOT EXISTS (SELECT 1 FROM sale_outflows o WHERE o.document_id = NEW.id
+        AND o.sale_line_id = l.id AND o.sequence = l.sequence AND o.product_id = l.product_id
+        AND o.quantity = l.quantity AND o.cost_minor = l.total_cost_minor)
+      OR (SELECT coalesce(sum(a.quantity), 0) FROM sale_cost_allocations a
+        WHERE a.sale_line_id = l.id) <> l.quantity
+      OR (SELECT coalesce(sum(a.cost_minor), 0) FROM sale_cost_allocations a
+        WHERE a.sale_line_id = l.id) <> l.total_cost_minor
+      OR EXISTS (SELECT 1 FROM sale_cost_allocations a
+        JOIN cost_layers c ON c.id = a.cost_layer_id
+        JOIN inventory_movements m ON m.id = c.inbound_movement_id
+        JOIN business_documents p ON p.id = m.document_id
+        JOIN journal_entries j ON j.document_id = p.id
+        JOIN sales s ON s.document_id = l.sale_id
+        WHERE a.sale_line_id = l.id AND (c.product_id <> l.product_id
+          OR ${_utcSortKey('c.acquired_at_utc')} > ${_utcSortKey('s.sold_at_utc')}
+          OR p.status <> 'posted' OR j.status <> 'posted'))))
+    THEN RAISE(ABORT, 'Each sale line requires its exact stock outflow and FIFO cost allocations') END;
+  SELECT CASE WHEN (SELECT count(*) FROM customer_receivables WHERE origin_document_id = NEW.id) <> 1
+    OR NOT EXISTS (SELECT 1 FROM customer_receivables r
+      JOIN sales s ON s.document_id = r.origin_document_id
+      JOIN ledger_accounts a ON a.id = r.control_account_id
+      WHERE r.origin_document_id = NEW.id AND r.customer_name_snapshot = s.customer_name_snapshot
+        AND r.initial_minor = s.receivable_minor AND r.issued_at_utc = s.sold_at_utc
+        AND r.due_date = s.due_date AND a.role = 'customer_receivable'
+        AND a.class = 'asset' AND a.is_active = 1)
+    THEN RAISE(ABORT, 'A credit sale requires its matching customer receivable') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM journal_entries e
+    WHERE e.document_id = NEW.id AND e.status = 'draft' AND e.cost_completeness = 'complete')
+    THEN RAISE(ABORT, 'Prepare the complete sale journal before posting') END;
+  SELECT CASE WHEN (SELECT count(*) FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+      WHERE e.document_id = NEW.id) <> (SELECT CASE WHEN total_cost_minor > 0 THEN 4 ELSE 2 END
+        FROM sales WHERE document_id = NEW.id)
+    OR NOT EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+      JOIN customer_receivables r ON r.origin_document_id = e.document_id
+      WHERE e.document_id = NEW.id AND l.account_id = r.control_account_id
+        AND l.debit_minor = r.initial_minor AND l.credit_minor = 0)
+    OR NOT EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+      JOIN ledger_accounts a ON a.id = l.account_id JOIN sales s ON s.document_id = e.document_id
+      WHERE e.document_id = NEW.id AND a.class = 'revenue' AND a.role = 'sales_revenue'
+        AND a.is_active = 1 AND l.credit_minor = s.receivable_minor AND l.debit_minor = 0)
+    OR EXISTS (SELECT 1 FROM sales s WHERE s.document_id = NEW.id AND s.total_cost_minor > 0
+      AND (NOT EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+        JOIN ledger_accounts a ON a.id = l.account_id WHERE e.document_id = NEW.id
+          AND a.class = 'cost' AND a.role = 'cost_of_sales' AND a.is_active = 1
+          AND l.debit_minor = s.total_cost_minor AND l.credit_minor = 0)
+        OR NOT EXISTS (SELECT 1 FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+        JOIN ledger_accounts a ON a.id = l.account_id WHERE e.document_id = NEW.id
+          AND a.class = 'asset' AND a.role = 'inventory' AND a.is_active = 1
+          AND l.credit_minor = s.total_cost_minor AND l.debit_minor = 0)))
+    THEN RAISE(ABORT, 'A sale must post receivable, revenue and its exact documented inventory cost') END;
+END
+''',
+    ..._freezeSaleFacts(
+      'sales',
+      'document_id',
+      'existing.document_id = NEW.document_id OR existing.draft_id = NEW.draft_id',
+    ),
+    ..._freezeSaleFacts(
+      'sale_lines',
+      'sale_id',
+      '''existing.id = NEW.id
+OR (existing.sale_id = NEW.sale_id AND existing.sequence = NEW.sequence)
+OR (existing.sale_id = NEW.sale_id AND existing.product_id = NEW.product_id)''',
+    ),
+    ..._freezeSaleFacts(
+      'sale_outflows',
+      'document_id',
+      '''existing.id = NEW.id
+OR existing.sale_line_id = NEW.sale_line_id
+OR (existing.document_id = NEW.document_id AND existing.sequence = NEW.sequence)''',
+    ),
+    ..._freezeSaleFacts(
+      'customer_receivables',
+      'origin_document_id',
+      'existing.id = NEW.id OR existing.origin_document_id = NEW.origin_document_id',
+    ),
+    ..._freezeSaleJournal(),
+  ]);
+
+  // Dart emits three or six fractional digits. Padding to microseconds keeps
+  // chronological ordering exact without SQLite's millisecond date rounding.
+  static String _utcSortKey(String column) =>
+      "(substr($column, 1, 19) || '.' || "
+      "substr(substr($column, 21, length($column) - 21) || '000000', 1, 6) || 'Z')";
+
+  static List<String> _freezeSaleDraftLines() {
+    String locked(String row) =>
+        '''EXISTS (SELECT 1 FROM sales_drafts d
+WHERE d.id = $row.draft_id AND (d.status <> 'open' OR EXISTS (
+SELECT 1 FROM sale_confirmations c WHERE c.draft_id = d.id AND c.status <> 'cancelled')))''';
+    return [
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER sales_draft_lines_locked_no_${action.toLowerCase()}
+BEFORE $action ON sales_draft_lines
+WHEN ${action == 'INSERT'
+            ? locked('NEW')
+            : action == 'DELETE'
+            ? locked('OLD')
+            : '(${locked('OLD')} OR ${locked('NEW')})'}
+BEGIN
+  SELECT RAISE(ABORT, 'Prepared and confirmed sale account lines are locked');
+END
+''',
+    ];
+  }
+
+  static List<String> _freezeSaleFacts(
+    String table,
+    String documentColumn,
+    String conflicts,
+  ) {
+    String confirmed(String row) =>
+        '''EXISTS (SELECT 1 FROM business_documents d
+WHERE d.id = $row.$documentColumn AND d.status <> 'draft')''';
+    final insertGuard = '''(${confirmed('NEW')} OR EXISTS (
+SELECT 1 FROM $table existing WHERE ($conflicts) AND ${confirmed('existing')}))''';
+    return [
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER ${table}_confirmed_no_${action.toLowerCase()}
+BEFORE $action ON $table
+WHEN ${action == 'INSERT'
+            ? insertGuard
+            : action == 'DELETE'
+            ? confirmed('OLD')
+            : '(${confirmed('OLD')} OR $insertGuard)'}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed sale history is immutable');
+END
+''',
+    ];
+  }
+
+  static List<String> _freezeSaleJournal() {
+    String confirmed(String row) =>
+        '''EXISTS (SELECT 1 FROM business_documents d
+WHERE d.id = $row.document_id AND d.type = 'credit_sale' AND d.status <> 'draft')''';
+    String linesConfirmed(String row) =>
+        '''EXISTS (SELECT 1 FROM journal_entries e
+JOIN business_documents d ON d.id = e.document_id
+WHERE e.id = $row.entry_id AND d.type = 'credit_sale' AND d.status <> 'draft')''';
+    return [
+      '''
+CREATE TRIGGER sale_entries_confirmed_no_delete
+BEFORE DELETE ON journal_entries
+WHEN ${confirmed('OLD')}
+BEGIN
+  SELECT RAISE(ABORT, 'A confirmed sale requires its journal entry');
+END
+''',
+      '''
+CREATE TRIGGER sale_entries_confirmed_no_rewrite
+BEFORE UPDATE ON journal_entries
+WHEN ${confirmed('OLD')}
+  AND (NEW.id <> OLD.id OR NEW.document_id <> OLD.document_id
+    OR NEW.cost_completeness <> OLD.cost_completeness
+    OR NEW.reversal_of_id IS NOT OLD.reversal_of_id OR NEW.status <> 'posted')
+BEGIN
+  SELECT RAISE(ABORT, 'Only posting is allowed on a confirmed sale journal');
+END
+''',
+      '''
+CREATE TRIGGER sale_entries_confirmed_no_replace
+BEFORE INSERT ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries e
+  JOIN business_documents d ON d.id = e.document_id
+  WHERE (e.id = NEW.id OR e.document_id = NEW.document_id)
+    AND d.type = 'credit_sale' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed sale journal entries cannot be replaced');
+END
+''',
+      '''
+CREATE TRIGGER sale_entries_confirmed_no_conflicting_update
+BEFORE UPDATE ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries e
+  JOIN business_documents d ON d.id = e.document_id
+  WHERE e.id <> OLD.id AND (e.id = NEW.id OR e.document_id = NEW.document_id)
+    AND d.type = 'credit_sale' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed sale journal entries cannot be replaced through an update');
+END
+''',
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER sale_journal_lines_confirmed_no_${action.toLowerCase()}
+BEFORE $action ON journal_lines
+WHEN ${action == 'INSERT'
+            ? linesConfirmed('NEW')
+            : action == 'DELETE'
+            ? linesConfirmed('OLD')
+            : '(${linesConfirmed('OLD')} OR ${linesConfirmed('NEW')})'}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed sale journal lines are immutable');
+END
+''',
+      '''
+CREATE TRIGGER sale_journal_lines_confirmed_no_replace
+BEFORE INSERT ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines l
+  JOIN journal_entries e ON e.id = l.entry_id
+  JOIN business_documents d ON d.id = e.document_id
+  WHERE (l.id = NEW.id OR (l.entry_id = NEW.entry_id AND l.sequence = NEW.sequence))
+    AND d.type = 'credit_sale' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed sale journal lines cannot be replaced');
+END
+''',
+      '''
+CREATE TRIGGER sale_journal_lines_confirmed_no_conflicting_update
+BEFORE UPDATE ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines l
+  JOIN journal_entries e ON e.id = l.entry_id
+  JOIN business_documents d ON d.id = e.document_id
+  WHERE (l.id = NEW.id OR (l.entry_id = NEW.entry_id AND l.sequence = NEW.sequence))
+    AND d.type = 'credit_sale' AND d.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed sale journal lines cannot be replaced through an update');
+END
+''',
+    ];
+  }
 
   static List<String> _freezeCommercialTable(
     String table,

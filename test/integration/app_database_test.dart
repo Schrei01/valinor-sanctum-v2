@@ -43,7 +43,7 @@ void main() {
       addTearDown(app.close);
 
       final health = await app.readHealth();
-      expect(health['schemaVersion'], 2);
+      expect(health['schemaVersion'], DatabaseSchema.version);
       expect(health['applicationId'], DatabaseSchema.applicationId);
       expect(health['foreignKeysEnabled'], isTrue);
       expect(health['integrityOk'], isTrue);
@@ -71,10 +71,21 @@ void main() {
         'inventory_movements',
         'cost_layers',
         'obligations',
+        'sales_drafts',
+        'sales_draft_lines',
+        'sale_confirmations',
+        'sales',
+        'sale_lines',
+        'sale_outflows',
+        'sale_cost_allocations',
+        'customer_receivables',
       ]) {
         expect(await app.database.query(table), isEmpty, reason: table);
       }
-      expect(await app.database.query('schema_migrations'), hasLength(2));
+      expect(
+        await app.database.query('schema_migrations'),
+        hasLength(DatabaseSchema.version),
+      );
     },
   );
 
@@ -331,6 +342,7 @@ void main() {
 
   test('v1 DDL remains byte-for-byte compatible with released checksums', () {
     expect(DatabaseSchema.migrationChecksum, 'fnv1a64:2b8aa24f7fdff6d1');
+    expect(DatabaseSchema.migration2Checksum, 'fnv1a64:7c3f94396eb01ba3');
   });
 
   test(
@@ -352,7 +364,7 @@ void main() {
 
       final app = await AppDatabase.open(path: path);
       final health = await app.readHealth();
-      expect(health['schemaVersion'], 2);
+      expect(health['schemaVersion'], DatabaseSchema.version);
       expect(health['migrationChecksumVerified'], isTrue);
       expect(health['schemaChecksumVerified'], isTrue);
       final migratedRows = await _foundationRows(app.database);
@@ -368,7 +380,7 @@ void main() {
         'schema_migrations',
         orderBy: 'version',
       );
-      expect(history, hasLength(2));
+      expect(history, hasLength(DatabaseSchema.version));
       expect(history.first, originalMigration.single);
       await app.close();
 
@@ -471,7 +483,7 @@ void main() {
   );
 
   test(
-    'v2 validates historical v1 checksum as well as current schema',
+    'current schema validates historical v1 checksum as well as current schema',
     () async {
       final path = p.join(fixtureDirectory.path, 'history.sqlite3');
       final app = await AppDatabase.open(path: path);
@@ -483,6 +495,106 @@ void main() {
         AppDatabase.open(path: path),
         throwsA(isA<DatabaseValidationException>()),
       );
+    },
+  );
+
+  test(
+    'v2 purchase history survives v3 migration with a verified v2 backup',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'upgrade_v2.sqlite3');
+      final old = await _createVersion2(path);
+      await _insertPurchaseDraft(old);
+      await _postPurchaseDocument(old);
+      await old.update('journal_entries', {
+        'status': 'posted',
+        'posted_at_utc': _timestamp,
+      });
+      final before = await _allRows(old);
+      await old.close();
+
+      final app = await AppDatabase.open(path: path);
+      final health = await app.readHealth();
+      expect(health['schemaVersion'], 3);
+      expect(health['schemaChecksumVerified'], isTrue);
+      expect(health['migrationChecksumVerified'], isTrue);
+      for (final table in before.keys) {
+        final after = await app.database.query(table);
+        if (table == 'schema_migrations') {
+          expect(after.take(2).toList(), before[table]);
+        } else {
+          expect(after, before[table], reason: table);
+        }
+      }
+      await app.close();
+      final backups = await Directory(
+        p.join(fixtureDirectory.path, 'backups'),
+      ).list().where((entry) => entry is File).toList();
+      expect(backups, hasLength(1));
+      expect(p.basename(backups.single.path), contains('.v2.'));
+      final backup = await databaseFactoryFfi.openDatabase(
+        backups.single.path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      expect(await backup.getVersion(), 2);
+      expect(await _allRows(backup), before);
+      expect(await backup.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      await backup.close();
+      final reopened = await AppDatabase.open(path: path);
+      await reopened.close();
+      expect(
+        await Directory(p.join(fixtureDirectory.path, 'backups')).list().length,
+        1,
+      );
+    },
+  );
+
+  test(
+    'v2 migration snapshots committed WAL and rejects historical drift',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'wal_v2.sqlite3');
+      final old = await _createVersion2(path);
+      addTearDown(old.close);
+      await old.rawQuery('PRAGMA journal_mode = WAL');
+      await _insertActor(old);
+      final app = await AppDatabase.open(path: path);
+      expect(
+        (await app.database.query('actors')).single['id'],
+        'synthetic-actor',
+      );
+      await app.database.update('schema_migrations', {
+        'migration_checksum': 'historical-v2-drift',
+      }, where: 'version = 2');
+      await app.close();
+      await expectLater(
+        AppDatabase.open(path: path),
+        throwsA(isA<DatabaseValidationException>()),
+      );
+    },
+  );
+
+  test(
+    'v2 backup failure preserves the old file and migration history',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'no_backup_v2.sqlite3');
+      final old = await _createVersion2(path);
+      await _insertActor(old);
+      await old.close();
+      await File(
+        p.join(fixtureDirectory.path, 'backups'),
+      ).writeAsString('keep');
+      final before = await File(path).readAsBytes();
+      await expectLater(
+        AppDatabase.open(path: path),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await File(path).readAsBytes(), before);
+      final check = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      expect(await check.getVersion(), 2);
+      expect(await check.query('schema_migrations'), hasLength(2));
+      await check.close();
     },
   );
 
@@ -837,6 +949,34 @@ WHERE substr(name, 1, 7) <> 'sqlite_' ORDER BY type, name
           .toList(),
     ),
   );
+}
+
+Future<Database> _createVersion2(String path) async {
+  final db = await _createVersion1(path);
+  for (final statement in DatabaseSchema.migration2Statements) {
+    await db.execute(statement);
+  }
+  await db.execute('PRAGMA user_version = 2');
+  await db.insert('schema_migrations', {
+    'version': 2,
+    'name': DatabaseSchema.migration2Name,
+    'migration_checksum': DatabaseSchema.migration2Checksum,
+    'schema_checksum': await _testSchemaChecksum(db),
+    'applied_at_utc': _timestamp,
+  });
+  return db;
+}
+
+Future<Map<String, List<Map<String, Object?>>>> _allRows(
+  DatabaseExecutor db,
+) async {
+  final tables = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND substr(name, 1, 7) <> 'sqlite_' ORDER BY name",
+  );
+  return {
+    for (final table in tables)
+      table['name']! as String: await db.query(table['name']! as String),
+  };
 }
 
 Future<Map<String, List<Map<String, Object?>>>> _foundationRows(

@@ -1,0 +1,57 @@
+{
+  "verifiedAtUtc": "2026-10-19T20:46:28.0852761Z",
+  "version": "0.3.0+3",
+  "schemaVersion": 3,
+  "scope": "Persistent open accounts and credit product sales; collections are pending",
+  "checks": {
+    "dartFormatFiles": 45,
+    "dartFormatClean": true,
+    "analyzeClean": true,
+    "testsPassed": 157,
+    "testsSkipped": 3,
+    "skippedReason": "Host cannot create symbolic links",
+    "syntheticFlowChecksPassed": 27,
+    "independentStaticReviewPerformed": true,
+    "staleRevisionAfterUnlockFixedAndTested": true,
+    "crossTypeCommandIdReservationFixedAndTested": true
+  },
+  "build": {
+    "smokeSeconds": 58.7,
+    "finalSeconds": 63.2,
+    "finalHasNoSanctumOverrides": true,
+    "smokeAndFinalAotDiffer": true,
+    "smokeWindowObservedAndClosed": true,
+    "finalLauncherObservedAndWindowClosed": true,
+    "nativeSaleEntryPerformed": false,
+    "nativeMethod": "Accessibility and keyboard",
+    "imageIsWidgetRender": true
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.3.0-windows-x64.zip",
+    "bytes": 14390577,
+    "files": 17,
+    "sha256": "5E4DCCF5B64000F0DB62A9D30B0B23948CF631BBF31E845B73FAE320DD57FBC1",
+    "version": "0.3.0+3",
+    "allFilesMatch": true,
+    "includesRuntimeDatabase": false,
+    "smokeAotSha256": "CA06ECD23F103579CEE56CB73FA61AF22626435C0793919479025766FF62189C",
+    "finalAotSha256": "75C0A5F35BFC91555F073266D131482CD0E26B3A8F5EB9C040B2F82219D5FF58",
+    "currentAliasPublished": true
+  },
+  "developmentMigration": {
+    "verifiedAtUtc": "2026-10-19T20:45:52.5211416Z",
+    "ownDevelopmentBackupCreated": true,
+    "backupName": "sanctum2.v2.1792442627528003-52a8cb2a.sqlite3",
+    "originalPosOpenedOrModifiedByAgent": false,
+    "packageHashUnchangedAfterNativeTest": true
+  },
+  "productionEnabled": false,
+  "databaseResetOrDowngradePerformed": false,
+  "originalPosOpenedOrModifiedByAgent": false,
+  "remoteWorkflowResultInspected": false,
+  "evidenceFiles": [
+    "sales-flow.json",
+    "sales-native-observations.json",
+    "sales-final-observations.json"
+  ]
+}

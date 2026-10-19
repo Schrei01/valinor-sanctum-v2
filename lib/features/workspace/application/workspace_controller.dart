@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../domain/business_profile.dart';
 import '../domain/workspace_store.dart';
 import '../../inventory/domain/inventory_store.dart';
+import '../../sales/domain/sales_store.dart';
 
 enum WorkspaceState { loading, ready, failed }
 
@@ -19,6 +20,7 @@ class WorkspaceController extends ChangeNotifier {
   String get databasePath => _session?.databasePath ?? '';
   String get profileId => _session?.profileId ?? '';
   InventoryStore? get inventoryStore => _session?.inventoryStore;
+  SalesStore? get salesStore => _session?.salesStore;
 
   Future<void> initialize() async {
     if (busy || _disposed || state == WorkspaceState.ready) return;

@@ -4,6 +4,8 @@ Fecha: 19 de octubre de 2026, America/Bogota. Continuación autorizada mediante 
 
 Versión 0.2.0, esquema SQLite v2. Es una entrega parcial de etapa 4A, exclusivamente para desarrollo y pruebas del repositorio nuevo. No reemplaza el POS original.
 
+Registro histórico: la entrega posterior 0.3.0 añade cuentas abiertas y ventas a crédito con esquema v3. Para iniciar la versión vigente utiliza `Iniciar Valinor Sanctum.cmd` en la raíz; un ejecutable 0.2.0 no puede abrir una base migrada a v3.
+
 ## Funcionalidad
 
 - Crear, editar, archivar y reactivar categorías, proveedores y productos. Buscar por nombre/SKU, con listas paginadas.

@@ -1,5 +1,6 @@
 import 'business_profile.dart';
 import '../../inventory/domain/inventory_store.dart';
+import '../../sales/domain/sales_store.dart';
 
 abstract interface class WorkspaceStore {
   Future<BusinessProfile?> readProfile();
@@ -14,9 +15,11 @@ class WorkspaceSession {
     required this.databasePath,
     required this.profileId,
     this.inventoryStore,
+    this.salesStore,
   });
   final WorkspaceStore store;
   final String databasePath;
   final String profileId;
   final InventoryStore? inventoryStore;
+  final SalesStore? salesStore;
 }

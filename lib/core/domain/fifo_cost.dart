@@ -72,3 +72,36 @@ void _validateLayer(int totalCostMinor, int totalQuantity) {
     );
   }
 }
+
+/// Versioned sale policy `fifo-front-remainder-v1`: each unit receives the
+/// integer base cost and the first `totalCostMinor % totalQuantity` units receive
+/// one additional minor unit. Consecutive partitions exactly exhaust the layer.
+/// Unlike the proportional policy above, SQL can validate this calculation
+/// without multiplying the full layer value by an endpoint.
+int fifoFrontRemainderCostForRange({
+  required int totalCostMinor,
+  required int totalQuantity,
+  required int startInclusive,
+  required int endExclusive,
+}) {
+  _validateLayer(totalCostMinor, totalQuantity);
+  if (startInclusive < 0 || startInclusive >= totalQuantity) {
+    throw RangeError.value(
+      startInclusive,
+      'startInclusive',
+      'Fuera de la capa.',
+    );
+  }
+  if (endExclusive <= startInclusive || endExclusive > totalQuantity) {
+    throw RangeError.value(endExclusive, 'endExclusive', 'Tramo inválido.');
+  }
+  final total = BigInt.from(totalCostMinor);
+  final quantity = BigInt.from(totalQuantity);
+  final start = BigInt.from(startInclusive);
+  final length = BigInt.from(endExclusive) - start;
+  final remainingExtra = (total % quantity) - start;
+  final extra = remainingExtra <= BigInt.zero
+      ? BigInt.zero
+      : (remainingExtra < length ? remainingExtra : length);
+  return (length * (total ~/ quantity) + extra).toInt();
+}

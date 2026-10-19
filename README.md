@@ -2,13 +2,13 @@
 
 Repositorio independiente para la nueva aplicación de gestión comercial de Valinor.
 
-**Estado: catálogo y recepción de compras a crédito implementados (0.2.0, esquema v2).** Categorías, proveedores, productos, stock/costo por movimientos y compras atómicas con deuda y asiento balanceado. La fundación 0.1.0 y su validación se conservan como antecedentes. Pagos, ventas y ajustes siguen pendientes; producción permanece deshabilitada.
+**Estado: cuentas abiertas y ventas a crédito implementadas (0.3.0, esquema v3).** Incluye catálogo, compras a crédito y ventas con stock, costo FIFO histórico, cuenta por cobrar y asiento atómicos. Las cuentas se guardan y las confirmaciones pendientes se recuperan al reabrir. Cobros, pagos y ajustes siguen pendientes; producción permanece deshabilitada.
 
-Consulta [el incremento 02 y sus verificaciones](docs/13-incremento-02.md), [el catálogo renderizado mediante pruebas](docs/images/inventory-catalog.png), o [el historial de compras renderizado](docs/images/inventory-purchases.png). La [validación Windows de la fundación](docs/11-validacion-windows.md) conserva el corte anterior.
+Consulta [el incremento 03 y sus verificaciones](docs/15-incremento-03.md), [su contrato](docs/14-contrato-incremento-03.md) y [la pantalla de ventas renderizada con datos sintéticos](docs/images/sales-credit.png). El [incremento 02](docs/13-incremento-02.md) y la [validación Windows de la fundación](docs/11-validacion-windows.md) conservan los cortes anteriores.
 
-Para abrir el programa, haz doble clic en **Iniciar Valinor Sanctum.cmd** en la raíz del proyecto. Inicia la entrega vigente de `dist/ValinorSanctum2`; esa ruta se actualiza al empaquetar. La copia versionada 0.2.0 está en `dist/0.2.0/ValinorSanctum2/valinor_sanctum_2.exe` y su ZIP en `dist/valinor-sanctum-2-0.2.0-windows-x64.zip`. Conserva las DLL y la carpeta data junto al ejecutable. Esta versión de desarrollo guarda sus datos dentro de `C:/proyectos/valinor_sanctum_2` y no está habilitada para producción. Las bases propias v1 se actualizan con respaldo SQLite previo; la versión anterior no puede abrir v2.
+Para abrir el programa, haz doble clic en **Iniciar Valinor Sanctum.cmd** en la raíz del proyecto. Inicia la entrega vigente de `dist/ValinorSanctum2`; esa ruta se actualiza al empaquetar. La copia versionada 0.3.0 está en `dist/0.3.0/ValinorSanctum2/valinor_sanctum_2.exe` y su ZIP en `dist/valinor-sanctum-2-0.3.0-windows-x64.zip`. Conserva las DLL y la carpeta data junto al ejecutable. Esta versión de desarrollo guarda sus datos dentro de `C:/proyectos/valinor_sanctum_2` y no está habilitada para producción. Las bases propias v1/v2 se actualizan con respaldo SQLite previo; las versiones anteriores no pueden abrir v3.
 
-Si aparece `database v2 is newer than supported v1`, se ha abierto un bundle 0.1.0. Cierra esa ventana e inicia el programa con el archivo de la raíz; no borres ni reinicies la base para resolver un ejecutable antiguo.
+Si aparece `database v2 is newer than supported v1` o `database v3 is newer than supported v2`, se ha abierto un bundle antiguo. Cierra esa ventana e inicia el programa con el archivo de la raíz; no borres ni reinicies la base para resolver un ejecutable antiguo.
 
 ## Separación de proyectos
 
@@ -34,6 +34,8 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 11. [Toolchain instalado, ejecutable Windows y paquete completo](docs/11-validacion-windows.md).
 12. [Contrato del incremento de catálogo y recepción](docs/12-contrato-incremento-02.md).
 13. [Catálogo, compras a crédito y validación 0.2.0](docs/13-incremento-02.md).
+14. [Contrato de cuentas abiertas y ventas a crédito 0.3.0](docs/14-contrato-incremento-03.md).
+15. [Cuentas abiertas, ventas a crédito y validación 0.3.0](docs/15-incremento-03.md).
 
 ## Decisiones aprobadas
 
@@ -56,11 +58,12 @@ El SDK portable y sus cachés están en .tooling, ignorados por Git. Los scripts
 ./scripts/flutter.ps1 pub get --enforce-lockfile
 ./scripts/flutter.ps1 analyze
 ./scripts/flutter.ps1 test --reporter expanded
+./scripts/dart.ps1 run tool/verify_sales_flow.dart
 ./scripts/flutter.ps1 run -d windows
 ./scripts/flutter.ps1 build windows --release --no-pub
 ./scripts/package-windows.ps1
 ~~~
 
-El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.2.0-windows-x64.zip`. Conserva el bundle previo bajo tmp y rechaza versiones anteriores al proyecto o a la entrega vigente. Hay que cerrar una aplicación que esté ejecutándose desde esa ruta antes de actualizarla.
+El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.3.0-windows-x64.zip`. Conserva el bundle previo bajo tmp y rechaza versiones anteriores al proyecto o a la entrega vigente. Hay que cerrar una aplicación que esté ejecutándose desde esa ruta antes de actualizarla.
 
-Resultados 0.2.0: 114 pruebas aprobadas y tres omitidas por falta de permiso del host para crear enlaces simbólicos; análisis y formato limpios. El flujo sintético verifica recepción/reintento, stock/costo y deuda al reabrir, balance y snapshots históricos. En Windows se observaron catálogo, historial y diagnóstico v2 mediante accesibilidad y teclado; los formularios se ejercitaron en pruebas de widgets. No se presenta esa observación como entrada manual nativa de compras. Los límites y artefactos están en el informe del incremento.
+Resultados 0.3.0: 157 pruebas aprobadas y tres omitidas por falta de permiso del host para crear enlaces simbólicos; análisis y formato limpios. El verificador sintético pasó 27 comprobaciones de cuenta/solicitud recuperada, venta y reintento, stock/costo, deuda, balance y snapshots históricos. Los formularios se ejercitaron en pruebas de widgets; los límites y artefactos están en el informe del incremento.

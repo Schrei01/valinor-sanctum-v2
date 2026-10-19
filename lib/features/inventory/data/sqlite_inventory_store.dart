@@ -304,6 +304,18 @@ ORDER BY l.purchase_id, l.sequence
         );
       }
 
+      final reservedSaleCommands = await txn.query(
+        'sale_confirmations',
+        columns: ['command_id'],
+        where: 'command_id = ?',
+        whereArgs: [command.commandId],
+      );
+      if (reservedSaleCommands.isNotEmpty) {
+        throw const InventoryValidationException(
+          'Este identificador ya corresponde a una confirmación de venta.',
+        );
+      }
+
       final suppliers = await txn.query(
         'counterparties',
         where: 'id = ? AND is_supplier = 1 AND is_active = 1',
@@ -333,6 +345,25 @@ LEFT JOIN categories g ON g.id = c.category_id WHERE c.id = ?
           );
         }
         productRows[line.productId] = rows.single;
+        final laterSales = await txn.rawQuery(
+          '''
+SELECT s.sold_at_utc FROM sales s
+JOIN sale_lines l ON l.sale_id = s.document_id
+JOIN business_documents d ON d.id = s.document_id AND d.status = 'posted'
+JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
+WHERE l.product_id = ?
+''',
+          [line.productId],
+        );
+        if (laterSales.any(
+          (row) => DateTime.parse(
+            row['sold_at_utc'] as String,
+          ).isAfter(command.occurredAtUtc),
+        )) {
+          throw const InventoryValidationException(
+            'La recepción no puede ser anterior a una venta confirmada del mismo producto.',
+          );
+        }
         final current = stock[line.productId] ?? _StockTotals();
         _int64(
           current.quantity + BigInt.from(line.quantity),
@@ -542,6 +573,19 @@ ORDER BY m.stock_sequence
       );
       value.quantity += BigInt.from(row['quantity_delta'] as int);
       value.cost += BigInt.from(row['total_cost_minor'] as int);
+    }
+    final outflows = await txn.rawQuery('''
+SELECT o.product_id, o.quantity, o.cost_minor FROM sale_outflows o
+JOIN business_documents d ON d.id = o.document_id AND d.status = 'posted'
+JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
+''');
+    for (final row in outflows) {
+      final value = result.putIfAbsent(
+        row['product_id'] as String,
+        _StockTotals.new,
+      );
+      value.quantity -= BigInt.from(row['quantity'] as int);
+      value.cost -= BigInt.from(row['cost_minor'] as int);
     }
     return result;
   }
