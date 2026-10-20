@@ -2,11 +2,13 @@
 
 Repositorio independiente para la nueva aplicación de gestión comercial de Valinor.
 
-**Estado: compras de contado y ventas de mostrador (0.7.0, esquema v7).** En **Compras** crea o repón un producto con costo unitario, PVP unitario, proveedor, categoría, SKU opcional y cantidad. **Ingresar producto** guarda catálogo, inventario y pago total desde Efectivo o Nequi juntos; no pide referencia ni vencimiento. El historial muestra ingresos. El saldo inicial real se declara antes del primer movimiento de cada cuenta. En **Ventas** conserva varias cuentas con varias líneas y pago por línea; Registrar venta confirma entrega y cobro juntos. Ajustes y caja/arqueo siguen pendientes; producción permanece deshabilitada.
+**Estado: catálogo de consulta, compras de contado y ventas de mostrador (0.7.1, esquema v7).** **Catálogo** permite consultar Productos, Categorías o Proveedores, buscar y paginar; no crea ni modifica registros. En **Compras** crea o repón un producto con costo unitario, PVP unitario, proveedor, categoría, SKU opcional y cantidad. **Ingresar producto** guarda catálogo, inventario y pago total desde Efectivo o Nequi juntos; no pide referencia ni vencimiento. El historial muestra ingresos. El saldo inicial real se declara antes del primer movimiento de cada cuenta. En **Ventas** conserva varias cuentas con varias líneas y pago por línea; Registrar venta confirma entrega y cobro juntos. Ajustes y caja/arqueo siguen pendientes; producción permanece deshabilitada.
 
 Consulta [el incremento 07 y sus verificaciones](docs/23-incremento-07.md), [su contrato](docs/22-contrato-incremento-07.md), [el nuevo formulario de Compras](docs/images/stock-intake.png) y [la pantalla de Ventas](docs/images/quick-sales.png). Ambas imágenes usan datos sintéticos. Los incrementos anteriores conservan sus cortes históricos.
 
-Para abrir el programa, haz doble clic en **Iniciar Valinor Sanctum.cmd** en la raíz del proyecto. Inicia la entrega vigente de `dist/ValinorSanctum2`; esa ruta se actualiza al empaquetar. La copia versionada 0.7.0 está en `dist/0.7.0/ValinorSanctum2/valinor_sanctum_2.exe` y su ZIP en `dist/valinor-sanctum-2-0.7.0-windows-x64.zip`. Conserva las DLL y la carpeta data junto al ejecutable. Esta versión de desarrollo guarda sus datos dentro de `C:/proyectos/valinor_sanctum_2` y no está habilitada para producción. Las bases propias v1–v6 se actualizan con respaldo SQLite previo; las versiones anteriores no pueden abrir v7.
+El ajuste 0.7.1 se describe en [Catálogo de consulta](docs/24-catalogo-consulta.md), con [vista previa](docs/images/catalog-readonly.png).
+
+Para abrir el programa, haz doble clic en **Iniciar Valinor Sanctum.cmd** en la raíz del proyecto. Inicia la entrega vigente de `dist/ValinorSanctum2`; esa ruta se actualiza al empaquetar. La copia versionada 0.7.1 está en `dist/0.7.1/ValinorSanctum2/valinor_sanctum_2.exe` y su ZIP en `dist/valinor-sanctum-2-0.7.1-windows-x64.zip`. Conserva las DLL y la carpeta data junto al ejecutable. Esta versión de desarrollo guarda sus datos dentro de `C:/proyectos/valinor_sanctum_2` y no está habilitada para producción. Las bases propias v1–v6 se actualizan con respaldo SQLite previo; las versiones anteriores no pueden abrir v7.
 
 Si aparece `database v7 is newer than supported v6` u otro aviso de base más nueva, se ha abierto un bundle antiguo. Cierra esa ventana e inicia el programa con el archivo de la raíz; no borres ni reinicies la base para resolver un ejecutable antiguo.
 
@@ -44,6 +46,7 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 21. [Mostrador y validación 0.6.1](docs/21-incremento-06.md).
 22. [Contrato de compras de contado e ingreso al catálogo](docs/22-contrato-incremento-07.md).
 23. [Compras, historial de ingresos y validación 0.7.0](docs/23-incremento-07.md).
+24. [Catálogo de consulta y validación 0.7.1](docs/24-catalogo-consulta.md).
 
 ## Decisiones aprobadas
 
@@ -77,6 +80,6 @@ El SDK portable y sus cachés están en .tooling, ignorados por Git. Los scripts
 ./scripts/package-windows.ps1
 ~~~
 
-El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.7.0-windows-x64.zip`. Conserva el bundle previo bajo tmp y rechaza versiones anteriores al proyecto o a la entrega vigente. Hay que cerrar todas las copias de la aplicación de este proyecto antes de actualizarla.
+El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.7.1-windows-x64.zip`. Conserva el bundle previo bajo tmp y rechaza versiones anteriores al proyecto o a la entrega vigente. Hay que cerrar todas las copias de la aplicación de este proyecto antes de actualizarla.
 
-Resultados 0.7.0: 370 pruebas aprobadas y tres omitidas por falta de permiso del host para crear enlaces simbólicos; análisis y formato limpios. El recorrido independiente pasó 26 comprobaciones de ingreso, catálogo, fondos, costo, venta posterior, reapertura y reintentos. Los formularios se ejercitaron en widgets y la imagen de Compras se inspeccionó; los límites y artefactos están en el informe del incremento.
+Resultados 0.7.1: tres pruebas de interfaz de Catálogo aprobadas, análisis y formato limpios y vista previa inspeccionada. No cambia el esquema ni la persistencia. La suite general del corte 0.7.0 aprobó 370 pruebas y omitió tres por permisos de symlinks; ese recorrido financiero y sus 26 comprobaciones se documentan en su informe histórico.

@@ -93,6 +93,7 @@ categoría, SKU opcional y cantidad. Puedes crear el producto o reponer uno exis
 Elige Efectivo o Nequi para pagar: el ingreso y la salida de dinero se guardan juntos.
 Registra el saldo inicial real antes del primer movimiento de cada cuenta si corresponde.
 Consulta el Historial de ingresos desde la misma sección Compras.
+Catálogo es solo consulta: filtra Productos, Categorías o Proveedores y busca por nombre.
 En Ventas crea varias cuentas, agrega productos y elige la forma de pago por línea.
 Registrar venta guarda entrega, stock, costo y cobro de contado en una sola operación.
 Las cuentas de mostrador se guardan automáticamente mientras las preparas.

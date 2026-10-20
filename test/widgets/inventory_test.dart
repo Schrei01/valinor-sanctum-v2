@@ -131,68 +131,105 @@ void main() {
   );
 
   testWidgets(
-    'catalog retains product and category IDs and form after failed save',
+    'catalog filters are read only and search resets when changing lists',
     (tester) async {
       final store = FakeInventoryStore()
-        ..saveFailure = StateError('unknown save result');
+        ..categories.addAll(const [
+          InventoryCategory(id: 'food', name: 'Comestible'),
+          InventoryCategory(id: 'article', name: 'Artículo'),
+          InventoryCategory(id: 'event', name: 'Evento'),
+        ])
+        ..suppliers.addAll(const [
+          InventorySupplier(id: 'supplier', name: 'Proveedor sintético'),
+          InventorySupplier(
+            id: 'old-supplier',
+            name: 'Proveedor anterior',
+            isActive: false,
+          ),
+        ])
+        ..products.addAll(const [
+          CatalogProduct(
+            id: 'water',
+            name: 'Agua sintética',
+            sku: 'SYN-AGUA',
+            categoryId: 'food',
+            listPriceMinor: 300000,
+          ),
+          CatalogProduct(
+            id: 'game',
+            name: 'Juego sintético',
+            sku: 'SYN-JUEGO',
+            categoryId: 'article',
+            listPriceMinor: 500000,
+            isActive: false,
+          ),
+        ])
+        ..stock.add(
+          const StockPosition(
+            productId: 'water',
+            quantity: 10,
+            totalCostMinor: 1200000,
+          ),
+        );
       await open(tester, store);
       await tester.tap(find.text('Catálogo'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('catalog-create')));
+      expect(find.text('Agua sintética'), findsOneWidget);
+      expect(find.text('Juego sintético'), findsOneWidget);
+      expect(find.text('PVP'), findsOneWidget);
+      expect(find.text('Unidades'), findsOneWidget);
+      expect(find.text('10'), findsOneWidget);
+      expect(find.text('Acciones'), findsNothing);
+      expect(find.text('Valoración'), findsNothing);
+      expect(find.byKey(const Key('catalog-create')), findsNothing);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(find.text('Archivar'), findsNothing);
+      expect(find.text('Reactivar'), findsNothing);
+      await capture(tester, 'catalog-readonly');
+
+      await tester.enterText(
+        find.byKey(const Key('catalog-search')),
+        'SYN-AGUA',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Agua sintética'), findsOneWidget);
+      expect(find.text('Juego sintético'), findsNothing);
+      await tester.tap(find.text('Categorías'));
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<TextFormField>(find.byKey(const Key('product-price')))
+            .widget<TextField>(find.byKey(const Key('catalog-search')))
             .controller!
             .text,
         isEmpty,
       );
+      expect(find.text('Comestible'), findsOneWidget);
+      expect(find.text('Artículo'), findsOneWidget);
+      expect(find.text('Evento'), findsOneWidget);
+      expect(find.text('Agua sintética'), findsNothing);
+      expect(find.byKey(const Key('catalog-create')), findsNothing);
+      await tester.enterText(find.byKey(const Key('catalog-search')), 'evento');
+      await tester.pumpAndSettle();
+      expect(find.text('Evento'), findsOneWidget);
+      expect(find.text('Comestible'), findsNothing);
+      await tester.tap(find.text('Proveedores'));
+      await tester.pumpAndSettle();
+      expect(find.text('Proveedor sintético'), findsOneWidget);
+      expect(find.text('Proveedor anterior'), findsOneWidget);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(find.text('Archivar'), findsNothing);
+      expect(find.text('Reactivar'), findsNothing);
       await tester.enterText(
-        find.byKey(const Key('product-name')),
-        'Juego sintético',
+        find.byKey(const Key('catalog-search')),
+        'anterior',
       );
-      await tester.enterText(find.byKey(const Key('product-sku')), 'SYN-01');
-      await tester.enterText(
-        find.byKey(const Key('product-price')),
-        '12.345,67',
-      );
-      await tester.tap(find.text('Guardar producto'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('product-name')), findsOneWidget);
-      expect(
-        tester
-            .widget<TextFormField>(find.byKey(const Key('product-price')))
-            .controller!
-            .text,
-        '12.345,67',
-      );
-      final productId = store.savedProducts.single.id;
-      store.saveFailure = null;
-      await tester.tap(find.text('Guardar producto'));
-      await tester.pumpAndSettle();
-      expect(store.savedProducts.last.id, productId);
-      expect(store.products.single.listPriceMinor, 1234567);
-      expect(find.text('Juego sintético'), findsOneWidget);
-      await tester.tap(find.text('Categorías'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('catalog-create')));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const Key('catalog-name')), 'Mesa');
-      store.saveFailure = StateError('unknown category save result');
-      await tester.tap(find.text('Guardar'));
-      await tester.pumpAndSettle();
-      final categoryId = store.savedCategoryIds.single;
-      store.saveFailure = null;
-      await tester.tap(find.text('Guardar'));
-      await tester.pumpAndSettle();
-      expect(store.savedCategoryIds.last, categoryId);
-      expect(store.categories.single.name, 'Mesa');
-      await tester.tap(find.text('Archivar'));
-      await tester.pumpAndSettle();
-      expect(store.categories.single.isActive, isFalse);
-      await tester.tap(find.text('Reactivar'));
-      await tester.pumpAndSettle();
-      expect(store.categories.single.isActive, isTrue);
+      expect(find.text('Proveedor sintético'), findsNothing);
+      expect(find.text('Proveedor anterior'), findsOneWidget);
+      expect(store.saves, 0);
+      expect(store.stock.single.quantity, 10);
+      expect(store.products.last.isActive, isFalse);
+      expect(store.suppliers.last.isActive, isFalse);
       expect(tester.takeException(), isNull);
     },
   );

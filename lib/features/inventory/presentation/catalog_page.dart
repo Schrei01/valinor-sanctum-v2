@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/domain/money.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../application/inventory_controller.dart';
 import '../domain/inventory_store.dart';
@@ -23,9 +22,16 @@ class CatalogPage extends StatefulWidget {
 
 class _CatalogPageState extends State<CatalogPage> {
   _CatalogTab _tab = _CatalogTab.products;
+  final _search = TextEditingController();
   String _query = '';
   int _page = 0;
   static const _pageSize = 15;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -37,9 +43,9 @@ class _CatalogPageState extends State<CatalogPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InventoryPageHeading(
-            title: 'Catálogo e inventario',
+            title: 'Catálogo',
             subtitle:
-                'Consulta productos, PVP y existencias. Para crear un producto con cantidad o reponerlo, usa Compras.',
+                'Consulta productos, categorías y proveedores. Ingresa productos y cantidades desde Compras.',
             busy: controller.busy,
             onRefresh: controller.load,
           ),
@@ -48,8 +54,6 @@ class _CatalogPageState extends State<CatalogPage> {
               text: controller.loadError!,
               onRetry: controller.busy ? null : controller.load,
             ),
-          if (controller.catalogError != null)
-            InventoryNotice(text: controller.catalogError!),
           if (data == null)
             if (controller.loading)
               const Center(child: CircularProgressIndicator())
@@ -68,46 +72,35 @@ class _CatalogPageState extends State<CatalogPage> {
                       _CatalogTab.suppliers => 'Proveedores',
                     }),
                     selected: _tab == tab,
-                    onSelected: (_) => setState(() {
-                      _tab = tab;
-                      _page = 0;
-                    }),
+                    onSelected: (_) {
+                      if (_tab == tab) return;
+                      setState(() {
+                        _tab = tab;
+                        _search.clear();
+                        _query = '';
+                        _page = 0;
+                      });
+                    },
                   ),
               ],
             ),
             const SizedBox(height: 20),
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SizedBox(
-                  width: 320,
-                  child: TextField(
-                    key: const Key('catalog-search'),
-                    decoration: const InputDecoration(
-                      labelText: 'Buscar por nombre o SKU',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                    onChanged: (value) => setState(() {
-                      _query = value.trim().toLowerCase();
-                      _page = 0;
-                    }),
-                  ),
+            SizedBox(
+              width: 320,
+              child: TextField(
+                key: const Key('catalog-search'),
+                controller: _search,
+                decoration: InputDecoration(
+                  labelText: _tab == _CatalogTab.products
+                      ? 'Buscar por nombre o SKU'
+                      : 'Buscar por nombre',
+                  prefixIcon: const Icon(Icons.search),
                 ),
-                FilledButton.icon(
-                  key: const Key('catalog-create'),
-                  onPressed: controller.busy
-                      ? null
-                      : () => _create(context, data),
-                  icon: const Icon(Icons.add),
-                  label: Text(switch (_tab) {
-                    _CatalogTab.products => 'Nuevo producto',
-                    _CatalogTab.categories => 'Nueva categoría',
-                    _CatalogTab.suppliers => 'Nuevo proveedor',
-                  }),
-                ),
-              ],
+                onChanged: (value) => setState(() {
+                  _query = value.trim().toLowerCase();
+                  _page = 0;
+                }),
+              ),
             ),
             const SizedBox(height: 20),
             if (_tab == _CatalogTab.products) _products(data) else _names(data),
@@ -149,9 +142,7 @@ class _CatalogPageState extends State<CatalogPage> {
                 DataColumn(label: Text('Producto')),
                 DataColumn(label: Text('PVP'), numeric: true),
                 DataColumn(label: Text('Unidades'), numeric: true),
-                DataColumn(label: Text('Valoración'), numeric: true),
                 DataColumn(label: Text('Estado')),
-                DataColumn(label: Text('Acciones')),
               ],
               rows: [
                 for (final product
@@ -195,45 +186,7 @@ class _CatalogPageState extends State<CatalogPage> {
                         ),
                       ),
                       DataCell(Text('${positions[product.id]?.quantity ?? 0}')),
-                      DataCell(
-                        Text(
-                          inventoryMoney(
-                            positions[product.id]?.totalCostMinor ?? 0,
-                            widget.profile,
-                          ),
-                        ),
-                      ),
                       DataCell(Text(product.isActive ? 'Activo' : 'Archivado')),
-                      DataCell(
-                        Row(
-                          children: [
-                            IconButton(
-                              tooltip: 'Editar ${product.name}',
-                              onPressed: widget.controller.busy
-                                  ? null
-                                  : () => _editProduct(product, data),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                            TextButton(
-                              onPressed: widget.controller.busy
-                                  ? null
-                                  : () => widget.controller.saveProduct(
-                                      CatalogProduct(
-                                        id: product.id,
-                                        name: product.name,
-                                        sku: product.sku,
-                                        categoryId: product.categoryId,
-                                        listPriceMinor: product.listPriceMinor,
-                                        isActive: !product.isActive,
-                                      ),
-                                    ),
-                              child: Text(
-                                product.isActive ? 'Archivar' : 'Reactivar',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
               ],
@@ -247,21 +200,17 @@ class _CatalogPageState extends State<CatalogPage> {
 
   Widget _names(InventorySnapshot data) {
     final entries = _tab == _CatalogTab.categories
-        ? data.categories
-              .map((value) => (value.id, value.name, value.isActive))
-              .toList()
-        : data.suppliers
-              .map((value) => (value.id, value.name, value.isActive))
-              .toList();
+        ? data.categories.map((value) => (value.name, value.isActive)).toList()
+        : data.suppliers.map((value) => (value.name, value.isActive)).toList();
     final rows = entries
-        .where((value) => value.$2.toLowerCase().contains(_query))
+        .where((value) => value.$1.toLowerCase().contains(_query))
         .toList();
     final page = _clampedPage(rows.length);
     if (rows.isEmpty) {
       return _EmptyCatalog(
         _tab == _CatalogTab.categories
-            ? 'Aún no hay categorías. Puedes crearlas para organizar los productos.'
-            : 'Aún no hay proveedores. Puedes crearlos al ingresar un producto en Compras.',
+            ? 'No hay categorías para mostrar.'
+            : 'No hay proveedores para mostrar. Puedes registrarlos al ingresar un producto en Compras.',
       );
     }
     return Column(
@@ -271,41 +220,14 @@ class _CatalogPageState extends State<CatalogPage> {
             margin: const EdgeInsets.only(bottom: 8),
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Wrap(
-                spacing: 20,
-                runSpacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 280,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          entry.$2,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Text(entry.$3 ? 'Activo' : 'Archivado'),
-                      ],
-                    ),
+                  Text(
+                    entry.$1,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  IconButton(
-                    tooltip: 'Editar ${entry.$2}',
-                    onPressed: widget.controller.busy
-                        ? null
-                        : () => _editName(
-                            id: entry.$1,
-                            name: entry.$2,
-                            active: entry.$3,
-                          ),
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
-                  TextButton(
-                    onPressed: widget.controller.busy
-                        ? null
-                        : () => _saveName(entry.$1, entry.$2, !entry.$3),
-                    child: Text(entry.$3 ? 'Archivar' : 'Reactivar'),
-                  ),
+                  Text(entry.$2 ? 'Activo' : 'Archivado'),
                 ],
               ),
             ),
@@ -341,51 +263,6 @@ class _CatalogPageState extends State<CatalogPage> {
       ],
     ),
   );
-
-  void _create(BuildContext context, InventorySnapshot data) {
-    if (_tab == _CatalogTab.products) {
-      _editProduct(null, data);
-    } else {
-      _editName();
-    }
-  }
-
-  Future<bool> _saveName(String id, String name, bool active) =>
-      _tab == _CatalogTab.categories
-      ? widget.controller.saveCategory(
-          InventoryCategory(id: id, name: name, isActive: active),
-        )
-      : widget.controller.saveSupplier(
-          InventorySupplier(id: id, name: name, isActive: active),
-        );
-
-  Future<void> _editName({String? id, String? name, bool active = true}) async {
-    final category = _tab == _CatalogTab.categories;
-    final editorId = id ?? InventoryIds.next();
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _NameDialog(
-        controller: widget.controller,
-        title:
-            '${id == null ? (category ? 'Nueva' : 'Nuevo') : 'Editar'} ${category ? 'categoría' : 'proveedor'}',
-        name: name ?? '',
-        onSave: (value) => _saveName(editorId, value, active),
-      ),
-    );
-  }
-
-  Future<void> _editProduct(CatalogProduct? product, InventorySnapshot data) =>
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => _ProductDialog(
-          controller: widget.controller,
-          profile: widget.profile,
-          categories: data.categories,
-          product: product,
-        ),
-      );
 }
 
 class _EmptyCatalog extends StatelessWidget {
@@ -394,266 +271,5 @@ class _EmptyCatalog extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     child: Padding(padding: const EdgeInsets.all(28), child: Text(text)),
-  );
-}
-
-class _NameDialog extends StatefulWidget {
-  const _NameDialog({
-    required this.controller,
-    required this.title,
-    required this.name,
-    required this.onSave,
-  });
-  final InventoryController controller;
-  final String title;
-  final String name;
-  final Future<bool> Function(String) onSave;
-  @override
-  State<_NameDialog> createState() => _NameDialogState();
-}
-
-class _NameDialogState extends State<_NameDialog> {
-  final _form = GlobalKey<FormState>();
-  late final _name = TextEditingController(text: widget.name);
-  bool _attempted = false;
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.controller,
-    builder: (context, _) => AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 440,
-        child: Form(
-          key: _form,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                key: const Key('catalog-name'),
-                controller: _name,
-                enabled: !widget.controller.busy,
-                autofocus: true,
-                maxLength: 120,
-                decoration: const InputDecoration(labelText: 'Nombre'),
-                validator: inventoryNameError,
-              ),
-              if (_attempted && widget.controller.catalogError != null)
-                Text(
-                  widget.controller.catalogError!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: widget.controller.busy
-              ? null
-              : () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: widget.controller.busy
-              ? null
-              : () async {
-                  if (!_form.currentState!.validate()) return;
-                  setState(() => _attempted = true);
-                  final saved = await widget.onSave(_name.text.trim());
-                  if (saved && context.mounted) Navigator.pop(context);
-                },
-          child: Text(widget.controller.saving ? 'Guardando…' : 'Guardar'),
-        ),
-      ],
-    ),
-  );
-}
-
-class _ProductDialog extends StatefulWidget {
-  const _ProductDialog({
-    required this.controller,
-    required this.profile,
-    required this.categories,
-    this.product,
-  });
-  final InventoryController controller;
-  final BusinessProfile profile;
-  final List<InventoryCategory> categories;
-  final CatalogProduct? product;
-  @override
-  State<_ProductDialog> createState() => _ProductDialogState();
-}
-
-class _ProductDialogState extends State<_ProductDialog> {
-  final _form = GlobalKey<FormState>();
-  late final _editorId = widget.product?.id ?? InventoryIds.next();
-  late final _name = TextEditingController(text: widget.product?.name ?? '');
-  late final _sku = TextEditingController(text: widget.product?.sku ?? '');
-  late final _price = TextEditingController(
-    text: widget.product == null
-        ? ''
-        : Money.fromMinorUnits(
-            widget.product!.listPriceMinor,
-            currency: widget.profile.currencyCode,
-            scale: widget.profile.moneyScale,
-          ).formatEsCo(),
-  );
-  late String? _categoryId = widget.product?.categoryId;
-  bool _attempted = false;
-  @override
-  void dispose() {
-    _name.dispose();
-    _sku.dispose();
-    _price.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.controller,
-    builder: (context, _) => AlertDialog(
-      title: Text(
-        widget.product == null ? 'Nuevo producto' : 'Editar producto',
-      ),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _form,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextFormField(
-                  key: const Key('product-name'),
-                  controller: _name,
-                  enabled: !widget.controller.busy,
-                  autofocus: true,
-                  maxLength: 120,
-                  decoration: const InputDecoration(labelText: 'Nombre'),
-                  validator: inventoryNameError,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  key: const Key('product-sku'),
-                  controller: _sku,
-                  enabled: !widget.controller.busy,
-                  maxLength: 64,
-                  decoration: const InputDecoration(
-                    labelText: 'SKU (opcional)',
-                  ),
-                  validator: (value) =>
-                      RegExp(r'[\x00-\x1f]').hasMatch(value ?? '')
-                      ? 'Escribe un SKU válido.'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  key: const Key('product-category'),
-                  initialValue: _categoryId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Categoría'),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('Sin categoría'),
-                    ),
-                    for (final category in widget.categories.where(
-                      (item) => item.isActive || item.id == _categoryId,
-                    ))
-                      DropdownMenuItem(
-                        value: category.id,
-                        enabled: category.isActive,
-                        child: Text(
-                          '${category.name}${category.isActive ? '' : ' (archivada)'}',
-                        ),
-                      ),
-                  ],
-                  onChanged: widget.controller.busy
-                      ? null
-                      : (value) => setState(() => _categoryId = value),
-                  validator: (value) =>
-                      value != null &&
-                          !widget.categories.any(
-                            (item) => item.id == value && item.isActive,
-                          )
-                      ? 'Selecciona una categoría activa o Sin categoría.'
-                      : null,
-                ),
-                const SizedBox(height: 18),
-                TextFormField(
-                  key: const Key('product-price'),
-                  controller: _price,
-                  enabled: !widget.controller.busy,
-                  decoration: InputDecoration(
-                    labelText: 'PVP (${widget.profile.currencyCode})',
-                    helperText:
-                        '${widget.profile.moneyScale} decimales · formato colombiano',
-                  ),
-                  validator: (value) =>
-                      inventoryAmountError(value, widget.profile),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Cambiar el PVP no modifica el costo ni los ingresos de productos ya guardados.',
-                ),
-                if (_attempted && widget.controller.catalogError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: Text(
-                      widget.controller.catalogError!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: widget.controller.busy
-              ? null
-              : () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: widget.controller.busy
-              ? null
-              : () async {
-                  if (!_form.currentState!.validate()) return;
-                  setState(() => _attempted = true);
-                  final sku = _sku.text.trim();
-                  final saved = await widget.controller.saveProduct(
-                    CatalogProduct(
-                      id: _editorId,
-                      name: _name.text.trim(),
-                      sku: sku.isEmpty ? null : sku,
-                      categoryId: _categoryId,
-                      listPriceMinor: Money.parseEsCo(
-                        _price.text,
-                        currency: widget.profile.currencyCode,
-                        scale: widget.profile.moneyScale,
-                      ).minorUnits,
-                      isActive: widget.product?.isActive ?? true,
-                    ),
-                  );
-                  if (saved && context.mounted) Navigator.pop(context);
-                },
-          child: Text(
-            widget.controller.saving ? 'Guardando…' : 'Guardar producto',
-          ),
-        ),
-      ],
-    ),
   );
 }

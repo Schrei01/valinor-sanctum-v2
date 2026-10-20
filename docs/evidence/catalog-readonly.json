@@ -1,0 +1,54 @@
+{
+  "verifiedAtUtc": "2026-10-20T08:44:53.685Z",
+  "version": "0.7.1+9",
+  "schemaVersion": 7,
+  "tests": {
+    "catalogWidgetTestsPassed": 3,
+    "analyzeClean": true,
+    "formattedModifiedDartFiles": 3,
+    "formatClean": true,
+    "widgetImageInspected": true,
+    "fullFinancialSuiteRepeated": false
+  },
+  "build": {
+    "seconds": 62.5189236,
+    "aotSha256": "6D330C4696117976716DA5482F738E86B024D6570B701F3EA30366C4749A60E5",
+    "noSanctumOverrides": true,
+    "exeVersion": "0.7.1+9"
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.7.1-windows-x64.zip",
+    "files": 17,
+    "bytes": 14620663,
+    "sha256": "9004E7E770AC603D3068007F603332D8668DD88C219D3AEC616014558A8EADCA",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe",
+    "all17FilesMatchStableAndVersionedCopy": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.7.1/ValinorSanctum2",
+    "hashUnchangedAfterNativeLaunch": true
+  },
+  "native": {
+    "method": "Accessibility and keyboard",
+    "version071Observed": true,
+    "filtersObserved": true,
+    "columnsObserved": true,
+    "valuationAndActionsAbsent": true,
+    "modificationControlsAbsent": true,
+    "businessDataEntered": false,
+    "windowClosed": true,
+    "rawUserTreeExcluded": true,
+    "screenshotCaptured": false
+  },
+  "data": {
+    "readOnlyComparison": true,
+    "tablesCompared": 42,
+    "allTableRowsUnchanged": true,
+    "schemaMigrationAdded": false,
+    "resetPerformed": false
+  },
+  "originalPosOpenedOrModified": false,
+  "productionEnabled": false,
+  "remoteWorkflowResultInspected": false
+}
