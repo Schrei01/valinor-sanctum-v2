@@ -1,0 +1,56 @@
+{
+  "verifiedAtUtc": "2026-10-20T15:43:34.1590847Z",
+  "version": "0.9.1+13",
+  "schemaVersion": 8,
+  "tests": {
+    "catalogWidgetTestsPassed": 12,
+    "fullFinancialSuiteRepeated": false,
+    "analyzeClean": true,
+    "formattedDartFiles": 4,
+    "formatClean": true,
+    "independentReviewOutstandingFindings": 0
+  },
+  "behavior": {
+    "columns": [
+      "Producto",
+      "PVP",
+      "Unidades",
+      "Proveedor"
+    ],
+    "bothCatalogSourcesUpdated": true,
+    "multipleHistoricalSuppliersSupported": true,
+    "missingSupplierLabel": "Sin proveedor",
+    "exhaustedProductsRemainHidden": true,
+    "existingFiltersPreserved": true,
+    "databaseOrMigrationChanges": false
+  },
+  "build": {
+    "seconds": 56.7564685,
+    "executableVersion": "0.9.1+13",
+    "appSha256": "6291217B0C859215F45DFD34EFD6F16B294FAFCDDB4C6A2335A50AFA39445B7C",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.9.1-windows-x64.zip",
+    "files": 17,
+    "bytes": 14644956,
+    "sha256": "5BF2022C4B8D8E5556756246BADA74658E1A9A5753D18515DC4606FC46951247",
+    "allFilesMatchStableAndVersioned": true,
+    "privateDataAbsent": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.9.1/ValinorSanctum2",
+    "zipHashUnchangedAfterNativeLaunch": true
+  },
+  "native": {
+    "version091Observed": true,
+    "fourCatalogHeadersObserved": true,
+    "stateColumnAbsent": true,
+    "noLoadFailure": true,
+    "method": "Accessibility and keyboard",
+    "screenshotsCaptured": false,
+    "businessDataEnteredByAgent": false,
+    "windowLeftOpenForUser": true
+  },
+  "originalPosOpenedOrModified": false,
+  "remoteWorkflowResultInspected": false
+}

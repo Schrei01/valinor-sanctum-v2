@@ -154,7 +154,15 @@ void main() {
       expect(find.text('COP 0,00'), findsNothing);
       expect(find.text('7'), findsOneWidget);
       expect(find.text('0'), findsNothing);
-      expect(find.text('Con existencias'), findsOneWidget);
+      expect(find.text('Sin proveedor'), findsOneWidget);
+      expect(find.text('Estado'), findsNothing);
+      final table = tester.widget<DataTable>(find.byType(DataTable));
+      expect(table.columns.map((column) => (column.label as Text).data), [
+        'Producto',
+        'PVP',
+        'Unidades',
+        'Proveedor',
+      ]);
       expect(find.text('Agotado'), findsNothing);
       expect(find.text('Activo'), findsNothing);
       expect(
@@ -449,6 +457,20 @@ void main() {
         findsNothing,
       );
       expect(find.text('4 productos con existencias'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(DataTable),
+          matching: find.text('Distribuidora A'),
+        ),
+        findsNWidgets(2),
+      );
+      expect(
+        find.descendant(
+          of: find.byType(DataTable),
+          matching: find.text('Distribuidora B'),
+        ),
+        findsNWidgets(2),
+      );
       expect(find.text('Agotado de referencia'), findsNothing);
       expect(find.text('COP 0,00'), findsOneWidget);
       await tester.tap(find.byKey(const Key('catalog-category-filter')));

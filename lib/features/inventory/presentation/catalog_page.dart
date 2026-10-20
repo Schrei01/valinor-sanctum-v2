@@ -427,7 +427,7 @@ class _CatalogPageState extends State<CatalogPage> {
                   DataColumn(label: Text('Producto')),
                   DataColumn(label: Text('PVP'), numeric: true),
                   DataColumn(label: Text('Unidades'), numeric: true),
-                  DataColumn(label: Text('Estado')),
+                  DataColumn(label: Text('Proveedor')),
                 ],
                 rows: [
                   for (final product
@@ -445,12 +445,9 @@ class _CatalogPageState extends State<CatalogPage> {
                                   product.name,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                if (product.category.isNotEmpty ||
-                                    product.supplier.isNotEmpty)
+                                if (product.category.isNotEmpty)
                                   Text(
-                                    [product.category, product.supplier]
-                                        .where((value) => value.isNotEmpty)
-                                        .join(' · '),
+                                    product.category,
                                     style: Theme.of(
                                       context,
                                     ).textTheme.bodySmall,
@@ -478,7 +475,11 @@ class _CatalogPageState extends State<CatalogPage> {
                           ),
                         ),
                         DataCell(Text('${product.quantity}')),
-                        const DataCell(Text('Con existencias')),
+                        _supplierCell(
+                          product.supplier.trim().isEmpty
+                              ? 'Sin proveedor'
+                              : product.supplier,
+                        ),
                       ],
                     ),
                 ],
@@ -511,6 +512,17 @@ class _CatalogPageState extends State<CatalogPage> {
     final categories = {
       for (final category in data.categories) category.id: category.name,
     };
+    final suppliers = {
+      for (final supplier in data.suppliers) supplier.id: supplier.name,
+    };
+    String supplierNames(String productId) {
+      final names = {
+        for (final id in data.productSupplierIds[productId] ?? const <String>[])
+          suppliers[id] ?? 'Proveedor no disponible',
+      }.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      return names.isEmpty ? 'Sin proveedor' : names.join(', ');
+    }
+
     if (rows.isEmpty) {
       return _EmptyCatalog(
         available.isEmpty
@@ -536,7 +548,7 @@ class _CatalogPageState extends State<CatalogPage> {
                 DataColumn(label: Text('Producto')),
                 DataColumn(label: Text('PVP'), numeric: true),
                 DataColumn(label: Text('Unidades'), numeric: true),
-                DataColumn(label: Text('Estado')),
+                DataColumn(label: Text('Proveedor')),
               ],
               rows: [
                 for (final product
@@ -580,7 +592,7 @@ class _CatalogPageState extends State<CatalogPage> {
                         ),
                       ),
                       DataCell(Text('${positions[product.id]?.quantity ?? 0}')),
-                      DataCell(Text(product.isActive ? 'Activo' : 'Archivado')),
+                      _supplierCell(supplierNames(product.id)),
                     ],
                   ),
               ],
@@ -591,6 +603,16 @@ class _CatalogPageState extends State<CatalogPage> {
       ],
     );
   }
+
+  DataCell _supplierCell(String name) => DataCell(
+    ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 240),
+      child: Tooltip(
+        message: name,
+        child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+      ),
+    ),
+  );
 
   int _clampedPage(int length) =>
       _page.clamp(0, length == 0 ? 0 : (length - 1) ~/ _pageSize);

@@ -200,7 +200,7 @@ void main() {
         ])
         ..productSupplierIds.addAll({
           'water': ['supplier'],
-          'game': ['old-supplier'],
+          'game': ['old-supplier', 'supplier'],
           'snack': ['old-supplier'],
           'empty': ['old-supplier'],
           'no-stock': ['old-supplier'],
@@ -215,6 +215,18 @@ void main() {
       expect(find.text('3 productos con existencias'), findsOneWidget);
       expect(find.text('PVP'), findsOneWidget);
       expect(find.text('Unidades'), findsOneWidget);
+      final table = tester.widget<DataTable>(find.byType(DataTable));
+      expect(table.columns.map((column) => (column.label as Text).data), [
+        'Producto',
+        'PVP',
+        'Unidades',
+        'Proveedor',
+      ]);
+      expect(
+        find.text('Proveedor anterior, Proveedor sintético'),
+        findsOneWidget,
+      );
+      expect(find.text('Estado'), findsNothing);
       expect(find.text('10'), findsOneWidget);
       expect(find.text('Acciones'), findsNothing);
       expect(find.text('Valoración'), findsNothing);
@@ -342,6 +354,7 @@ void main() {
     await tester.tap(find.text('Catálogo'));
     await tester.pumpAndSettle();
     expect(find.text('Juego sintético'), findsOneWidget);
+    expect(find.text('Sin proveedor'), findsOneWidget);
     await capture(tester, 'inventory-catalog');
     expect(tester.takeException(), isNull);
   });

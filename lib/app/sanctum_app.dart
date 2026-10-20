@@ -530,7 +530,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.9.0',
+                    'Versión 0.9.1',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

@@ -95,6 +95,7 @@ Elige Efectivo o Nequi para pagar: el ingreso y la salida de dinero se guardan j
 Registra el saldo inicial real antes del primer movimiento de cada cuenta si corresponde.
 Consulta el Historial de ingresos desde la misma sección Compras.
 Catálogo muestra productos: filtra por Categoría y Proveedor, y busca por nombre o SKU.
+Sus columnas son Producto, PVP, Unidades y Proveedor.
 Todos los productos limpia los filtros y la búsqueda. Catálogo es solo consulta.
 Catálogo muestra solo productos con unidades disponibles; los agotados se conservan
 para reponerlos desde Compras. Un inventario inicial confirmado está disponible en Ventas.
