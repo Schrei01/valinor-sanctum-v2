@@ -100,117 +100,146 @@ ORDER BY c.paid_at_utc DESC, c.document_id
   @override
   Future<PreparedSupplierPayment> preparePayment(
     SupplierPaymentCommand command,
-  ) async {
+  ) => _database.database.transaction((txn) async {
+    await _guardPaidCommand(txn, command.commandId, internal: false);
+    return preparePaymentInTransaction(txn, command);
+  }, exclusive: true);
+
+  Future<PreparedSupplierPayment> preparePaymentInTransaction(
+    Transaction txn,
+    SupplierPaymentCommand command, {
+    List<SupplierPaymentPart>? snapshots,
+  }) async {
+    await _guardPaidCommand(txn, command.commandId, internal: true);
     _id(command.commandId);
     _id(command.payableId);
     _businessDate(command.occurredAtUtc);
     final inputs = _inputs(command.parts);
-    return _database.database.transaction((txn) async {
-      final profile = await _profile(txn);
-      final prior = await txn.query(
-        'supplier_payment_requests',
-        where: 'command_id = ?',
-        whereArgs: [command.commandId],
-      );
-      if (prior.isNotEmpty) {
-        final old = _prepared(prior.single);
-        if (old.payableId != command.payableId ||
-            old.occurredAtUtc.microsecondsSinceEpoch !=
-                command.occurredAtUtc.microsecondsSinceEpoch ||
-            !_sameInputs(old.parts, inputs)) {
-          throw const SupplierPaymentsValidationException(
-            'El identificador ya corresponde a otro pago.',
-          );
-        }
-        return old;
-      }
-      if ((await txn.query(
-            'command_log',
-            where: 'id = ?',
-            whereArgs: [command.commandId],
-          )).isNotEmpty ||
-          (await txn.query(
-            'sale_confirmations',
-            where: 'command_id = ?',
-            whereArgs: [command.commandId],
-          )).isNotEmpty ||
-          (await txn.query(
-            'collection_requests',
-            where: 'command_id = ?',
-            whereArgs: [command.commandId],
-          )).isNotEmpty) {
+    final profile = await _profile(txn);
+    final prior = await txn.query(
+      'supplier_payment_requests',
+      where: 'command_id = ?',
+      whereArgs: [command.commandId],
+    );
+    if (prior.isNotEmpty) {
+      final old = _prepared(prior.single);
+      if (old.payableId != command.payableId ||
+          old.occurredAtUtc.microsecondsSinceEpoch !=
+              command.occurredAtUtc.microsecondsSinceEpoch ||
+          !_sameInputs(old.parts, inputs)) {
         throw const SupplierPaymentsValidationException(
-          'El identificador ya corresponde a otro comando.',
+          'El identificador ya corresponde a otro pago.',
         );
       }
-      if ((await txn.rawQuery(
-        'SELECT command_id FROM quick_sale_requests WHERE command_id = ? OR sale_command_id = ? OR collection_command_id = ?',
-        [command.commandId, command.commandId, command.commandId],
-      )).isNotEmpty) {
-        throw const SupplierPaymentsValidationException(
-          'El identificador ya corresponde a una venta de mostrador.',
-        );
-      }
-      final payable = await _payable(txn, command.payableId);
-      final parts = <SupplierPaymentPart>[];
-      for (final input in inputs) {
-        final account = await _activeAccount(txn, input.cashAccountId);
-        final method = await _activeMethod(txn, input.paymentMethodId);
-        parts.add(
-          SupplierPaymentPart(
-            cashAccountId: input.cashAccountId,
-            paymentMethodId: input.paymentMethodId,
-            cashAccountName: account['name'] as String,
-            cashAccountKind: account['kind'] as String,
-            paymentMethodCode: method['code'] as String,
-            paymentMethodName: method['name'] as String,
-            amountMinor: input.amountMinor,
-          ),
-        );
-      }
-      await _validateFundsAndTiming(txn, parts, command.occurredAtUtc);
-      final total = _total(parts);
-      await _validateTimingAndAmount(
-        txn,
-        payable,
-        command.occurredAtUtc,
-        total,
+      return old;
+    }
+    if ((await txn.query(
+          'command_log',
+          where: 'id = ?',
+          whereArgs: [command.commandId],
+        )).isNotEmpty ||
+        (await txn.query(
+          'sale_confirmations',
+          where: 'command_id = ?',
+          whereArgs: [command.commandId],
+        )).isNotEmpty ||
+        (await txn.query(
+          'collection_requests',
+          where: 'command_id = ?',
+          whereArgs: [command.commandId],
+        )).isNotEmpty) {
+      throw const SupplierPaymentsValidationException(
+        'El identificador ya corresponde a otro comando.',
       );
-      final canonical = jsonEncode({
-        'version': 1,
-        'profileId': profile.profileId,
-        'currency': profile.currencyCode,
-        'scale': profile.moneyScale,
-        'payableId': payable.payableId,
-        'purchaseDocumentId': payable.purchaseDocumentId,
-        'label': payable.label,
-        'supplierName': payable.supplierName,
-        'occurredAtUtc': command.occurredAtUtc.toIso8601String(),
-        'totalMinor': total,
-        'parts': parts.map(_partPayload).toList(),
-      });
-      final preparedAt = DateTime.now().toUtc();
-      final row = <String, Object?>{
-        'command_id': command.commandId,
-        'canonical_payload': canonical,
-        'payable_id': command.payableId,
-        'occurred_at_utc': command.occurredAtUtc.toIso8601String(),
-        'prepared_at_utc': preparedAt.toIso8601String(),
-        'status': 'prepared',
-      };
-      await txn.insert('supplier_payment_requests', row);
-      return _prepared(row);
-    }, exclusive: true);
+    }
+    if ((await txn.rawQuery(
+      'SELECT command_id FROM quick_sale_requests WHERE command_id = ? OR sale_command_id = ? OR collection_command_id = ?',
+      [command.commandId, command.commandId, command.commandId],
+    )).isNotEmpty) {
+      throw const SupplierPaymentsValidationException(
+        'El identificador ya corresponde a una venta de mostrador.',
+      );
+    }
+    final payable = await _payable(txn, command.payableId);
+    final parts = <SupplierPaymentPart>[];
+    for (final input in inputs) {
+      final account = await _activeAccount(txn, input.cashAccountId);
+      final method = await _activeMethod(txn, input.paymentMethodId);
+      parts.add(
+        SupplierPaymentPart(
+          cashAccountId: input.cashAccountId,
+          paymentMethodId: input.paymentMethodId,
+          cashAccountName: account['name'] as String,
+          cashAccountKind: account['kind'] as String,
+          paymentMethodCode: method['code'] as String,
+          paymentMethodName: method['name'] as String,
+          amountMinor: input.amountMinor,
+        ),
+      );
+    }
+    if (snapshots != null) {
+      final captured = snapshots.toList()
+        ..sort((a, b) {
+          final account = a.cashAccountId.compareTo(b.cashAccountId);
+          return account == 0
+              ? a.paymentMethodId.compareTo(b.paymentMethodId)
+              : account;
+        });
+      if (captured.length != parts.length ||
+          !List.generate(
+            parts.length,
+            (i) =>
+                parts[i].cashAccountId == captured[i].cashAccountId &&
+                parts[i].paymentMethodId == captured[i].paymentMethodId &&
+                parts[i].cashAccountKind == captured[i].cashAccountKind &&
+                parts[i].paymentMethodCode == captured[i].paymentMethodCode &&
+                parts[i].amountMinor == captured[i].amountMinor,
+          ).every((v) => v)) {
+        throw const SupplierPaymentsValidationException(
+          'La identidad del pago preparado cambió.',
+        );
+      }
+      parts
+        ..clear()
+        ..addAll(captured);
+    }
+    await _validateFundsAndTiming(txn, parts, command.occurredAtUtc);
+    final total = _total(parts);
+    await _validateTimingAndAmount(txn, payable, command.occurredAtUtc, total);
+    final canonical = jsonEncode({
+      'version': 1,
+      'profileId': profile.profileId,
+      'currency': profile.currencyCode,
+      'scale': profile.moneyScale,
+      'payableId': payable.payableId,
+      'purchaseDocumentId': payable.purchaseDocumentId,
+      'label': payable.label,
+      'supplierName': payable.supplierName,
+      'occurredAtUtc': command.occurredAtUtc.toIso8601String(),
+      'totalMinor': total,
+      'parts': parts.map(_partPayload).toList(),
+    });
+    final preparedAt = DateTime.now().toUtc();
+    final row = <String, Object?>{
+      'command_id': command.commandId,
+      'canonical_payload': canonical,
+      'payable_id': command.payableId,
+      'occurred_at_utc': command.occurredAtUtc.toIso8601String(),
+      'prepared_at_utc': preparedAt.toIso8601String(),
+      'status': 'prepared',
+    };
+    await txn.insert('supplier_payment_requests', row);
+    return _prepared(row);
   }
 
   @override
   Future<SupplierPaymentResult> confirmPrepared(String commandId) async {
     _id(commandId);
     try {
-      return await _database.database.transaction(
-        (txn) => _confirm(txn, commandId),
-        exclusive: true,
-      );
+      return await _database.database.transaction((txn) async {
+        await _guardPaidCommand(txn, commandId, internal: false);
+        return confirmInTransaction(txn, commandId);
+      }, exclusive: true);
     } on SupplierPaymentsValidationException {
       // Only a known precommit rejection becomes discardable. An I/O failure
       // leaves the durable request prepared, including after an uncertain reply.
@@ -236,10 +265,11 @@ ORDER BY c.paid_at_utc DESC, c.document_id
     }
   }
 
-  Future<SupplierPaymentResult> _confirm(
+  Future<SupplierPaymentResult> confirmInTransaction(
     Transaction txn,
     String commandId,
   ) async {
+    await _guardPaidCommand(txn, commandId, internal: true);
     final rows = await txn.query(
       'supplier_payment_requests',
       where: 'command_id = ?',
@@ -491,6 +521,26 @@ ORDER BY c.paid_at_utc DESC, c.document_id
         whereArgs: [commandId],
       );
     }, exclusive: true);
+  }
+
+  static Future<void> _guardPaidCommand(
+    DatabaseExecutor txn,
+    String id, {
+    required bool internal,
+  }) async {
+    final rows = await txn.rawQuery(
+      'SELECT * FROM paid_purchase_requests WHERE command_id=? OR purchase_command_id=? OR payment_command_id=?',
+      [id, id, id],
+    );
+    if (rows.isNotEmpty &&
+        !(internal &&
+            rows.length == 1 &&
+            rows.single['payment_command_id'] == id &&
+            rows.single['status'] == 'executing')) {
+      throw const SupplierPaymentsValidationException(
+        'El identificador pertenece a un ingreso de mercancía.',
+      );
+    }
   }
 
   static Future<List<PayableSummary>> _payables(DatabaseExecutor txn) async {

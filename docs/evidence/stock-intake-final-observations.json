@@ -1,0 +1,17 @@
+{
+  "observedAtUtc": "2026-10-20T04:36:17.615Z",
+  "version": "0.7.0+8",
+  "schemaVersion": 7,
+  "method": "Accessibility and keyboard",
+  "screenshotCaptured": false,
+  "profileConfigured": true,
+  "versionObserved": true,
+  "allRequestedFieldsObserved": true,
+  "historyHeadingObserved": true,
+  "referenceAndDueAbsent": true,
+  "fourCorrectIndicatorsObserved": true,
+  "defaultDevelopmentPathObserved": true,
+  "businessDataEntered": false,
+  "windowClosed": true,
+  "rawUserTreeExcluded": true
+}

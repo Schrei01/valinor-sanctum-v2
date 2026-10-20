@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 6;
+  static const int version = 7;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -31,6 +31,11 @@ abstract final class DatabaseSchema {
   static String get migration6Checksum =>
       checksum(migration6Statements.join('\n;\n'));
 
+  static const String migration7Name =
+      'paid_stock_intakes_and_cash_openings_v7';
+  static String get migration7Checksum =>
+      checksum(migration7Statements.join('\n;\n'));
+
   static String nameForVersion(int version) => switch (version) {
     1 => migrationName,
     2 => migration2Name,
@@ -38,6 +43,7 @@ abstract final class DatabaseSchema {
     4 => migration4Name,
     5 => migration5Name,
     6 => migration6Name,
+    7 => migration7Name,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -48,6 +54,7 @@ abstract final class DatabaseSchema {
     4 => migration4Checksum,
     5 => migration5Checksum,
     6 => migration6Checksum,
+    7 => migration7Checksum,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -1904,6 +1911,409 @@ BEGIN
 END
 ''',
   ]);
+
+  /// Paid stock intakes reuse the immutable purchase and payment facts. Their
+  /// parent commits only when both children and the captured catalog facts agree.
+  static final List<String> migration7Statements = List<String>.unmodifiable([
+    '''
+CREATE TABLE paid_purchase_requests (
+  command_id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(command_id)) > 0),
+  canonical_payload TEXT NOT NULL CHECK (json_valid(canonical_payload)),
+  occurred_at_utc TEXT NOT NULL CHECK (${_collectionUtc('occurred_at_utc')}),
+  prepared_at_utc TEXT NOT NULL CHECK (${_collectionUtc('prepared_at_utc')}),
+  status TEXT NOT NULL CHECK (status IN ('prepared', 'executing', 'rejected', 'cancelled', 'confirmed')),
+  rejection_reason TEXT,
+  purchase_command_id TEXT NOT NULL UNIQUE CHECK (length(trim(purchase_command_id)) > 0),
+  payment_command_id TEXT NOT NULL UNIQUE CHECK (length(trim(payment_command_id)) > 0),
+  CHECK (command_id <> purchase_command_id AND command_id <> payment_command_id
+    AND purchase_command_id <> payment_command_id),
+  CHECK ((status IN ('prepared', 'executing', 'confirmed') AND rejection_reason IS NULL)
+    OR (status IN ('rejected', 'cancelled') AND rejection_reason IS NOT NULL
+      AND length(trim(rejection_reason)) > 0))
+)
+''',
+    '''
+CREATE TABLE paid_purchase_entries (
+  request_id TEXT PRIMARY KEY NOT NULL REFERENCES paid_purchase_requests(command_id) ON DELETE RESTRICT,
+  purchase_document_id TEXT NOT NULL UNIQUE REFERENCES purchases(document_id) ON DELETE RESTRICT,
+  payment_document_id TEXT NOT NULL UNIQUE REFERENCES supplier_payments(document_id) ON DELETE RESTRICT,
+  product_id TEXT NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+  product_name_snapshot TEXT NOT NULL CHECK (length(trim(product_name_snapshot)) BETWEEN 1 AND 160),
+  sku_snapshot TEXT CHECK (sku_snapshot IS NULL OR length(trim(sku_snapshot)) BETWEEN 1 AND 80),
+  category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+  category_name_snapshot TEXT NOT NULL CHECK (length(trim(category_name_snapshot)) BETWEEN 1 AND 160),
+  supplier_id TEXT NOT NULL REFERENCES counterparties(id) ON DELETE RESTRICT,
+  supplier_name_snapshot TEXT NOT NULL CHECK (length(trim(supplier_name_snapshot)) BETWEEN 1 AND 160),
+  quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+  unit_purchase_price_minor INTEGER NOT NULL CHECK (typeof(unit_purchase_price_minor) = 'integer' AND unit_purchase_price_minor > 0),
+  list_price_minor INTEGER NOT NULL CHECK (typeof(list_price_minor) = 'integer' AND list_price_minor >= 0
+    AND typeof(quantity * list_price_minor) = 'integer'),
+  total_cost_minor INTEGER NOT NULL CHECK (typeof(total_cost_minor) = 'integer' AND total_cost_minor > 0
+    AND typeof(quantity * unit_purchase_price_minor) = 'integer'
+    AND quantity * unit_purchase_price_minor = total_cost_minor),
+  payment_option_id TEXT NOT NULL REFERENCES quick_payment_options(id) ON DELETE RESTRICT,
+  payment_option_label_snapshot TEXT NOT NULL CHECK (length(trim(payment_option_label_snapshot)) BETWEEN 1 AND 160),
+  cash_account_id TEXT NOT NULL REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  payment_method_id TEXT NOT NULL REFERENCES payment_methods(id) ON DELETE RESTRICT,
+  cash_account_name_snapshot TEXT NOT NULL CHECK (length(trim(cash_account_name_snapshot)) BETWEEN 1 AND 160),
+  cash_account_kind_snapshot TEXT NOT NULL CHECK (cash_account_kind_snapshot IN ('cash', 'bank', 'mobile', 'clearing')),
+  payment_method_code_snapshot TEXT NOT NULL CHECK (length(trim(payment_method_code_snapshot)) BETWEEN 1 AND 32),
+  payment_method_name_snapshot TEXT NOT NULL CHECK (length(trim(payment_method_name_snapshot)) BETWEEN 1 AND 160)
+)
+''',
+    '''
+CREATE TABLE cash_openings (
+  document_id TEXT PRIMARY KEY NOT NULL REFERENCES business_documents(id) ON DELETE RESTRICT,
+  command_id TEXT NOT NULL UNIQUE REFERENCES command_log(id) ON DELETE RESTRICT,
+  cash_account_id TEXT NOT NULL UNIQUE REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  amount_minor INTEGER NOT NULL CHECK (typeof(amount_minor) = 'integer' AND amount_minor > 0),
+  occurred_at_utc TEXT NOT NULL CHECK (${_collectionUtc('occurred_at_utc')})
+)
+''',
+    'CREATE INDEX idx_paid_purchase_entries_product ON paid_purchase_entries(product_id)',
+    '''
+CREATE TRIGGER paid_purchase_requests_validate_insert
+BEFORE INSERT ON paid_purchase_requests
+BEGIN
+  SELECT CASE WHEN NEW.status <> 'prepared'
+    OR EXISTS (SELECT 1 FROM paid_purchase_requests WHERE command_id IN
+      (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id)
+      OR purchase_command_id IN (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id)
+      OR payment_command_id IN (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id))
+    OR EXISTS (SELECT 1 FROM command_log WHERE id IN
+      (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id))
+    OR EXISTS (SELECT 1 FROM sale_confirmations WHERE command_id IN
+      (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id))
+    OR EXISTS (SELECT 1 FROM collection_requests WHERE command_id IN
+      (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id))
+    OR EXISTS (SELECT 1 FROM supplier_payment_requests WHERE command_id IN
+      (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id))
+    OR EXISTS (SELECT 1 FROM quick_sale_requests WHERE command_id IN
+      (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id)
+      OR sale_command_id IN (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id)
+      OR collection_command_id IN (NEW.command_id, NEW.purchase_command_id, NEW.payment_command_id))
+    THEN RAISE(ABORT, 'Create a unique prepared intake and reserve its child identifiers') END;
+END
+''',
+    '''
+CREATE TRIGGER paid_purchase_requests_validate_update
+BEFORE UPDATE ON paid_purchase_requests
+BEGIN
+  SELECT CASE WHEN NEW.command_id <> OLD.command_id OR NEW.canonical_payload <> OLD.canonical_payload
+    OR NEW.occurred_at_utc <> OLD.occurred_at_utc OR NEW.prepared_at_utc <> OLD.prepared_at_utc
+    OR NEW.purchase_command_id <> OLD.purchase_command_id OR NEW.payment_command_id <> OLD.payment_command_id
+    THEN RAISE(ABORT, 'Prepared intake input and child identities are immutable') END;
+  SELECT CASE WHEN NOT ((OLD.status = 'prepared' AND NEW.status IN ('executing', 'rejected'))
+    OR (OLD.status = 'executing' AND NEW.status = 'confirmed')
+    OR (OLD.status = 'rejected' AND NEW.status = 'cancelled'))
+    THEN RAISE(ABORT, 'Invalid intake request transition') END;
+  SELECT CASE WHEN NEW.status IN ('rejected', 'cancelled') AND (
+    EXISTS (SELECT 1 FROM command_log WHERE id IN
+      (OLD.command_id, OLD.purchase_command_id, OLD.payment_command_id))
+    OR EXISTS (SELECT 1 FROM supplier_payment_requests WHERE command_id = OLD.payment_command_id)
+    OR EXISTS (SELECT 1 FROM paid_purchase_entries WHERE request_id = OLD.command_id))
+    THEN RAISE(ABORT, 'A committed intake cannot be rejected or cancelled') END;
+  SELECT CASE WHEN NEW.status = 'cancelled' AND NEW.rejection_reason IS NOT OLD.rejection_reason
+    THEN RAISE(ABORT, 'Intake rejection reasons are historical') END;
+  SELECT CASE WHEN NEW.status = 'confirmed' AND NOT (${_paidPurchaseConfirmedResult()})
+    THEN RAISE(ABORT, 'An intake requires its posted purchase, full payment and exact history') END;
+END
+''',
+    '''
+CREATE TRIGGER paid_purchase_requests_no_delete
+BEFORE DELETE ON paid_purchase_requests
+BEGIN
+  SELECT RAISE(ABORT, 'Durable intake requests cannot be deleted');
+END
+''',
+    '''
+CREATE TRIGGER paid_purchase_requests_reserve_command_ids
+BEFORE INSERT ON command_log
+WHEN EXISTS (SELECT 1 FROM paid_purchase_requests request WHERE
+  (NEW.id = request.command_id AND (request.status <> 'executing' OR NEW.command_type <> 'paid_purchase'))
+  OR (NEW.id = request.purchase_command_id AND (request.status <> 'executing' OR NEW.command_type <> 'receive_purchase'))
+  OR (NEW.id = request.payment_command_id AND (request.status <> 'executing' OR NEW.command_type <> 'pay_supplier')))
+BEGIN
+  SELECT RAISE(ABORT, 'Intake command identifiers are reserved for its executing parent and children');
+END
+''',
+    for (final table in [
+      'sale_confirmations',
+      'collection_requests',
+      'supplier_payment_requests',
+    ])
+      '''
+CREATE TRIGGER ${table}_respect_intake_command_ids
+BEFORE INSERT ON $table
+WHEN EXISTS (SELECT 1 FROM paid_purchase_requests request WHERE
+  NEW.command_id IN (request.command_id, request.purchase_command_id, request.payment_command_id)
+  AND NOT (${table == 'supplier_payment_requests' ? "request.status = 'executing' AND NEW.command_id = request.payment_command_id" : '0'}))
+BEGIN
+  SELECT RAISE(ABORT, 'Only an executing intake may prepare its exact payment command');
+END
+''',
+    '''
+CREATE TRIGGER quick_sale_requests_respect_intake_command_ids
+BEFORE INSERT ON quick_sale_requests
+WHEN EXISTS (SELECT 1 FROM paid_purchase_requests request WHERE
+  request.command_id IN (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id)
+  OR request.purchase_command_id IN (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id)
+  OR request.payment_command_id IN (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id))
+BEGIN
+  SELECT RAISE(ABORT, 'Quick checkout cannot use a reserved intake command identifier');
+END
+''',
+    '''
+CREATE TRIGGER paid_purchase_entries_validate_insert
+BEFORE INSERT ON paid_purchase_entries
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM paid_purchase_entries WHERE request_id = NEW.request_id
+    OR purchase_document_id = NEW.purchase_document_id OR payment_document_id = NEW.payment_document_id)
+    THEN RAISE(ABORT, 'Intake history cannot be replaced') END;
+  SELECT CASE WHEN NOT (${_paidPurchaseEntryMatches('NEW')})
+    THEN RAISE(ABORT, 'Intake history must match captured input and its posted full purchase payment') END;
+END
+''',
+    for (final action in ['UPDATE', 'DELETE'])
+      '''
+CREATE TRIGGER paid_purchase_entries_no_${action.toLowerCase()}
+BEFORE $action ON paid_purchase_entries
+BEGIN
+  SELECT RAISE(ABORT, 'Paid intake history is immutable');
+END
+''',
+    '''
+CREATE TRIGGER cash_openings_documents_insert_as_draft
+BEFORE INSERT ON business_documents
+WHEN NEW.type = 'cash_opening' AND NEW.status <> 'draft'
+BEGIN
+  SELECT RAISE(ABORT, 'Create a cash opening document as draft before posting');
+END
+''',
+    '''
+CREATE TRIGGER cash_openings_validate_insert
+BEFORE INSERT ON cash_openings
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM cash_openings WHERE document_id = NEW.document_id
+    OR command_id = NEW.command_id OR cash_account_id = NEW.cash_account_id)
+    THEN RAISE(ABORT, 'A money account may have only one immutable opening') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM business_documents d
+    JOIN command_log c ON c.id = d.command_id JOIN cash_accounts a ON a.id = NEW.cash_account_id
+    JOIN ledger_accounts ledger ON ledger.id = a.ledger_account_id
+    WHERE d.id = NEW.document_id AND d.command_id = NEW.command_id
+      AND d.type = 'cash_opening' AND d.status = 'draft' AND d.occurred_at_utc = NEW.occurred_at_utc
+      AND c.command_type = 'cash_opening' AND c.actor_id = d.actor_id
+      AND c.authorization_policy_version = 'development-single-user-v1'
+      AND a.is_active = 1 AND a.is_available = 1 AND ledger.is_active = 1
+      AND ledger.class = 'asset' AND ledger.role = 'cash')
+    OR EXISTS (SELECT 1 FROM cash_accounts cash JOIN journal_lines line ON line.account_id = cash.ledger_account_id
+      JOIN journal_entries entry ON entry.id = line.entry_id AND entry.status = 'posted'
+      JOIN business_documents document ON document.id = entry.document_id AND document.status = 'posted'
+      WHERE cash.id = NEW.cash_account_id)
+    THEN RAISE(ABORT, 'Record an explicit opening only before a money account has posted movements') END;
+END
+''',
+    '''
+CREATE TRIGGER cash_openings_validate_document_posting
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status = 'draft' AND NEW.status = 'posted' AND
+  (NEW.type = 'cash_opening' OR EXISTS (SELECT 1 FROM cash_openings WHERE document_id = NEW.id))
+BEGIN
+  SELECT CASE WHEN NEW.type <> 'cash_opening' OR NEW.command_sequence <> 0
+    OR date(NEW.occurred_at_utc, '-5 hours') <> NEW.business_date
+    OR NOT EXISTS (SELECT 1 FROM cash_openings opening JOIN command_log command ON command.id = opening.command_id
+      JOIN cash_accounts cash ON cash.id = opening.cash_account_id
+      JOIN ledger_accounts account ON account.id = cash.ledger_account_id
+      WHERE opening.document_id = NEW.id AND opening.command_id = NEW.command_id
+        AND opening.occurred_at_utc = NEW.occurred_at_utc AND command.command_type = 'cash_opening'
+        AND command.actor_id = NEW.actor_id AND command.authorization_policy_version = 'development-single-user-v1'
+        AND cash.is_active = 1 AND cash.is_available = 1 AND account.is_active = 1
+        AND account.class = 'asset' AND account.role = 'cash')
+    THEN RAISE(ABORT, 'Cash opening document or money account is invalid') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM cash_openings opening JOIN cash_accounts cash ON cash.id = opening.cash_account_id
+    JOIN journal_lines line ON line.account_id = cash.ledger_account_id
+    JOIN journal_entries entry ON entry.id = line.entry_id AND entry.status = 'posted'
+    JOIN business_documents document ON document.id = entry.document_id AND document.status = 'posted'
+    WHERE opening.document_id = NEW.id AND document.id <> NEW.id)
+    THEN RAISE(ABORT, 'A cash opening must precede all posted money account movements') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM journal_entries WHERE document_id = NEW.id
+    AND status = 'draft' AND cost_completeness = 'not_applicable')
+    OR (SELECT count(*) FROM journal_lines line JOIN journal_entries entry ON entry.id = line.entry_id
+      WHERE entry.document_id = NEW.id) <> 2
+    OR NOT EXISTS (SELECT 1 FROM cash_openings opening JOIN cash_accounts cash ON cash.id = opening.cash_account_id
+      JOIN journal_entries entry ON entry.document_id = opening.document_id
+      JOIN journal_lines line ON line.entry_id = entry.id
+      WHERE opening.document_id = NEW.id AND line.account_id = cash.ledger_account_id
+        AND line.debit_minor = opening.amount_minor AND line.credit_minor = 0)
+    OR NOT EXISTS (SELECT 1 FROM cash_openings opening JOIN journal_entries entry ON entry.document_id = opening.document_id
+      JOIN journal_lines line ON line.entry_id = entry.id JOIN ledger_accounts account ON account.id = line.account_id
+      WHERE opening.document_id = NEW.id AND account.id = 'system:opening-equity' AND account.class = 'equity'
+        AND account.role = 'opening_balance' AND account.is_active = 1
+        AND line.debit_minor = 0 AND line.credit_minor = opening.amount_minor)
+    THEN RAISE(ABORT, 'An explicit cash opening debits money and credits opening equity exactly once') END;
+END
+''',
+    ..._freezeCashOpeningFacts(),
+  ]);
+
+  static String _paidPurchaseEntryMatches(String fact) =>
+      '''EXISTS (
+    SELECT 1 FROM paid_purchase_requests request
+    JOIN purchases purchase ON purchase.document_id = $fact.purchase_document_id
+    JOIN business_documents purchase_doc ON purchase_doc.id = purchase.document_id
+    JOIN journal_entries purchase_entry ON purchase_entry.document_id = purchase_doc.id
+    JOIN purchase_lines line ON line.purchase_id = purchase.document_id
+    JOIN obligations payable ON payable.origin_document_id = purchase.document_id
+    JOIN supplier_payments payment ON payment.document_id = $fact.payment_document_id
+    JOIN business_documents payment_doc ON payment_doc.id = payment.document_id
+    JOIN journal_entries payment_entry ON payment_entry.document_id = payment_doc.id
+    JOIN supplier_payment_requests payment_request ON payment_request.command_id = payment_doc.command_id
+    JOIN payable_settlements settlement ON settlement.supplier_payment_id = payment.document_id
+    JOIN supplier_payment_parts part ON part.supplier_payment_id = payment.document_id
+    JOIN catalog_items product ON product.id = $fact.product_id
+    JOIN categories category ON category.id = $fact.category_id
+    JOIN counterparties supplier ON supplier.id = $fact.supplier_id
+    JOIN quick_payment_options option ON option.id = $fact.payment_option_id
+    WHERE request.command_id = $fact.request_id AND request.status = 'executing'
+      AND purchase_doc.command_id = request.purchase_command_id AND payment_doc.command_id = request.payment_command_id
+      AND purchase_doc.status = 'posted' AND purchase_entry.status = 'posted'
+      AND payment_doc.status = 'posted' AND payment_entry.status = 'posted' AND payment_request.status = 'confirmed'
+      AND purchase_doc.actor_id = payment_doc.actor_id AND purchase_doc.profile_id = payment_doc.profile_id
+      AND purchase_doc.occurred_at_utc = request.occurred_at_utc AND payment_doc.occurred_at_utc = request.occurred_at_utc
+      AND json_extract(request.canonical_payload, '\$.occurredAtUtc') IS request.occurred_at_utc
+      AND json_extract(request.canonical_payload, '\$.profileId') IS purchase_doc.profile_id
+      AND purchase.supplier_id = $fact.supplier_id AND purchase.supplier_name_snapshot = $fact.supplier_name_snapshot
+      AND purchase.payable_minor = $fact.total_cost_minor AND purchase.supplier_reference IS NULL
+      AND purchase.due_date = purchase_doc.business_date
+      AND (SELECT count(*) FROM purchase_lines WHERE purchase_id = purchase.document_id) = 1
+      AND line.product_id = $fact.product_id AND line.name_snapshot = $fact.product_name_snapshot
+      AND line.quantity = $fact.quantity AND line.acquisition_total_minor = $fact.total_cost_minor
+      AND product.is_active = 1 AND product.name = $fact.product_name_snapshot AND product.sku IS $fact.sku_snapshot
+      AND product.category_id = $fact.category_id AND product.list_price_minor = $fact.list_price_minor
+      AND category.is_active = 1 AND category.name = $fact.category_name_snapshot
+      AND supplier.is_active = 1 AND supplier.is_supplier = 1 AND supplier.name = $fact.supplier_name_snapshot
+      AND payment.payable_id = payable.id AND payment.total_minor = $fact.total_cost_minor AND payment.remaining_minor = 0
+      AND settlement.payable_id = payable.id AND settlement.amount_minor = $fact.total_cost_minor
+      AND (SELECT count(*) FROM payable_settlements WHERE payable_id = payable.id) = 1
+      AND (SELECT count(*) FROM supplier_payment_parts WHERE supplier_payment_id = payment.document_id) = 1
+      AND part.amount_minor = $fact.total_cost_minor AND part.cash_account_id = $fact.cash_account_id
+      AND part.payment_method_id = $fact.payment_method_id
+      AND part.cash_account_name_snapshot = $fact.cash_account_name_snapshot
+      AND part.cash_account_kind_snapshot = $fact.cash_account_kind_snapshot
+      AND part.payment_method_code_snapshot = $fact.payment_method_code_snapshot
+      AND part.payment_method_name_snapshot = $fact.payment_method_name_snapshot
+      AND option.is_active = 1 AND option.cash_account_id = $fact.cash_account_id AND option.payment_method_id = $fact.payment_method_id
+      AND json_extract(request.canonical_payload, '\$.productId') IS $fact.product_id
+      AND json_extract(request.canonical_payload, '\$.productName') IS $fact.product_name_snapshot
+      AND json_extract(request.canonical_payload, '\$.sku') IS $fact.sku_snapshot
+      AND json_extract(request.canonical_payload, '\$.categoryId') IS $fact.category_id
+      AND json_extract(request.canonical_payload, '\$.categoryName') IS $fact.category_name_snapshot
+      AND json_extract(request.canonical_payload, '\$.supplierId') IS $fact.supplier_id
+      AND json_extract(request.canonical_payload, '\$.supplierName') IS $fact.supplier_name_snapshot
+      AND json_extract(request.canonical_payload, '\$.quantity') IS $fact.quantity
+      AND json_extract(request.canonical_payload, '\$.unitPurchasePriceMinor') IS $fact.unit_purchase_price_minor
+      AND json_extract(request.canonical_payload, '\$.listPriceMinor') IS $fact.list_price_minor
+      AND json_extract(request.canonical_payload, '\$.totalCostMinor') IS $fact.total_cost_minor
+      AND json_extract(request.canonical_payload, '\$.paymentOptionId') IS $fact.payment_option_id
+      AND json_extract(request.canonical_payload, '\$.paymentOptionLabel') IS $fact.payment_option_label_snapshot
+      AND json_extract(request.canonical_payload, '\$.cashAccountId') IS $fact.cash_account_id
+      AND json_extract(request.canonical_payload, '\$.paymentMethodId') IS $fact.payment_method_id
+      AND json_extract(request.canonical_payload, '\$.cashAccountName') IS $fact.cash_account_name_snapshot
+      AND json_extract(request.canonical_payload, '\$.cashAccountKind') IS $fact.cash_account_kind_snapshot
+      AND json_extract(request.canonical_payload, '\$.paymentMethodCode') IS $fact.payment_method_code_snapshot
+      AND json_extract(request.canonical_payload, '\$.paymentMethodName') IS $fact.payment_method_name_snapshot
+  )''';
+
+  static String _paidPurchaseConfirmedResult() =>
+      '''EXISTS (
+    SELECT 1 FROM paid_purchase_entries fact JOIN command_log parent ON parent.id = fact.request_id
+    JOIN business_documents purchase_doc ON purchase_doc.id = fact.purchase_document_id
+    JOIN business_documents payment_doc ON payment_doc.id = fact.payment_document_id
+    WHERE fact.request_id = OLD.command_id AND parent.command_type = 'paid_purchase'
+      AND parent.actor_id = purchase_doc.actor_id AND parent.actor_id = payment_doc.actor_id
+      AND parent.authorization_policy_version = 'development-single-user-v1'
+      AND purchase_doc.command_id = OLD.purchase_command_id AND payment_doc.command_id = OLD.payment_command_id
+      AND ${_paidPurchaseEntryMatches('fact')}
+  )''';
+
+  static List<String> _freezeCashOpeningFacts() => [
+    '''
+CREATE TRIGGER cash_opening_entries_no_replace
+BEFORE INSERT ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries existing JOIN cash_openings opening ON opening.document_id = existing.document_id
+  JOIN business_documents document ON document.id = opening.document_id
+  WHERE (existing.id = NEW.id OR existing.document_id = NEW.document_id) AND document.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed cash opening journal entries cannot be replaced');
+END
+''',
+    '''
+CREATE TRIGGER cash_opening_entries_no_conflicting_update
+BEFORE UPDATE ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries existing JOIN cash_openings opening ON opening.document_id = existing.document_id
+  JOIN business_documents document ON document.id = opening.document_id
+  WHERE existing.id <> OLD.id AND (existing.id = NEW.id OR existing.document_id = NEW.document_id)
+    AND document.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed cash opening journal entries cannot be replaced through an update');
+END
+''',
+    '''
+CREATE TRIGGER cash_opening_lines_no_replace
+BEFORE INSERT ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines existing JOIN journal_entries entry ON entry.id = existing.entry_id
+  JOIN cash_openings opening ON opening.document_id = entry.document_id
+  JOIN business_documents document ON document.id = opening.document_id
+  WHERE (existing.id = NEW.id OR (existing.entry_id = NEW.entry_id AND existing.sequence = NEW.sequence))
+    AND document.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed cash opening journal lines cannot be replaced');
+END
+''',
+    '''
+CREATE TRIGGER cash_opening_lines_no_conflicting_update
+BEFORE UPDATE ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines existing JOIN journal_entries entry ON entry.id = existing.entry_id
+  JOIN cash_openings opening ON opening.document_id = entry.document_id
+  JOIN business_documents document ON document.id = opening.document_id
+  WHERE existing.id <> OLD.id AND (existing.id = NEW.id OR (existing.entry_id = NEW.entry_id AND existing.sequence = NEW.sequence))
+    AND document.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed cash opening journal lines cannot be replaced through an update');
+END
+''',
+    for (final action in ['UPDATE', 'DELETE'])
+      '''
+CREATE TRIGGER cash_openings_no_${action.toLowerCase()}
+BEFORE $action ON cash_openings
+BEGIN
+  SELECT RAISE(ABORT, 'Explicit opening balances are immutable');
+END
+''',
+    for (final action in ['UPDATE', 'DELETE'])
+      '''
+CREATE TRIGGER cash_opening_entries_no_${action.toLowerCase()}
+BEFORE $action ON journal_entries
+WHEN EXISTS (SELECT 1 FROM cash_openings opening JOIN business_documents document ON document.id = opening.document_id
+  WHERE opening.document_id = OLD.document_id AND document.status <> 'draft')
+  ${action == 'UPDATE' ? "AND NOT (OLD.status = 'draft' AND NEW.status = 'posted' AND NEW.id = OLD.id AND NEW.document_id = OLD.document_id AND NEW.reversal_of_id IS OLD.reversal_of_id AND NEW.cost_completeness = OLD.cost_completeness)" : ''}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed cash openings retain their exact journal');
+END
+''',
+    for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+      '''
+CREATE TRIGGER cash_opening_lines_no_${action.toLowerCase()}
+BEFORE $action ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_entries entry JOIN cash_openings opening ON opening.document_id = entry.document_id
+  JOIN business_documents document ON document.id = opening.document_id
+  WHERE entry.id = ${action == 'DELETE' ? 'OLD' : 'NEW'}.entry_id AND document.status <> 'draft')
+  ${action == 'UPDATE' ? "OR EXISTS (SELECT 1 FROM journal_entries entry JOIN cash_openings opening ON opening.document_id = entry.document_id JOIN business_documents document ON document.id = opening.document_id WHERE entry.id = OLD.entry_id AND document.status <> 'draft')" : ''}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed cash opening journal lines are immutable');
+END
+''',
+  ];
 
   static List<String> _freezeQuickDraftLines() {
     String locked(String row) =>

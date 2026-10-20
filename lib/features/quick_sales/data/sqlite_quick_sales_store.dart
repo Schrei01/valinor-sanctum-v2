@@ -852,6 +852,15 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
   }
 
   static Future<void> _unusedCommand(DatabaseExecutor txn, String id) async {
+    if ((await txn.query(
+      'paid_purchase_requests',
+      where: 'command_id=? OR purchase_command_id=? OR payment_command_id=?',
+      whereArgs: [id, id, id],
+    )).isNotEmpty) {
+      throw const QuickSalesValidationException(
+        'El identificador está reservado por un ingreso de productos.',
+      );
+    }
     for (final table in [
       'command_log',
       'sale_confirmations',

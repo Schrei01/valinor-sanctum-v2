@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/domain/money.dart';
+import '../../stock_intake/application/stock_intake_controller.dart';
+import '../../stock_intake/domain/stock_intake_store.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../application/inventory_controller.dart';
 import '../domain/inventory_store.dart';
@@ -12,7 +14,7 @@ class PurchasesPage extends StatefulWidget {
     required this.controller,
     required this.profile,
   });
-  final InventoryController controller;
+  final StockIntakeController controller;
   final BusinessProfile profile;
   @override
   State<PurchasesPage> createState() => _PurchasesPageState();
@@ -20,22 +22,123 @@ class PurchasesPage extends StatefulWidget {
 
 class _PurchasesPageState extends State<PurchasesPage> {
   final _form = GlobalKey<FormState>();
-  final _reference = TextEditingController();
-  final _due = TextEditingController();
-  final List<_ReceiptLineDraft> _lines = [_ReceiptLineDraft()];
+  final _name = TextEditingController();
+  final _sku = TextEditingController();
+  final _supplier = TextEditingController();
+  final _cost = TextEditingController();
+  final _pvp = TextEditingController();
+  final _quantity = TextEditingController(text: '1');
+  final _productFocus = FocusNode();
+  final _supplierFocus = FocusNode();
+  CatalogProduct? _existing;
   String? _supplierId;
-  bool _confirmed = false;
+  String? _categoryId;
+  String? _paymentOptionId;
+  String? _hydratedCommand;
   int _formVersion = 0;
+  int _confirmedVersion = 0;
   int _historyPage = 0;
 
   @override
-  void dispose() {
-    _reference.dispose();
-    _due.dispose();
-    for (final line in _lines) {
-      line.dispose();
+  void initState() {
+    super.initState();
+    _confirmedVersion = widget.controller.confirmedVersion;
+    widget.controller.addListener(_changed);
+    _hydratePending();
+  }
+
+  @override
+  void didUpdateWidget(covariant PurchasesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_changed);
+      widget.controller.addListener(_changed);
+      _confirmedVersion = widget.controller.confirmedVersion;
+      _hydratePending();
     }
+  }
+
+  void _changed() {
+    if (!mounted) return;
+    if (_confirmedVersion != widget.controller.confirmedVersion) {
+      _confirmedVersion = widget.controller.confirmedVersion;
+      _name.clear();
+      _sku.clear();
+      _cost.clear();
+      _pvp.clear();
+      _quantity.text = '1';
+      _existing = null;
+      _hydratedCommand = null;
+      _formVersion++;
+      _historyPage = 0;
+    }
+    _hydratePending();
+    setState(() {});
+  }
+
+  void _hydratePending() {
+    final pending = widget.controller.pendingIntakes.firstOrNull;
+    if (pending == null || _hydratedCommand == pending.command.commandId) {
+      return;
+    }
+    final command = pending.command;
+    _hydratedCommand = command.commandId;
+    _existing = command.expectedProduct;
+    _name.text = command.productName;
+    _sku.text = command.sku ?? '';
+    _supplier.text = command.supplierName;
+    _supplierId = command.supplierId;
+    _categoryId = command.categoryId;
+    _paymentOptionId = command.paymentOptionId;
+    _quantity.text = '${command.quantity}';
+    _cost.text = _amount(command.unitPurchasePriceMinor);
+    _pvp.text = _amount(command.listPriceMinor);
+    _formVersion++;
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_changed);
+    for (final field in [_name, _sku, _supplier, _cost, _pvp, _quantity]) {
+      field.dispose();
+    }
+    _productFocus.dispose();
+    _supplierFocus.dispose();
     super.dispose();
+  }
+
+  String _amount(int value) => Money.fromMinorUnits(
+    value,
+    currency: widget.profile.currencyCode,
+    scale: widget.profile.moneyScale,
+  ).formatEsCo();
+
+  IntakePaymentOption? _payment(StockIntakeSnapshot data) =>
+      data.paymentOptions
+          .where((item) => item.id == _paymentOptionId && item.isActive)
+          .firstOrNull ??
+      data.paymentOptions.where((item) => item.isActive).firstOrNull;
+
+  BigInt? get _total {
+    try {
+      final quantity = BigInt.tryParse(_quantity.text.trim());
+      if (quantity == null ||
+          quantity <= BigInt.zero ||
+          !RegExp(r'^[0-9]+$').hasMatch(_quantity.text.trim())) {
+        return null;
+      }
+      final cost = Money.parseEsCo(
+        _cost.text,
+        currency: widget.profile.currencyCode,
+        scale: widget.profile.moneyScale,
+      );
+      if (cost.minorUnits <= 0) return null;
+      return cost.asBigInt * quantity;
+    } on FormatException {
+      return null;
+    } on RangeError {
+      return null;
+    }
   }
 
   @override
@@ -44,444 +147,581 @@ class _PurchasesPageState extends State<PurchasesPage> {
     builder: (context, _) {
       final controller = widget.controller;
       final data = controller.snapshot;
-      final locked = controller.busy || controller.pendingReceipt != null;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InventoryPageHeading(
-            title: 'Compras recibidas',
-            subtitle:
-                'Registra mercancía ya recibida a crédito: aumenta el inventario y la deuda con el proveedor. Esta compra no es un gasto ni una salida de caja.',
-            busy: controller.busy,
-            onRefresh: controller.load,
-          ),
-          if (controller.loadError != null)
-            InventoryNotice(
-              text: controller.loadError!,
-              onRetry: controller.busy ? null : controller.load,
+      final locked = controller.formLocked;
+      return FocusTraversalGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InventoryPageHeading(
+              title: 'Compras',
+              subtitle:
+                  'Ingresa productos al catálogo y sus cantidades. La compra se paga completa desde la cuenta elegida.',
+              busy: controller.busy,
+              onRefresh: controller.load,
             ),
-          if (data == null)
-            if (controller.loading)
-              const Center(child: CircularProgressIndicator())
-            else
-              const Text('La información de compras no está disponible.')
-          else ...[
-            if (_confirmed)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 20),
+            if (controller.loadError != null)
+              InventoryNotice(
+                text: controller.loadError!,
+                onRetry: controller.busy ? null : controller.load,
+              ),
+            if (controller.operationError != null)
+              InventoryNotice(text: controller.operationError!),
+            if (controller.operationNotice != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
                 child: Text(
-                  'Compra recibida y guardada. Inventario y deuda registrados.',
-                  key: Key('receipt-confirmed'),
-                  style: TextStyle(
+                  controller.operationNotice!,
+                  key: const Key('intake-notice'),
+                  style: const TextStyle(
                     color: Color(0xFF183D35),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-            if (controller.receiptError != null)
-              InventoryNotice(text: controller.receiptError!),
-            if (!data.suppliers.any((value) => value.isActive) ||
-                !data.products.any(controller.isProductAvailable))
-              const Card(
+            if (data == null)
+              if (controller.loading)
+                const Center(child: CircularProgressIndicator())
+              else
+                const Text('Los productos y saldos no están disponibles.')
+            else ...[
+              for (final pending in controller.pendingIntakes)
+                _pending(pending, data),
+              if (controller.pendingOpening != null) _pendingOpening(data),
+              Card(
                 child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text(
-                    'Primero crea al menos un producto y un proveedor activo en Catálogo.',
-                  ),
-                ),
-              ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _form,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Recibir compra a crédito',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Las cantidades son unidades enteras. Escribe el costo total de cada línea, sin dividirlo entre unidades. Un costo cero debe ser explícito.',
-                      ),
-                      const SizedBox(height: 24),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('receipt-supplier-$_formVersion'),
-                        initialValue: _supplierId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Proveedor',
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: _form,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Ingreso de productos',
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                        items: [
-                          for (final supplier in data.suppliers.where(
-                            (item) => item.isActive || item.id == _supplierId,
-                          ))
-                            DropdownMenuItem(
-                              value: supplier.id,
-                              enabled: supplier.isActive,
-                              child: Text(
-                                '${supplier.name}${supplier.isActive ? '' : ' (archivado)'}',
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Escribe un producto nuevo o elige uno existente para reponerlo.',
+                        ),
+                        const SizedBox(height: 20),
+                        _productField(data, locked),
+                        if (_existing != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Reponer producto · existencias: ${data.stock.where((item) => item.productId == _existing!.id).firstOrNull?.quantity ?? 0}',
+                              key: const Key('intake-existing'),
+                            ),
+                          ),
+                        const SizedBox(height: 16),
+                        _fields([
+                          TextFormField(
+                            key: const Key('intake-sku'),
+                            controller: _sku,
+                            enabled: !locked,
+                            maxLength: 64,
+                            decoration: const InputDecoration(
+                              labelText: 'SKU (opcional)',
+                            ),
+                            validator: (value) =>
+                                RegExp(r'[\x00-\x1f]').hasMatch(value ?? '')
+                                ? 'Escribe un SKU válido.'
+                                : null,
+                          ),
+                          DropdownButtonFormField<String>(
+                            key: ValueKey('intake-category-$_formVersion'),
+                            initialValue:
+                                data.categories.any(
+                                  (item) => item.id == _categoryId,
+                                )
+                                ? _categoryId
+                                : null,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Categoría',
+                            ),
+                            items: [
+                              for (final category in data.categories.where(
+                                (item) =>
+                                    item.isActive || item.id == _categoryId,
+                              ))
+                                DropdownMenuItem(
+                                  value: category.id,
+                                  enabled: category.isActive,
+                                  child: Text(
+                                    category.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: locked
+                                ? null
+                                : (value) =>
+                                      setState(() => _categoryId = value),
+                            validator: (value) =>
+                                data.categories.any(
+                                  (item) => item.id == value && item.isActive,
+                                )
+                                ? null
+                                : 'Elige una categoría activa.',
+                          ),
+                        ]),
+                        const SizedBox(height: 16),
+                        _supplierField(data, locked),
+                        const SizedBox(height: 16),
+                        _fields([
+                          TextFormField(
+                            key: const Key('intake-cost'),
+                            controller: _cost,
+                            enabled: !locked,
+                            decoration: InputDecoration(
+                              labelText:
+                                  'Precio de compra unitario (${widget.profile.currencyCode})',
+                            ),
+                            validator: (value) => _positiveAmountError(value),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          TextFormField(
+                            key: const Key('intake-pvp'),
+                            controller: _pvp,
+                            enabled: !locked,
+                            decoration: InputDecoration(
+                              labelText:
+                                  'PVP unitario (${widget.profile.currencyCode})',
+                            ),
+                            validator: (value) =>
+                                inventoryAmountError(value, widget.profile),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          TextFormField(
+                            key: const Key('intake-quantity'),
+                            controller: _quantity,
+                            enabled: !locked,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Cantidad',
+                            ),
+                            validator: _quantityError,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ]),
+                        const SizedBox(height: 20),
+                        _fields([
+                          DropdownButtonFormField<String>(
+                            key: ValueKey('intake-payment-$_formVersion'),
+                            initialValue: _payment(data)?.id,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Pagar desde',
+                            ),
+                            items: [
+                              for (final option in data.paymentOptions.where(
+                                (item) => item.isActive,
+                              ))
+                                DropdownMenuItem(
+                                  value: option.id,
+                                  child: Text(option.label),
+                                ),
+                            ],
+                            onChanged: locked
+                                ? null
+                                : (value) =>
+                                      setState(() => _paymentOptionId = value),
+                            validator: (value) =>
+                                data.paymentOptions.any(
+                                  (item) => item.id == value && item.isActive,
+                                )
+                                ? null
+                                : 'Elige una cuenta.',
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Text(
+                              'Saldo disponible: ${inventoryMoney(_payment(data)?.balanceMinor ?? 0, widget.profile)}',
+                              key: const Key('intake-balance'),
+                            ),
+                          ),
+                        ]),
+                        const SizedBox(height: 16),
+                        Text(
+                          _total == null
+                              ? 'Total de compra: completa precio y cantidad'
+                              : _total! > Money.maxMinorUnits
+                              ? 'Total de compra: supera el límite permitido'
+                              : 'Total de compra: ${inventoryMoney(_total!.toInt(), widget.profile)}',
+                          key: const Key('intake-total'),
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        if (_total != null &&
+                            _total! >
+                                BigInt.from(_payment(data)?.balanceMinor ?? 0))
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text(
+                              'El saldo no alcanza para pagar esta compra.',
+                              key: Key('intake-insufficient'),
+                            ),
+                          ),
+                        const SizedBox(height: 20),
+                        Wrap(
+                          spacing: 16,
+                          runSpacing: 12,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            FilledButton.icon(
+                              key: const Key('intake-submit'),
+                              onPressed: locked || controller.loadError != null
+                                  ? null
+                                  : _receive,
+                              icon: Icon(
+                                controller.confirming
+                                    ? Icons.hourglass_empty
+                                    : Icons.inventory_2_outlined,
+                              ),
+                              label: Text(
+                                controller.confirming
+                                    ? 'Guardando ingreso…'
+                                    : 'Ingresar producto',
                               ),
                             ),
-                        ],
-                        onChanged: locked
-                            ? null
-                            : (value) => setState(() {
-                                _supplierId = value;
-                                _confirmed = false;
-                              }),
-                        validator: (value) =>
-                            !data.suppliers.any(
-                              (item) => item.id == value && item.isActive,
-                            )
-                            ? 'Selecciona un proveedor activo.'
-                            : null,
-                      ),
-                      const SizedBox(height: 18),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final width = constraints.maxWidth >= 620
-                              ? (constraints.maxWidth - 18) / 2
-                              : constraints.maxWidth;
-                          return Wrap(
-                            spacing: 18,
-                            runSpacing: 18,
-                            children: [
-                              SizedBox(
-                                width: width,
-                                child: TextFormField(
-                                  key: const Key('receipt-reference'),
-                                  controller: _reference,
-                                  enabled: !locked,
-                                  maxLength: 120,
-                                  decoration: const InputDecoration(
-                                    labelText:
-                                        'Referencia del proveedor (opcional)',
-                                  ),
-                                  validator: (value) =>
-                                      RegExp(
-                                        r'[\x00-\x1f]',
-                                      ).hasMatch(value ?? '')
-                                      ? 'La referencia contiene caracteres no válidos.'
-                                      : null,
-                                ),
-                              ),
-                              SizedBox(
-                                width: width,
-                                child: TextFormField(
-                                  key: const Key('receipt-due'),
-                                  controller: _due,
-                                  enabled: !locked,
-                                  maxLength: 10,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Vencimiento',
-                                    hintText: 'AAAA-MM-DD',
-                                    helperText:
-                                        'Fecha de la deuda · recepción con fecha de hoy en Bogotá',
-                                  ),
-                                  validator: (value) =>
-                                      InventoryController.isValidIsoDate(
-                                        value?.trim() ?? '',
+                            OutlinedButton.icon(
+                              key: const Key('intake-opening'),
+                              onPressed:
+                                  locked ||
+                                      controller.loadError != null ||
+                                      !data.paymentOptions.any(
+                                        (item) =>
+                                            item.isActive &&
+                                            item.canRecordOpening,
                                       )
-                                      ? null
-                                      : 'Escribe una fecha real: AAAA-MM-DD.',
-                                ),
+                                  ? null
+                                  : () => _opening(data),
+                              icon: const Icon(
+                                Icons.account_balance_wallet_outlined,
                               ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      for (var index = 0; index < _lines.length; index++)
-                        _lineEditor(_lines[index], index, data, locked),
-                      TextButton.icon(
-                        key: const Key('receipt-add-line'),
-                        onPressed: locked || _lines.length >= 100
-                            ? null
-                            : () => setState(() {
-                                _lines.add(_ReceiptLineDraft());
-                                _confirmed = false;
-                              }),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Añadir producto'),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        _totalLabel(),
-                        key: const Key('receipt-total'),
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Quedará pendiente de pago. Puedes registrar abonos desde Pagos después de confirmar la recepción.',
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton.icon(
-                        key: const Key('receive-purchase'),
-                        onPressed:
-                            controller.busy ||
-                                (controller.pendingReceipt == null &&
-                                    (!data.suppliers.any(
-                                          (value) => value.isActive,
-                                        ) ||
-                                        !data.products.any(
-                                          controller.isProductAvailable,
-                                        )))
-                            ? null
-                            : _receive,
-                        icon: Icon(
-                          controller.receiving
-                              ? Icons.hourglass_empty
-                              : controller.pendingReceipt != null
-                              ? Icons.refresh
-                              : Icons.inventory_2_outlined,
+                              label: const Text('Saldo inicial'),
+                            ),
+                          ],
                         ),
-                        label: Text(
-                          controller.receiving
-                              ? 'Confirmando recepción…'
-                              : controller.pendingReceipt != null
-                              ? 'Reintentar la misma compra'
-                              : 'Confirmar recepción a crédito',
-                        ),
-                      ),
-                      if (controller.pendingReceipt != null)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 12),
-                          child: Text(
-                            'Mantén la aplicación abierta y reintenta esta compra antes de registrar otra.',
-                          ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'Historial de recepciones',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Compras a crédito registradas. Consulta lo pagado y pendiente; aplica abonos desde Pagos.',
-            ),
-            const SizedBox(height: 16),
-            _history(data),
+              const SizedBox(height: 32),
+              Text(
+                'Historial de ingresos',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              _history(data),
+            ],
           ],
+        ),
+      );
+    },
+  );
+
+  Widget _fields(List<Widget> fields) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 900
+          ? fields.length
+          : constraints.maxWidth >= 580
+          ? 2
+          : 1;
+      final width = (constraints.maxWidth - (columns - 1) * 16) / columns;
+      return Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        children: [
+          for (final field in fields) SizedBox(width: width, child: field),
         ],
       );
     },
   );
 
-  Widget _lineEditor(
-    _ReceiptLineDraft line,
-    int index,
-    InventorySnapshot data,
+  Widget _productField(
+    StockIntakeSnapshot data,
     bool locked,
-  ) => Container(
-    key: ValueKey(line.id),
-    margin: const EdgeInsets.only(bottom: 16),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      border: Border.all(color: const Color(0xFFE4E7E0)),
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 700;
-        final productWidth = wide
-            ? constraints.maxWidth - 376
-            : constraints.maxWidth;
-        final amountWidth = wide
-            ? 200.0
-            : constraints.maxWidth >= 400
-            ? constraints.maxWidth - 160
-            : constraints.maxWidth;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Producto ${index + 1}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Quitar producto ${index + 1}',
-                  onPressed: locked || _lines.length == 1
-                      ? null
-                      : () => setState(() {
-                          _lines.remove(line);
-                          line.dispose();
-                          _confirmed = false;
-                        }),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              crossAxisAlignment: WrapCrossAlignment.start,
-              children: [
-                SizedBox(
-                  width: productWidth,
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('receipt-product-${line.id}'),
-                    initialValue: line.productId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Producto'),
-                    items: [
-                      for (final product in data.products.where(
-                        (item) =>
-                            widget.controller.isProductAvailable(item) ||
-                            item.id == line.productId,
-                      ))
-                        DropdownMenuItem(
-                          value: product.id,
-                          enabled: widget.controller.isProductAvailable(
-                            product,
-                          ),
-                          child: Text(
-                            '${product.name}${widget.controller.isProductAvailable(product) ? '' : ' (no disponible)'}',
-                          ),
-                        ),
-                    ],
-                    onChanged: locked
-                        ? null
-                        : (value) => setState(() {
-                            line.productId = value;
-                            _confirmed = false;
-                          }),
-                    validator: (value) =>
-                        !data.products.any(
-                          (item) =>
-                              item.id == value &&
-                              widget.controller.isProductAvailable(item),
-                        )
-                        ? 'Selecciona un producto disponible.'
-                        : null,
-                  ),
-                ),
-                SizedBox(
-                  width: wide
-                      ? 144
-                      : constraints.maxWidth < 144
-                      ? constraints.maxWidth
-                      : 144,
-                  child: TextFormField(
-                    key: ValueKey('receipt-quantity-${line.id}'),
-                    controller: line.quantity,
-                    enabled: !locked,
-                    decoration: const InputDecoration(labelText: 'Unidades'),
-                    validator: (value) {
-                      if (!RegExp(r'^[0-9]+$').hasMatch(value?.trim() ?? '')) {
-                        return 'Solo enteros.';
-                      }
-                      final number = BigInt.tryParse(value!.trim());
-                      return number == null ||
-                              number <= BigInt.zero ||
-                              number > Money.maxMinorUnits
-                          ? 'Cantidad no válida.'
-                          : null;
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: amountWidth,
-                  child: TextFormField(
-                    key: ValueKey('receipt-cost-${line.id}'),
-                    controller: line.cost,
-                    enabled: !locked,
-                    decoration: InputDecoration(
-                      labelText: 'Costo TOTAL (${widget.profile.currencyCode})',
-                      helperText: '${widget.profile.moneyScale} decimales',
-                    ),
-                    validator: (value) =>
-                        inventoryAmountError(value, widget.profile),
-                    onChanged: (_) => setState(() => _confirmed = false),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
+  ) => RawAutocomplete<CatalogProduct>(
+    textEditingController: _name,
+    focusNode: _productFocus,
+    displayStringForOption: (item) => item.name,
+    optionsBuilder: (text) {
+      final query = text.text.trim().toLowerCase();
+      return query.isEmpty
+          ? const Iterable<CatalogProduct>.empty()
+          : data.products
+                .where(
+                  (item) =>
+                      item.isActive &&
+                      (item.name.toLowerCase().contains(query) ||
+                          (item.sku?.toLowerCase().contains(query) ?? false)),
+                )
+                .take(8);
+    },
+    onSelected: (product) => setState(() {
+      _existing = product;
+      _sku.text = product.sku ?? '';
+      _categoryId = product.categoryId;
+      _pvp.text = _amount(product.listPriceMinor);
+      final last = data.entries
+          .where((item) => item.productId == product.id)
+          .firstOrNull;
+      _cost.text = last == null ? '' : _amount(last.unitPurchasePriceMinor);
+      if (last != null) {
+        _supplier.text = last.supplierName;
+        _supplierId = data.suppliers
+            .where((item) => item.name == last.supplierName && item.isActive)
+            .firstOrNull
+            ?.id;
+      }
+      _formVersion++;
+    }),
+    fieldViewBuilder: (context, controller, focus, submit) => TextFormField(
+      key: const Key('intake-name'),
+      controller: controller,
+      focusNode: focus,
+      enabled: !locked,
+      maxLength: 120,
+      decoration: const InputDecoration(
+        labelText: 'Nombre del producto',
+        hintText: 'Nuevo producto o buscar por nombre / SKU',
+      ),
+      validator: inventoryNameError,
+      onFieldSubmitted: (_) => submit(),
+      onChanged: (value) {
+        if (_existing != null && value != _existing!.name) {
+          setState(() {
+            _existing = null;
+            _sku.clear();
+            _pvp.clear();
+            _cost.clear();
+            _categoryId = null;
+            _formVersion++;
+          });
+        }
       },
+    ),
+    optionsViewBuilder: (context, selected, options) => _suggestions([
+      for (final product in options)
+        ListTile(
+          dense: true,
+          title: Text(product.name),
+          subtitle: product.sku == null ? null : Text(product.sku!),
+          onTap: () => selected(product),
+        ),
+    ]),
+  );
+
+  Widget _supplierField(StockIntakeSnapshot data, bool locked) =>
+      RawAutocomplete<InventorySupplier>(
+        textEditingController: _supplier,
+        focusNode: _supplierFocus,
+        displayStringForOption: (item) => item.name,
+        optionsBuilder: (text) {
+          final query = text.text.trim().toLowerCase();
+          return query.isEmpty
+              ? const Iterable<InventorySupplier>.empty()
+              : data.suppliers
+                    .where(
+                      (item) =>
+                          item.isActive &&
+                          item.name.toLowerCase().contains(query),
+                    )
+                    .take(8);
+        },
+        onSelected: (supplier) => setState(() => _supplierId = supplier.id),
+        fieldViewBuilder: (context, controller, focus, submit) => TextFormField(
+          key: const Key('intake-supplier'),
+          controller: controller,
+          focusNode: focus,
+          enabled: !locked,
+          maxLength: 120,
+          decoration: const InputDecoration(
+            labelText: 'Proveedor',
+            helperText: 'Elige uno existente o escribe el nombre de uno nuevo.',
+          ),
+          validator: inventoryNameError,
+          onFieldSubmitted: (_) => submit(),
+          onChanged: (value) {
+            if (_supplierId != null &&
+                !data.suppliers.any(
+                  (item) => item.id == _supplierId && item.name == value,
+                )) {
+              setState(() => _supplierId = null);
+            }
+          },
+        ),
+        optionsViewBuilder: (context, selected, options) => _suggestions([
+          for (final supplier in options)
+            ListTile(
+              dense: true,
+              title: Text(supplier.name),
+              onTap: () => selected(supplier),
+            ),
+        ]),
+      );
+
+  Widget _suggestions(List<Widget> children) => Align(
+    alignment: Alignment.topLeft,
+    child: Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 280),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          shrinkWrap: true,
+          children: children,
+        ),
+      ),
     ),
   );
 
-  String _totalLabel() {
-    var total = BigInt.zero;
-    for (final line in _lines) {
-      if (inventoryAmountError(line.cost.text, widget.profile) != null) {
-        return 'Total: completa los costos';
-      }
-      total += Money.parseEsCo(
-        line.cost.text,
-        currency: widget.profile.currencyCode,
-        scale: widget.profile.moneyScale,
-      ).asBigInt;
-    }
-    if (total > Money.maxMinorUnits) return 'Total: supera el límite permitido';
-    return 'Total a crédito: ${inventoryMoney(total.toInt(), widget.profile)}';
+  String? _positiveAmountError(String? value) {
+    final error = inventoryAmountError(value, widget.profile);
+    if (error != null) return error;
+    return Money.parseEsCo(
+              value!,
+              currency: widget.profile.currencyCode,
+              scale: widget.profile.moneyScale,
+            ).minorUnits <=
+            0
+        ? 'Escribe un precio mayor que cero.'
+        : null;
+  }
+
+  String? _quantityError(String? value) {
+    final text = value?.trim() ?? '';
+    final quantity = BigInt.tryParse(text);
+    return !RegExp(r'^[0-9]+$').hasMatch(text) ||
+            quantity == null ||
+            quantity <= BigInt.zero ||
+            quantity > Money.maxMinorUnits
+        ? 'Escribe una cantidad entera positiva.'
+        : null;
   }
 
   Future<void> _receive() async {
-    final controller = widget.controller;
-    var confirmed = false;
-    if (controller.pendingReceipt != null) {
-      confirmed = await controller.retryReceipt();
-    } else {
-      if (!_form.currentState!.validate()) return;
-      confirmed = await controller.receivePurchase(
-        supplierId: _supplierId!,
-        reference: _reference.text,
-        dueDate: _due.text.trim(),
-        lines: [
-          for (final line in _lines)
-            ReceiptLineInput(
-              productId: line.productId!,
-              quantity: BigInt.parse(line.quantity.text.trim()).toInt(),
-              totalCostMinor: Money.parseEsCo(
-                line.cost.text,
-                currency: widget.profile.currencyCode,
-                scale: widget.profile.moneyScale,
-              ).minorUnits,
-            ),
-        ],
-      );
-    }
-    if (!mounted || !confirmed) return;
-    setState(() {
-      _form.currentState!.reset();
-      _reference.clear();
-      _due.clear();
-      _supplierId = null;
-      for (final line in _lines) {
-        line.dispose();
-      }
-      _lines
-        ..clear()
-        ..add(_ReceiptLineDraft());
-      _formVersion++;
-      _confirmed = true;
-      _historyPage = 0;
-    });
+    if (!_form.currentState!.validate()) return;
+    final payment = _payment(widget.controller.snapshot!);
+    if (payment == null) return;
+    await widget.controller.receive(
+      expectedProduct: _existing,
+      productName: _name.text,
+      sku: _sku.text,
+      categoryId: _categoryId!,
+      supplierId: _supplierId,
+      supplierName: _supplier.text,
+      unitPurchasePriceMinor: Money.parseEsCo(
+        _cost.text,
+        currency: widget.profile.currencyCode,
+        scale: widget.profile.moneyScale,
+      ).minorUnits,
+      listPriceMinor: Money.parseEsCo(
+        _pvp.text,
+        currency: widget.profile.currencyCode,
+        scale: widget.profile.moneyScale,
+      ).minorUnits,
+      quantity: BigInt.parse(_quantity.text.trim()).toInt(),
+      paymentOptionId: payment.id,
+    );
   }
 
-  Widget _history(InventorySnapshot data) {
-    final rows = data.receipts;
+  Widget _pending(PreparedStockIntake pending, StockIntakeSnapshot data) {
+    final command = pending.command;
+    final payment = data.paymentOptions
+        .where((item) => item.id == command.paymentOptionId)
+        .firstOrNull;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      color: Theme.of(context).colorScheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              pending.status == 'rejected'
+                  ? 'Ingreso por corregir'
+                  : 'Ingreso pendiente de confirmar',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${command.productName} · ${command.quantity} unidades · ${payment?.label ?? 'Cuenta guardada'}',
+            ),
+            if (pending.rejectionReason != null) Text(pending.rejectionReason!),
+            const SizedBox(height: 12),
+            FilledButton(
+              key: ValueKey('intake-retry-${command.commandId}'),
+              onPressed: widget.controller.busy
+                  ? null
+                  : () => pending.status == 'rejected'
+                        ? widget.controller.discardRejected(command.commandId)
+                        : widget.controller.retry(command.commandId),
+              child: Text(
+                pending.status == 'rejected'
+                    ? 'Corregir ingreso'
+                    : 'Reintentar el mismo ingreso',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pendingOpening(StockIntakeSnapshot data) {
+    final opening = widget.controller.pendingOpening!;
+    final option = data.paymentOptions
+        .where((item) => item.id == opening.paymentOptionId)
+        .firstOrNull;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Saldo inicial pendiente: ${option?.label ?? 'Cuenta guardada'} · ${inventoryMoney(opening.amountMinor, widget.profile)}',
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              key: const Key('intake-retry-opening'),
+              onPressed: widget.controller.busy
+                  ? null
+                  : widget.controller.retryOpening,
+              child: const Text('Reintentar saldo inicial'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _opening(StockIntakeSnapshot data) => showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => _OpeningDialog(
+      controller: widget.controller,
+      profile: widget.profile,
+      options: data.paymentOptions
+          .where((item) => item.isActive && item.canRecordOpening)
+          .toList(),
+      selected: _payment(data)?.id,
+    ),
+  );
+
+  Widget _history(StockIntakeSnapshot data) {
+    final rows = data.entries;
     if (rows.isEmpty) {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: Text('Aún no hay compras recibidas.'),
+          child: Text('Aún no hay ingresos de productos.'),
         ),
       );
     }
@@ -489,7 +729,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
     final page = _historyPage.clamp(0, (rows.length - 1) ~/ pageSize);
     return Column(
       children: [
-        for (final receipt in rows.skip(page * pageSize).take(pageSize))
+        for (final entry in rows.skip(page * pageSize).take(pageSize))
           Card(
             margin: const EdgeInsets.only(bottom: 10),
             child: Padding(
@@ -498,59 +738,33 @@ class _PurchasesPageState extends State<PurchasesPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Wrap(
-                    spacing: 24,
-                    runSpacing: 12,
+                    spacing: 16,
+                    runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        receipt.supplierName,
+                        '${entry.productName} · ${entry.quantity} unidades',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
+                      Chip(label: Text('Pagada · ${entry.paymentLabel}')),
                       Text(
-                        inventoryMoney(receipt.totalMinor, widget.profile),
+                        inventoryMoney(entry.totalCostMinor, widget.profile),
                         style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      Chip(
-                        label: Text(
-                          receipt.remainingMinor == 0
-                              ? 'Pagada'
-                              : 'Recibida a crédito',
-                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    'Pagado: ${inventoryMoney(receipt.paidMinor, widget.profile)} · '
-                    'Pendiente: ${inventoryMoney(receipt.remainingMinor, widget.profile)}',
+                    '${entry.supplierName} · ${entry.categoryName}${entry.sku == null ? '' : ' · ${entry.sku}'}',
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    'Recepción: ${InventoryController.isoDate(receipt.receivedAtUtc.subtract(const Duration(hours: 5)))} · Vence: ${receipt.dueDate}',
+                    'Compra unitaria: ${inventoryMoney(entry.unitPurchasePriceMinor, widget.profile)} · PVP: ${inventoryMoney(entry.listPriceMinor, widget.profile)}',
                   ),
-                  if (receipt.reference != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text('Referencia: ${receipt.reference}'),
-                    ),
-                  if (receipt.lines.isNotEmpty)
-                    ExpansionTile(
-                      tilePadding: EdgeInsets.zero,
-                      title: Text('Ver productos (${receipt.lines.length})'),
-                      children: [
-                        for (final line in receipt.lines)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                '${line.productName} · ${line.quantity} unidades · '
-                                'Costo total: ${inventoryMoney(line.totalCostMinor, widget.profile)}',
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Ingreso: ${InventoryController.isoDate(entry.occurredAtUtc.subtract(const Duration(hours: 5)))}',
+                  ),
                 ],
               ),
             ),
@@ -562,14 +776,14 @@ class _PurchasesPageState extends State<PurchasesPage> {
               '${page * pageSize + 1}–${(page * pageSize + pageSize).clamp(0, rows.length)} de ${rows.length}',
             ),
             IconButton(
-              tooltip: 'Recepciones anteriores',
+              tooltip: 'Ingresos anteriores',
               onPressed: page == 0
                   ? null
                   : () => setState(() => _historyPage = page - 1),
               icon: const Icon(Icons.chevron_left),
             ),
             IconButton(
-              tooltip: 'Recepciones siguientes',
+              tooltip: 'Ingresos siguientes',
               onPressed: (page + 1) * pageSize >= rows.length
                   ? null
                   : () => setState(() => _historyPage = page + 1),
@@ -582,13 +796,147 @@ class _PurchasesPageState extends State<PurchasesPage> {
   }
 }
 
-class _ReceiptLineDraft {
-  final String id = InventoryIds.next();
-  String? productId;
-  final quantity = TextEditingController(text: '1');
-  final cost = TextEditingController();
+class _OpeningDialog extends StatefulWidget {
+  const _OpeningDialog({
+    required this.controller,
+    required this.profile,
+    required this.options,
+    this.selected,
+  });
+  final StockIntakeController controller;
+  final BusinessProfile profile;
+  final List<IntakePaymentOption> options;
+  final String? selected;
+  @override
+  State<_OpeningDialog> createState() => _OpeningDialogState();
+}
+
+class _OpeningDialogState extends State<_OpeningDialog> {
+  final _form = GlobalKey<FormState>();
+  final _amount = TextEditingController();
+  late String? _selected =
+      widget.options.any((item) => item.id == widget.selected)
+      ? widget.selected
+      : widget.options.firstOrNull?.id;
+  @override
   void dispose() {
-    quantity.dispose();
-    cost.dispose();
+    _amount.dispose();
+    super.dispose();
   }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.controller,
+    builder: (context, _) => AlertDialog(
+      title: const Text('Declarar saldo inicial'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _form,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Escribe el dinero real que tenías en esta cuenta antes de empezar a registrar movimientos. Se permite una sola vez por cuenta y antes de su primer movimiento.',
+                ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  key: const Key('opening-account'),
+                  initialValue: _selected,
+                  decoration: const InputDecoration(labelText: 'Cuenta'),
+                  isExpanded: true,
+                  items: [
+                    for (final option in widget.options)
+                      DropdownMenuItem(
+                        value: option.id,
+                        child: Text(option.label),
+                      ),
+                  ],
+                  onChanged:
+                      widget.controller.busy ||
+                          widget.controller.pendingOpening != null
+                      ? null
+                      : (value) => setState(() => _selected = value),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const Key('opening-amount'),
+                  controller: _amount,
+                  enabled:
+                      !widget.controller.busy &&
+                      widget.controller.pendingOpening == null,
+                  decoration: InputDecoration(
+                    labelText: 'Saldo inicial (${widget.profile.currencyCode})',
+                  ),
+                  validator: (value) {
+                    final error = inventoryAmountError(value, widget.profile);
+                    if (error != null) return error;
+                    return Money.parseEsCo(
+                              value!,
+                              currency: widget.profile.currencyCode,
+                              scale: widget.profile.moneyScale,
+                            ).minorUnits >
+                            0
+                        ? null
+                        : 'Escribe un saldo positivo.';
+                  },
+                ),
+                if (widget.controller.operationError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      widget.controller.operationError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: widget.controller.busy
+              ? null
+              : () => Navigator.pop(context),
+          child: const Text('Cerrar'),
+        ),
+        FilledButton(
+          key: const Key('opening-save'),
+          onPressed: widget.controller.busy
+              ? null
+              : () async {
+                  bool saved;
+                  if (widget.controller.pendingOpening != null) {
+                    saved = await widget.controller.retryOpening();
+                  } else {
+                    if (!_form.currentState!.validate() || _selected == null) {
+                      return;
+                    }
+                    saved = await widget.controller.recordOpening(
+                      paymentOptionId: _selected!,
+                      amountMinor: Money.parseEsCo(
+                        _amount.text,
+                        currency: widget.profile.currencyCode,
+                        scale: widget.profile.moneyScale,
+                      ).minorUnits,
+                    );
+                  }
+                  if (saved && context.mounted) Navigator.pop(context);
+                },
+          child: Text(
+            widget.controller.savingOpening
+                ? 'Guardando…'
+                : widget.controller.pendingOpening != null
+                ? 'Reintentar el mismo saldo'
+                : 'Guardar saldo inicial',
+          ),
+        ),
+      ],
+    ),
+  );
 }

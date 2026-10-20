@@ -212,7 +212,18 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
   }
 
   @override
-  Future<ReceiptResult> receivePurchase(ReceiptCommand command) async {
+  Future<ReceiptResult> receivePurchase(ReceiptCommand command) =>
+      _database.database.transaction((txn) async {
+        await _guardPaidCommand(txn, command.commandId, internal: false);
+        return receivePurchaseInTransaction(txn, command);
+      }, exclusive: true);
+
+  /// Composes a fully paid intake without nesting SQLite transactions.
+  Future<ReceiptResult> receivePurchaseInTransaction(
+    Transaction txn,
+    ReceiptCommand command,
+  ) async {
+    await _guardPaidCommand(txn, command.commandId, internal: true);
     _id(command.commandId);
     _id(command.supplierId);
     if (!command.occurredAtUtc.isUtc ||
@@ -259,316 +270,334 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
       }
       _int64(BigInt.from(line.quantity), 'Cantidad');
     }
-    return _database.database.transaction((txn) async {
-      final profile = await _profile(txn);
-      var total = BigInt.zero;
-      for (final line in lines) {
-        _amount(line.totalCostMinor, profile, 'Costo total de línea');
-        total += BigInt.from(line.totalCostMinor);
-      }
-      final totalMinor = _int64(total, 'Total de compra');
-      if (totalMinor <= 0) {
-        throw const InventoryValidationException(
-          'El total de la compra debe ser positivo.',
-        );
-      }
-      final canonicalPayload = jsonEncode({
-        'version': 1,
-        'profileId': profile.profileId,
-        'currency': profile.currencyCode,
-        'scale': profile.moneyScale,
-        'supplierId': command.supplierId,
-        'reference': reference,
-        'dueDate': command.dueDate,
-        'occurredAtUtc': command.occurredAtUtc.toIso8601String(),
-        'lines': lines
-            .map(
-              (line) => {
-                'productId': line.productId,
-                'quantity': line.quantity,
-                'totalCostMinor': line.totalCostMinor,
-              },
-            )
-            .toList(),
-      });
-      final payloadHash = DatabaseSchema.checksum(canonicalPayload);
-      final prior = await txn.query(
-        'command_log',
-        where: 'id = ?',
-        whereArgs: [command.commandId],
+    final profile = await _profile(txn);
+    var total = BigInt.zero;
+    for (final line in lines) {
+      _amount(line.totalCostMinor, profile, 'Costo total de línea');
+      total += BigInt.from(line.totalCostMinor);
+    }
+    final totalMinor = _int64(total, 'Total de compra');
+    if (totalMinor <= 0) {
+      throw const InventoryValidationException(
+        'El total de la compra debe ser positivo.',
       );
-      if (prior.isNotEmpty) {
-        final row = prior.single;
-        if (row['command_type'] != 'receive_purchase' ||
-            row['response_version'] != 1 ||
-            row['payload_hash'] != payloadHash) {
-          throw const InventoryValidationException(
-            'Este identificador ya corresponde a otro comando.',
-          );
-        }
-        final stored =
-            jsonDecode(row['response_json'] as String) as Map<String, dynamic>;
-        if (stored['canonicalPayload'] != canonicalPayload) {
-          throw const InventoryValidationException(
-            'Este identificador ya corresponde a otro comando.',
-          );
-        }
-        final response = stored['result'] as Map<String, dynamic>;
-        return ReceiptResult(
-          documentId: response['documentId'] as String,
-          commandId: response['commandId'] as String,
-          totalMinor: response['totalMinor'] as int,
+    }
+    final canonicalPayload = jsonEncode({
+      'version': 1,
+      'profileId': profile.profileId,
+      'currency': profile.currencyCode,
+      'scale': profile.moneyScale,
+      'supplierId': command.supplierId,
+      'reference': reference,
+      'dueDate': command.dueDate,
+      'occurredAtUtc': command.occurredAtUtc.toIso8601String(),
+      'lines': lines
+          .map(
+            (line) => {
+              'productId': line.productId,
+              'quantity': line.quantity,
+              'totalCostMinor': line.totalCostMinor,
+            },
+          )
+          .toList(),
+    });
+    final payloadHash = DatabaseSchema.checksum(canonicalPayload);
+    final prior = await txn.query(
+      'command_log',
+      where: 'id = ?',
+      whereArgs: [command.commandId],
+    );
+    if (prior.isNotEmpty) {
+      final row = prior.single;
+      if (row['command_type'] != 'receive_purchase' ||
+          row['response_version'] != 1 ||
+          row['payload_hash'] != payloadHash) {
+        throw const InventoryValidationException(
+          'Este identificador ya corresponde a otro comando.',
         );
       }
+      final stored =
+          jsonDecode(row['response_json'] as String) as Map<String, dynamic>;
+      if (stored['canonicalPayload'] != canonicalPayload) {
+        throw const InventoryValidationException(
+          'Este identificador ya corresponde a otro comando.',
+        );
+      }
+      final response = stored['result'] as Map<String, dynamic>;
+      return ReceiptResult(
+        documentId: response['documentId'] as String,
+        commandId: response['commandId'] as String,
+        totalMinor: response['totalMinor'] as int,
+      );
+    }
 
-      final reservedSaleCommands = await txn.query(
-        'sale_confirmations',
-        columns: ['command_id'],
-        where: 'command_id = ?',
-        whereArgs: [command.commandId],
+    final reservedSaleCommands = await txn.query(
+      'sale_confirmations',
+      columns: ['command_id'],
+      where: 'command_id = ?',
+      whereArgs: [command.commandId],
+    );
+    if (reservedSaleCommands.isNotEmpty) {
+      throw const InventoryValidationException(
+        'Este identificador ya corresponde a una confirmación de venta.',
       );
-      if (reservedSaleCommands.isNotEmpty) {
-        throw const InventoryValidationException(
-          'Este identificador ya corresponde a una confirmación de venta.',
-        );
-      }
-      if ((await txn.query(
-        'collection_requests',
-        columns: ['command_id'],
-        where: 'command_id = ?',
-        whereArgs: [command.commandId],
-      )).isNotEmpty) {
-        throw const InventoryValidationException(
-          'Este identificador ya corresponde a una solicitud de cobro.',
-        );
-      }
+    }
+    if ((await txn.query(
+      'collection_requests',
+      columns: ['command_id'],
+      where: 'command_id = ?',
+      whereArgs: [command.commandId],
+    )).isNotEmpty) {
+      throw const InventoryValidationException(
+        'Este identificador ya corresponde a una solicitud de cobro.',
+      );
+    }
 
-      if ((await txn.query(
-        'supplier_payment_requests',
-        columns: ['command_id'],
-        where: 'command_id = ?',
-        whereArgs: [command.commandId],
-      )).isNotEmpty) {
-        throw const InventoryValidationException(
-          'Este identificador ya corresponde a una solicitud de pago.',
-        );
-      }
-      if ((await txn.rawQuery(
-        'SELECT command_id FROM quick_sale_requests WHERE command_id = ? OR sale_command_id = ? OR collection_command_id = ?',
-        [command.commandId, command.commandId, command.commandId],
-      )).isNotEmpty) {
-        throw const InventoryValidationException(
-          'Este identificador ya corresponde a una venta de mostrador.',
-        );
-      }
-      final suppliers = await txn.query(
-        'counterparties',
-        where: 'id = ? AND is_supplier = 1 AND is_active = 1',
-        whereArgs: [command.supplierId],
+    if ((await txn.query(
+      'supplier_payment_requests',
+      columns: ['command_id'],
+      where: 'command_id = ?',
+      whereArgs: [command.commandId],
+    )).isNotEmpty) {
+      throw const InventoryValidationException(
+        'Este identificador ya corresponde a una solicitud de pago.',
       );
-      if (suppliers.isEmpty) {
-        throw const InventoryValidationException(
-          'Selecciona un proveedor activo.',
-        );
-      }
-      final productRows = <String, Map<String, Object?>>{};
-      final stock = await _stock(txn);
-      for (final line in lines) {
-        final rows = await txn.rawQuery(
-          '''
+    }
+    if ((await txn.rawQuery(
+      'SELECT command_id FROM quick_sale_requests WHERE command_id = ? OR sale_command_id = ? OR collection_command_id = ?',
+      [command.commandId, command.commandId, command.commandId],
+    )).isNotEmpty) {
+      throw const InventoryValidationException(
+        'Este identificador ya corresponde a una venta de mostrador.',
+      );
+    }
+    final suppliers = await txn.query(
+      'counterparties',
+      where: 'id = ? AND is_supplier = 1 AND is_active = 1',
+      whereArgs: [command.supplierId],
+    );
+    if (suppliers.isEmpty) {
+      throw const InventoryValidationException(
+        'Selecciona un proveedor activo.',
+      );
+    }
+    final productRows = <String, Map<String, Object?>>{};
+    final stock = await _stock(txn);
+    for (final line in lines) {
+      final rows = await txn.rawQuery(
+        '''
 SELECT c.*, g.is_active AS category_is_active FROM catalog_items c
 LEFT JOIN categories g ON g.id = c.category_id WHERE c.id = ?
 ''',
-          [line.productId],
+        [line.productId],
+      );
+      if (rows.isEmpty ||
+          rows.single['is_active'] != 1 ||
+          (rows.single['category_id'] != null &&
+              rows.single['category_is_active'] != 1)) {
+        throw const InventoryValidationException(
+          'Todos los productos y sus categorías deben estar activos.',
         );
-        if (rows.isEmpty ||
-            rows.single['is_active'] != 1 ||
-            (rows.single['category_id'] != null &&
-                rows.single['category_is_active'] != 1)) {
-          throw const InventoryValidationException(
-            'Todos los productos y sus categorías deben estar activos.',
-          );
-        }
-        productRows[line.productId] = rows.single;
-        final laterSales = await txn.rawQuery(
-          '''
+      }
+      productRows[line.productId] = rows.single;
+      final laterSales = await txn.rawQuery(
+        '''
 SELECT s.sold_at_utc FROM sales s
 JOIN sale_lines l ON l.sale_id = s.document_id
 JOIN business_documents d ON d.id = s.document_id AND d.status = 'posted'
 JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
 WHERE l.product_id = ?
 ''',
-          [line.productId],
-        );
-        if (laterSales.any(
-          (row) => DateTime.parse(
-            row['sold_at_utc'] as String,
-          ).isAfter(command.occurredAtUtc),
-        )) {
-          throw const InventoryValidationException(
-            'La recepción no puede ser anterior a una venta confirmada del mismo producto.',
-          );
-        }
-        final current = stock[line.productId] ?? _StockTotals();
-        _int64(
-          current.quantity + BigInt.from(line.quantity),
-          'Existencias resultantes',
-        );
-        _int64(
-          current.cost + BigInt.from(line.totalCostMinor),
-          'Valor de existencias resultante',
+        [line.productId],
+      );
+      if (laterSales.any(
+        (row) => DateTime.parse(
+          row['sold_at_utc'] as String,
+        ).isAfter(command.occurredAtUtc),
+      )) {
+        throw const InventoryValidationException(
+          'La recepción no puede ser anterior a una venta confirmada del mismo producto.',
         );
       }
-      final lastSequences = await txn.query(
-        'inventory_movements',
-        columns: ['stock_sequence'],
-        orderBy: 'stock_sequence DESC',
-        limit: 1,
-      );
-      var stockSequence = lastSequences.isEmpty
-          ? BigInt.one
-          : BigInt.from(lastSequences.single['stock_sequence'] as int) +
-                BigInt.one;
+      final current = stock[line.productId] ?? _StockTotals();
       _int64(
-        stockSequence + BigInt.from(lines.length - 1),
-        'Secuencia de existencias',
+        current.quantity + BigInt.from(line.quantity),
+        'Existencias resultantes',
       );
-      final now = DateTime.now().toUtc().toIso8601String();
-      final occurredAt = command.occurredAtUtc.toIso8601String();
-      await _ensureSystemRows(txn, now);
-      final documentId = InventoryIds.next();
-      final entryId = InventoryIds.next();
-      final result = ReceiptResult(
-        documentId: documentId,
-        commandId: command.commandId,
-        totalMinor: totalMinor,
+      _int64(
+        current.cost + BigInt.from(line.totalCostMinor),
+        'Valor de existencias resultante',
       );
-      await txn.insert('command_log', {
-        'id': command.commandId,
-        'command_type': 'receive_purchase',
-        'payload_hash': payloadHash,
-        'actor_id': _operatorId,
-        'response_json': jsonEncode({
-          'canonicalPayload': canonicalPayload,
-          'result': {
-            'documentId': documentId,
-            'commandId': command.commandId,
-            'totalMinor': totalMinor,
-          },
-        }),
-        'response_version': 1,
-        'committed_at_utc': now,
-        'authorization_policy_version': 'development-single-user-v1',
+    }
+    final lastSequences = await txn.query(
+      'inventory_movements',
+      columns: ['stock_sequence'],
+      orderBy: 'stock_sequence DESC',
+      limit: 1,
+    );
+    var stockSequence = lastSequences.isEmpty
+        ? BigInt.one
+        : BigInt.from(lastSequences.single['stock_sequence'] as int) +
+              BigInt.one;
+    _int64(
+      stockSequence + BigInt.from(lines.length - 1),
+      'Secuencia de existencias',
+    );
+    final now = DateTime.now().toUtc().toIso8601String();
+    final occurredAt = command.occurredAtUtc.toIso8601String();
+    await _ensureSystemRows(txn, now);
+    final documentId = InventoryIds.next();
+    final entryId = InventoryIds.next();
+    final result = ReceiptResult(
+      documentId: documentId,
+      commandId: command.commandId,
+      totalMinor: totalMinor,
+    );
+    await txn.insert('command_log', {
+      'id': command.commandId,
+      'command_type': 'receive_purchase',
+      'payload_hash': payloadHash,
+      'actor_id': _operatorId,
+      'response_json': jsonEncode({
+        'canonicalPayload': canonicalPayload,
+        'result': {
+          'documentId': documentId,
+          'commandId': command.commandId,
+          'totalMinor': totalMinor,
+        },
+      }),
+      'response_version': 1,
+      'committed_at_utc': now,
+      'authorization_policy_version': 'development-single-user-v1',
+    });
+    await txn.insert('business_documents', {
+      'id': documentId,
+      'command_id': command.commandId,
+      'command_sequence': 0,
+      'profile_id': profile.profileId,
+      'actor_id': _operatorId,
+      'type': 'purchase_receipt',
+      'status': 'draft',
+      'occurred_at_utc': occurredAt,
+      'business_date': businessDateIso,
+      'recorded_at_utc': now,
+      'source_kind': synthetic ? 'synthetic' : 'native',
+      'date_quality': 'documented',
+    });
+    await txn.insert('purchases', {
+      'document_id': documentId,
+      'supplier_id': command.supplierId,
+      'supplier_name_snapshot': suppliers.single['name'],
+      'supplier_reference': reference,
+      'received_at_utc': occurredAt,
+      'due_date': command.dueDate,
+      'payable_minor': totalMinor,
+      'terms': 'credit',
+    });
+    await txn.insert('journal_entries', {
+      'id': entryId,
+      'document_id': documentId,
+      'status': 'draft',
+      'cost_completeness': 'complete',
+    });
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final lineId = InventoryIds.next();
+      final movementId = InventoryIds.next();
+      final sequence = _int64(stockSequence, 'Secuencia de existencias');
+      stockSequence += BigInt.one;
+      await txn.insert('purchase_lines', {
+        'id': lineId,
+        'purchase_id': documentId,
+        'sequence': i,
+        'product_id': line.productId,
+        'name_snapshot': productRows[line.productId]!['name'],
+        'quantity': line.quantity,
+        'acquisition_total_minor': line.totalCostMinor,
+        'cost_quality': 'documented',
       });
-      await txn.insert('business_documents', {
-        'id': documentId,
-        'command_id': command.commandId,
-        'command_sequence': 0,
-        'profile_id': profile.profileId,
-        'actor_id': _operatorId,
-        'type': 'purchase_receipt',
-        'status': 'draft',
-        'occurred_at_utc': occurredAt,
-        'business_date': businessDateIso,
-        'recorded_at_utc': now,
-        'source_kind': synthetic ? 'synthetic' : 'native',
-        'date_quality': 'documented',
-      });
-      await txn.insert('purchases', {
+      await txn.insert('inventory_movements', {
+        'id': movementId,
         'document_id': documentId,
-        'supplier_id': command.supplierId,
-        'supplier_name_snapshot': suppliers.single['name'],
-        'supplier_reference': reference,
-        'received_at_utc': occurredAt,
-        'due_date': command.dueDate,
-        'payable_minor': totalMinor,
-        'terms': 'credit',
+        'sequence': i,
+        'stock_sequence': sequence,
+        'product_id': line.productId,
+        'kind': 'purchase',
+        'quantity_delta': line.quantity,
+        'value_delta_minor': line.totalCostMinor,
+        'purchase_line_id': lineId,
       });
-      await txn.insert('journal_entries', {
-        'id': entryId,
-        'document_id': documentId,
-        'status': 'draft',
-        'cost_completeness': 'complete',
-      });
-      for (var i = 0; i < lines.length; i++) {
-        final line = lines[i];
-        final lineId = InventoryIds.next();
-        final movementId = InventoryIds.next();
-        final sequence = _int64(stockSequence, 'Secuencia de existencias');
-        stockSequence += BigInt.one;
-        await txn.insert('purchase_lines', {
-          'id': lineId,
-          'purchase_id': documentId,
-          'sequence': i,
-          'product_id': line.productId,
-          'name_snapshot': productRows[line.productId]!['name'],
-          'quantity': line.quantity,
-          'acquisition_total_minor': line.totalCostMinor,
-          'cost_quality': 'documented',
-        });
-        await txn.insert('inventory_movements', {
-          'id': movementId,
-          'document_id': documentId,
-          'sequence': i,
-          'stock_sequence': sequence,
-          'product_id': line.productId,
-          'kind': 'purchase',
-          'quantity_delta': line.quantity,
-          'value_delta_minor': line.totalCostMinor,
-          'purchase_line_id': lineId,
-        });
-        await txn.insert('cost_layers', {
-          'id': InventoryIds.next(),
-          'inbound_movement_id': movementId,
-          'product_id': line.productId,
-          'initial_quantity': line.quantity,
-          'total_cost_minor': line.totalCostMinor,
-          'cost_quality': 'documented',
-          'fifo_sequence': sequence,
-          'acquired_at_utc': occurredAt,
-        });
-      }
-      await txn.insert('obligations', {
+      await txn.insert('cost_layers', {
         'id': InventoryIds.next(),
-        'origin_document_id': documentId,
-        'sequence': 0,
-        'counterparty_id': command.supplierId,
-        'kind': 'supplier_payable',
-        'control_account_id': _payableAccountId,
-        'initial_minor': totalMinor,
-        'issued_at_utc': occurredAt,
-        'due_date': command.dueDate,
+        'inbound_movement_id': movementId,
+        'product_id': line.productId,
+        'initial_quantity': line.quantity,
+        'total_cost_minor': line.totalCostMinor,
+        'cost_quality': 'documented',
+        'fifo_sequence': sequence,
+        'acquired_at_utc': occurredAt,
       });
-      await txn.insert('journal_lines', {
-        'id': InventoryIds.next(),
-        'entry_id': entryId,
-        'sequence': 0,
-        'account_id': _inventoryAccountId,
-        'debit_minor': totalMinor,
-        'credit_minor': 0,
-      });
-      await txn.insert('journal_lines', {
-        'id': InventoryIds.next(),
-        'entry_id': entryId,
-        'sequence': 1,
-        'account_id': _payableAccountId,
-        'debit_minor': 0,
-        'credit_minor': totalMinor,
-      });
-      await txn.update(
-        'business_documents',
-        {'status': 'posted'},
-        where: 'id = ?',
-        whereArgs: [documentId],
+    }
+    await txn.insert('obligations', {
+      'id': InventoryIds.next(),
+      'origin_document_id': documentId,
+      'sequence': 0,
+      'counterparty_id': command.supplierId,
+      'kind': 'supplier_payable',
+      'control_account_id': _payableAccountId,
+      'initial_minor': totalMinor,
+      'issued_at_utc': occurredAt,
+      'due_date': command.dueDate,
+    });
+    await txn.insert('journal_lines', {
+      'id': InventoryIds.next(),
+      'entry_id': entryId,
+      'sequence': 0,
+      'account_id': _inventoryAccountId,
+      'debit_minor': totalMinor,
+      'credit_minor': 0,
+    });
+    await txn.insert('journal_lines', {
+      'id': InventoryIds.next(),
+      'entry_id': entryId,
+      'sequence': 1,
+      'account_id': _payableAccountId,
+      'debit_minor': 0,
+      'credit_minor': totalMinor,
+    });
+    await txn.update(
+      'business_documents',
+      {'status': 'posted'},
+      where: 'id = ?',
+      whereArgs: [documentId],
+    );
+    await txn.update(
+      'journal_entries',
+      {'status': 'posted', 'posted_at_utc': now},
+      where: 'id = ?',
+      whereArgs: [entryId],
+    );
+    return result;
+  }
+
+  static Future<void> _guardPaidCommand(
+    DatabaseExecutor txn,
+    String id, {
+    required bool internal,
+  }) async {
+    final rows = await txn.rawQuery(
+      'SELECT * FROM paid_purchase_requests WHERE command_id=? OR purchase_command_id=? OR payment_command_id=?',
+      [id, id, id],
+    );
+    if (rows.isNotEmpty &&
+        !(internal &&
+            rows.length == 1 &&
+            rows.single['purchase_command_id'] == id &&
+            rows.single['status'] == 'executing')) {
+      throw const InventoryValidationException(
+        'El identificador pertenece a un ingreso de mercancía.',
       );
-      await txn.update(
-        'journal_entries',
-        {'status': 'posted', 'posted_at_utc': now},
-        where: 'id = ?',
-        whereArgs: [entryId],
-      );
-      return result;
-    }, exclusive: true);
+    }
   }
 
   static Future<BusinessProfile> _profile(DatabaseExecutor txn) async {

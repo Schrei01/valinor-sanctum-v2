@@ -359,6 +359,7 @@ void main() {
     expect(DatabaseSchema.migration3Checksum, 'fnv1a64:c719534b847edc09');
     expect(DatabaseSchema.migration4Checksum, 'fnv1a64:b669041fbf59266d');
     expect(DatabaseSchema.migration5Checksum, 'fnv1a64:aaf6156fd67b9099');
+    expect(DatabaseSchema.migration6Checksum, 'fnv1a64:4ccd48022ac15ecc');
   });
 
   test(
@@ -842,7 +843,7 @@ void main() {
   });
 
   test(
-    'v5 supplier payment and money survive v6 with a complete WAL backup',
+    'v5 supplier payment and money survive current schema with a complete WAL backup',
     () async {
       final path = p.join(fixtureDirectory.path, 'upgrade_v5.sqlite3');
       final old = await _createVersion5(path);
@@ -853,7 +854,7 @@ void main() {
       final app = await AppDatabase.open(path: path);
       await old.close();
       final health = await app.readHealth();
-      expect(health['schemaVersion'], 6);
+      expect(health['schemaVersion'], DatabaseSchema.version);
       expect(health['schemaChecksumVerified'], isTrue);
       expect(health['migrationChecksumVerified'], isTrue);
       for (final table in before.keys) {
@@ -930,6 +931,111 @@ void main() {
     await old.update('schema_migrations', {
       'migration_checksum': 'changed-v5',
     }, where: 'version = 5');
+    await old.close();
+    await expectLater(
+      AppDatabase.open(path: path),
+      throwsA(isA<DatabaseValidationException>()),
+    );
+    expect(
+      await Directory(p.join(fixtureDirectory.path, 'backups')).exists(),
+      isFalse,
+    );
+  });
+
+  test(
+    'v6 prepared quick account and confirmed history survive v7 with a complete WAL backup',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'upgrade_v6.sqlite3');
+      final old = await _createVersion6(path);
+      await old.rawQuery('PRAGMA journal_mode = WAL');
+      await _insertVersion6History(old);
+      final before = await _allRows(old);
+      expect(await File('$path-wal').exists(), isTrue);
+      final app = await AppDatabase.open(path: path);
+      await old.close();
+      final health = await app.readHealth();
+      expect(health['schemaVersion'], 7);
+      expect(health['schemaChecksumVerified'], isTrue);
+      expect(health['migrationChecksumVerified'], isTrue);
+      for (final table in before.keys) {
+        final after = await app.database.query(table);
+        expect(
+          table == 'schema_migrations' ? after.take(6).toList() : after,
+          before[table],
+          reason: table,
+        );
+      }
+      for (final table in [
+        'paid_purchase_requests',
+        'paid_purchase_entries',
+        'cash_openings',
+      ]) {
+        expect(await app.database.query(table), isEmpty);
+      }
+      expect(
+        (await app.database.query('quick_sale_requests')).single['status'],
+        'prepared',
+      );
+      expect(
+        (await app.database.query('supplier_payments')).single['total_minor'],
+        20,
+      );
+      expect(
+        (await app.database.query('catalog_items')).single['name'],
+        'Synthetic product',
+      );
+      await app.close();
+      final backups = await Directory(
+        p.join(fixtureDirectory.path, 'backups'),
+      ).list().toList();
+      expect(backups, hasLength(1));
+      expect(p.basename(backups.single.path), contains('.v6.'));
+      final backup = await databaseFactoryFfi.openDatabase(
+        backups.single.path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      expect(await backup.getVersion(), 6);
+      expect(await _allRows(backup), before);
+      expect(await backup.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      expect(
+        (await backup.rawQuery('PRAGMA quick_check')).single.values.single,
+        'ok',
+      );
+      await backup.close();
+      final reopened = await AppDatabase.open(path: path);
+      await reopened.close();
+      expect(
+        await Directory(p.join(fixtureDirectory.path, 'backups')).list().length,
+        1,
+      );
+    },
+  );
+
+  test(
+    'v6 backup failure preserves all prior history and the old file',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'backup_failure_v6.sqlite3');
+      final old = await _createVersion6(path);
+      await _insertVersion6History(old);
+      await old.close();
+      await File(
+        p.join(fixtureDirectory.path, 'backups'),
+      ).writeAsString('keep');
+      final before = await File(path).readAsBytes();
+      await expectLater(
+        AppDatabase.open(path: path),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await File(path).readAsBytes(), before);
+    },
+  );
+
+  test('historical v6 drift is refused before migration or backup', () async {
+    final path = p.join(fixtureDirectory.path, 'history_failure_v6.sqlite3');
+    final old = await _createVersion6(path);
+    await old.update('schema_migrations', {
+      'migration_checksum': 'changed-v6',
+    }, where: 'version = 6');
     await old.close();
     await expectLater(
       AppDatabase.open(path: path),
@@ -1305,6 +1411,70 @@ Future<Database> _createVersion5(String path) async {
     'applied_at_utc': _timestamp,
   });
   return db;
+}
+
+Future<Database> _createVersion6(String path) async {
+  final db = await _createVersion5(path);
+  for (final statement in DatabaseSchema.migration6Statements) {
+    await db.execute(statement);
+  }
+  await db.execute('PRAGMA user_version = 6');
+  await db.insert('schema_migrations', {
+    'version': 6,
+    'name': DatabaseSchema.migration6Name,
+    'migration_checksum': DatabaseSchema.migration6Checksum,
+    'schema_checksum': await _testSchemaChecksum(db),
+    'applied_at_utc': _timestamp,
+  });
+  return db;
+}
+
+/// Released-v6 prepared quick account plus immutable prior sale/payment facts.
+/// Built with only the released statements; no current adapters or downgrade.
+Future<void> _insertVersion6History(DatabaseExecutor db) async {
+  await _insertVersion5Payment(db);
+  const occurred = '2026-01-01T18:00:00.000Z';
+  await db.insert('quick_payment_options', {
+    'id': 'old-quick-option',
+    'label': 'Efectivo sintético',
+    'cash_account_id': 'old-cash',
+    'payment_method_id': 'old-method',
+    'is_active': 1,
+  });
+  await db.insert('quick_sales_accounts', {
+    'id': 'old-quick-account',
+    'label': 'Cuenta sintética preparada',
+    'revision': 1,
+    'status': 'open',
+    'updated_at_utc': occurred,
+  });
+  await db.insert('quick_sales_lines', {
+    'id': 'old-quick-line',
+    'account_id': 'old-quick-account',
+    'sequence': 0,
+    'product_id': 'product',
+    'quantity_text': '1',
+    'unit_price_minor': 150,
+    'payment_option_id': 'old-quick-option',
+  });
+  await db.insert('quick_sale_requests', {
+    'command_id': 'old-prepared-quick-command',
+    'account_id': 'old-quick-account',
+    'account_revision': 1,
+    'canonical_payload': '{"fixture":"prepared-v6"}',
+    'occurred_at_utc': occurred,
+    'prepared_at_utc': occurred,
+    'status': 'prepared',
+    'sale_command_id': 'old-quick-sale-command',
+    'collection_command_id': 'old-quick-collection-command',
+    'legacy_draft_id': 'old-quick-internal-draft',
+  });
+  await db.update(
+    'quick_sales_accounts',
+    {'status': 'prepared'},
+    where: 'id = ?',
+    whereArgs: ['old-quick-account'],
+  );
 }
 
 /// Actual released-v5 facts, assembled without current adapters or downgrades.

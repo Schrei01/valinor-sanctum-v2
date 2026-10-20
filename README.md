@@ -2,13 +2,13 @@
 
 Repositorio independiente para la nueva aplicación de gestión comercial de Valinor.
 
-**Estado: ventas de mostrador (0.6.1, esquema v6).** En Ventas abre varias cuentas, agrega líneas de productos y elige Efectivo o Nequi en cada una. **Registrar venta** guarda entrega, costo y cobro inmediato en una sola operación. Los borradores se guardan automáticamente. Ventas es la única pantalla de ventas y no pide cliente ni vencimiento. Aperturas, ajustes y caja/arqueo siguen pendientes; producción permanece deshabilitada.
+**Estado: compras de contado y ventas de mostrador (0.7.0, esquema v7).** En **Compras** crea o repón un producto con costo unitario, PVP unitario, proveedor, categoría, SKU opcional y cantidad. **Ingresar producto** guarda catálogo, inventario y pago total desde Efectivo o Nequi juntos; no pide referencia ni vencimiento. El historial muestra ingresos. El saldo inicial real se declara antes del primer movimiento de cada cuenta. En **Ventas** conserva varias cuentas con varias líneas y pago por línea; Registrar venta confirma entrega y cobro juntos. Ajustes y caja/arqueo siguen pendientes; producción permanece deshabilitada.
 
-Consulta [el incremento 06 y sus verificaciones](docs/21-incremento-06.md), [su contrato](docs/20-contrato-incremento-06.md) y [la pantalla de mostrador con datos sintéticos](docs/images/quick-sales.png). Los incrementos anteriores conservan sus cortes históricos.
+Consulta [el incremento 07 y sus verificaciones](docs/23-incremento-07.md), [su contrato](docs/22-contrato-incremento-07.md), [el nuevo formulario de Compras](docs/images/stock-intake.png) y [la pantalla de Ventas](docs/images/quick-sales.png). Ambas imágenes usan datos sintéticos. Los incrementos anteriores conservan sus cortes históricos.
 
-Para abrir el programa, haz doble clic en **Iniciar Valinor Sanctum.cmd** en la raíz del proyecto. Inicia la entrega vigente de `dist/ValinorSanctum2`; esa ruta se actualiza al empaquetar. La copia versionada 0.6.1 está en `dist/0.6.1/ValinorSanctum2/valinor_sanctum_2.exe` y su ZIP en `dist/valinor-sanctum-2-0.6.1-windows-x64.zip`. Conserva las DLL y la carpeta data junto al ejecutable. Esta versión de desarrollo guarda sus datos dentro de `C:/proyectos/valinor_sanctum_2` y no está habilitada para producción. Las bases propias v1–v5 se actualizan con respaldo SQLite previo; las versiones anteriores no pueden abrir v6.
+Para abrir el programa, haz doble clic en **Iniciar Valinor Sanctum.cmd** en la raíz del proyecto. Inicia la entrega vigente de `dist/ValinorSanctum2`; esa ruta se actualiza al empaquetar. La copia versionada 0.7.0 está en `dist/0.7.0/ValinorSanctum2/valinor_sanctum_2.exe` y su ZIP en `dist/valinor-sanctum-2-0.7.0-windows-x64.zip`. Conserva las DLL y la carpeta data junto al ejecutable. Esta versión de desarrollo guarda sus datos dentro de `C:/proyectos/valinor_sanctum_2` y no está habilitada para producción. Las bases propias v1–v6 se actualizan con respaldo SQLite previo; las versiones anteriores no pueden abrir v7.
 
-Si aparece `database v6 is newer than supported v5` u otro aviso de base más nueva, se ha abierto un bundle antiguo. Cierra esa ventana e inicia el programa con el archivo de la raíz; no borres ni reinicies la base para resolver un ejecutable antiguo.
+Si aparece `database v7 is newer than supported v6` u otro aviso de base más nueva, se ha abierto un bundle antiguo. Cierra esa ventana e inicia el programa con el archivo de la raíz; no borres ni reinicies la base para resolver un ejecutable antiguo.
 
 ## Separación de proyectos
 
@@ -42,6 +42,8 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 19. [Pagos a proveedores y validación 0.5.0](docs/19-incremento-05.md).
 20. [Contrato de ventas de mostrador 0.6.1](docs/20-contrato-incremento-06.md).
 21. [Mostrador y validación 0.6.1](docs/21-incremento-06.md).
+22. [Contrato de compras de contado e ingreso al catálogo](docs/22-contrato-incremento-07.md).
+23. [Compras, historial de ingresos y validación 0.7.0](docs/23-incremento-07.md).
 
 ## Decisiones aprobadas
 
@@ -51,6 +53,7 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 - Usar un libro financiero interno de asientos balanceados, generado automáticamente, para distinguir ventas, cobros, compras, gastos, transferencias y capital.
 - Proponer FIFO por capas para valoración de productos; aprobar esta política antes de implementarla y mostrar por separado los costos desconocidos.
 - Persistir cuentas abiertas. La prioridad del MVP es registrar venta y cobro inmediato desde una única pantalla llamada Ventas; se retiró el acceso al formulario anterior.
+- Compras registra mercancía pagada de contado y su salida de Efectivo/Nequi, creando el producto desde el mismo formulario. No exige un recorrido de crédito ni un pago posterior.
 - Crear almacenamiento e identificadores exclusivos para 2.0; inicialización vacía y saldos iniciales declarados por el usuario.
 - Mantener objetivos y umbrales de negocio configurables, sin cifras de ventas, salarios o beneficios preestablecidas.
 
@@ -68,11 +71,12 @@ El SDK portable y sus cachés están en .tooling, ignorados por Git. Los scripts
 ./scripts/dart.ps1 run tool/verify_collections_flow.dart
 ./scripts/dart.ps1 run tool/verify_supplier_payments_flow.dart
 ./scripts/dart.ps1 run tool/verify_quick_sales_flow.dart
+./scripts/dart.ps1 run tool/verify_stock_intake_flow.dart
 ./scripts/flutter.ps1 run -d windows
 ./scripts/flutter.ps1 build windows --release --no-pub
 ./scripts/package-windows.ps1
 ~~~
 
-El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.6.1-windows-x64.zip`. Conserva el bundle previo bajo tmp y rechaza versiones anteriores al proyecto o a la entrega vigente. Hay que cerrar todas las copias de la aplicación de este proyecto antes de actualizarla.
+El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.7.0-windows-x64.zip`. Conserva el bundle previo bajo tmp y rechaza versiones anteriores al proyecto o a la entrega vigente. Hay que cerrar todas las copias de la aplicación de este proyecto antes de actualizarla.
 
-Resultados 0.6.1: 317 pruebas aprobadas y tres omitidas por falta de permiso del host para crear enlaces simbólicos; análisis y formato limpios. El flujo independiente pasó 30 comprobaciones de varias cuentas, pagos por línea, venta y cobro atómicos, reapertura, reintentos, stock y saldos exactos. Los formularios se ejercitaron en widgets y la imagen actualizada se inspeccionó; los límites y artefactos están en el informe del incremento.
+Resultados 0.7.0: 370 pruebas aprobadas y tres omitidas por falta de permiso del host para crear enlaces simbólicos; análisis y formato limpios. El recorrido independiente pasó 26 comprobaciones de ingreso, catálogo, fondos, costo, venta posterior, reapertura y reintentos. Los formularios se ejercitaron en widgets y la imagen de Compras se inspeccionó; los límites y artefactos están en el informe del incremento.

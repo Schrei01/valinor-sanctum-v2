@@ -39,7 +39,7 @@ class _CatalogPageState extends State<CatalogPage> {
           InventoryPageHeading(
             title: 'Catálogo e inventario',
             subtitle:
-                'Productos en unidades enteras. Las existencias y su valoración provienen de compras recibidas; los ajustes están pendientes.',
+                'Consulta productos, PVP y existencias. Para crear un producto con cantidad o reponerlo, usa Compras.',
             busy: controller.busy,
             onRefresh: controller.load,
           ),
@@ -132,7 +132,7 @@ class _CatalogPageState extends State<CatalogPage> {
     };
     if (rows.isEmpty) {
       return const _EmptyCatalog(
-        'No hay productos para mostrar. Crea el primero para recibir inventario.',
+        'No hay productos para mostrar. Puedes ingresar el primero con su cantidad desde Compras.',
       );
     }
     return Column(
@@ -147,7 +147,7 @@ class _CatalogPageState extends State<CatalogPage> {
               dataRowMaxHeight: 64,
               columns: const [
                 DataColumn(label: Text('Producto')),
-                DataColumn(label: Text('Precio de lista'), numeric: true),
+                DataColumn(label: Text('PVP'), numeric: true),
                 DataColumn(label: Text('Unidades'), numeric: true),
                 DataColumn(label: Text('Valoración'), numeric: true),
                 DataColumn(label: Text('Estado')),
@@ -261,7 +261,7 @@ class _CatalogPageState extends State<CatalogPage> {
       return _EmptyCatalog(
         _tab == _CatalogTab.categories
             ? 'Aún no hay categorías. Puedes crearlas para organizar los productos.'
-            : 'Aún no hay proveedores. Crea uno para registrar compras a crédito.',
+            : 'Aún no hay proveedores. Puedes crearlos al ingresar un producto en Compras.',
       );
     }
     return Column(
@@ -593,8 +593,7 @@ class _ProductDialogState extends State<_ProductDialog> {
                   controller: _price,
                   enabled: !widget.controller.busy,
                   decoration: InputDecoration(
-                    labelText:
-                        'Precio de lista (${widget.profile.currencyCode})',
+                    labelText: 'PVP (${widget.profile.currencyCode})',
                     helperText:
                         '${widget.profile.moneyScale} decimales · formato colombiano',
                   ),
@@ -603,7 +602,7 @@ class _ProductDialogState extends State<_ProductDialog> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'El precio de lista no cambia el costo ni las compras ya recibidas.',
+                  'Cambiar el PVP no modifica el costo ni los ingresos de productos ya guardados.',
                 ),
                 if (_attempted && widget.controller.catalogError != null)
                   Padding(

@@ -11,6 +11,7 @@ import '../features/supplier_payments/application/supplier_payments_controller.d
 import '../features/supplier_payments/presentation/supplier_payments_page.dart';
 import '../features/quick_sales/application/quick_sales_controller.dart';
 import '../features/quick_sales/presentation/quick_sales_page.dart';
+import '../features/stock_intake/application/stock_intake_controller.dart';
 
 const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
@@ -65,6 +66,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   CollectionsController? _collections;
   SupplierPaymentsController? _supplierPayments;
   QuickSalesController? _quickSales;
+  StockIntakeController? _stockIntake;
   late final AppLifecycleListener _exitListener;
 
   @override
@@ -91,7 +93,8 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   void _selectSection(int index) {
     setState(() => _section = index);
     if (widget.controller.profile == null) return;
-    if (index == 1 || index == 2) unawaited(_inventory?.load());
+    if (index == 1) unawaited(_inventory?.load());
+    if (index == 2) unawaited(_stockIntake?.load());
     if (index == 3) unawaited(_quickSales?.load());
     if (index == 4) unawaited(_collections?.load());
     if (index == 5) unawaited(_supplierPayments?.load());
@@ -104,6 +107,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     _collections?.dispose();
     _supplierPayments?.dispose();
     _quickSales?.dispose();
+    _stockIntake?.dispose();
     super.dispose();
   }
 
@@ -125,6 +129,20 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
         unawaited(_inventory!.load());
       }
       final quickSalesStore = controller.quickSalesStore;
+      final intakeStore = controller.stockIntakeStore;
+      if (!identical(_stockIntake?.store, intakeStore)) {
+        _stockIntake?.dispose();
+        _stockIntake = intakeStore == null
+            ? null
+            : StockIntakeController(store: intakeStore);
+      }
+      if (_stockIntake != null &&
+          controller.profile != null &&
+          _stockIntake!.snapshot == null &&
+          !_stockIntake!.loading &&
+          _stockIntake!.loadError == null) {
+        unawaited(_stockIntake!.load());
+      }
       if (!identical(_quickSales?.store, quickSalesStore)) {
         _quickSales?.dispose();
         _quickSales = quickSalesStore == null
@@ -262,11 +280,11 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                               _scrollPage(
                                 controller.profile == null
                                     ? const _ConfigureFirst()
-                                    : _inventory == null
+                                    : _stockIntake == null
                                     ? const _ModuleUnavailable()
                                     : PurchasesPage(
-                                        key: ObjectKey(_inventory),
-                                        controller: _inventory!,
+                                        key: ObjectKey(_stockIntake),
+                                        controller: _stockIntake!,
                                         profile: controller.profile!,
                                       ),
                                 wide,
@@ -510,7 +528,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.6.1',
+                    'Versión 0.7.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -634,7 +652,7 @@ class _Home extends StatelessWidget {
                   (
                     Icons.inventory_2_outlined,
                     'Catálogo e inventario',
-                    'Productos, proveedores, compras a crédito y pagos. Ajustes pendientes.',
+                    'Ingresa productos, costo, PVP y cantidades desde Compras, con pago de contado.',
                     'Disponible',
                   ),
                   (
@@ -907,7 +925,7 @@ class _System extends StatelessWidget {
       ),
       const SizedBox(height: 24),
       const Text(
-        'Entorno de desarrollo. Ventas de mostrador con cobro inmediato, catálogo, compras y pagos disponibles. Arqueo, usuarios e importación aún están pendientes.',
+        'Entorno de desarrollo. Compras de contado con ingreso al catálogo e inventario, ventas de mostrador y saldos iniciales disponibles. Arqueo, usuarios e importación aún están pendientes.',
         style: TextStyle(color: Color(0xFF65716A), height: 1.5),
       ),
     ],

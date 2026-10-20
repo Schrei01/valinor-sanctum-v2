@@ -83,21 +83,6 @@ void main() {
     return controller;
   }
 
-  Finder input(String prefix) => find.byWidgetPredicate(
-    (widget) =>
-        widget is TextFormField &&
-        widget.key is ValueKey<String> &&
-        (widget.key! as ValueKey<String>).value.startsWith(prefix),
-  );
-
-  Future<void> select(WidgetTester tester, Finder field, String value) async {
-    await tester.ensureVisible(field);
-    await tester.tap(field);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(value).last);
-    await tester.pumpAndSettle();
-  }
-
   Future<void> capture(WidgetTester tester, String name) async {
     if (!const bool.fromEnvironment('SANCTUM_CAPTURE_INVENTORY_PREVIEW')) {
       return;
@@ -212,118 +197,7 @@ void main() {
     },
   );
 
-  testWidgets(
-    'uncertain receipt survives navigation and retries same payload without duplicates',
-    (tester) async {
-      final store = FakeInventoryStore()
-        ..products.add(
-          const CatalogProduct(
-            id: 'product',
-            name: 'Juego sintético',
-            listPriceMinor: 1000,
-          ),
-        )
-        ..suppliers.add(
-          const InventorySupplier(id: 'supplier', name: 'Proveedor sintético'),
-        )
-        ..receiveFailure = StateError('lost confirmation')
-        ..commitBeforeReceiveFailure = true;
-      await open(tester, store);
-      await tester.tap(find.text('Compras'));
-      await tester.pumpAndSettle();
-      await select(
-        tester,
-        find.byKey(const ValueKey('receipt-supplier-0')),
-        'Proveedor sintético',
-      );
-      await tester.enterText(
-        find.byKey(const Key('receipt-reference')),
-        'SYN-REC-001',
-      );
-      await tester.enterText(
-        find.byKey(const Key('receipt-due')),
-        '2099-12-31',
-      );
-      final productField = find.byWidgetPredicate(
-        (widget) =>
-            widget is DropdownButtonFormField<String> &&
-            widget.key is ValueKey<String> &&
-            (widget.key! as ValueKey<String>).value.startsWith(
-              'receipt-product-',
-            ),
-      );
-      await select(tester, productField, 'Juego sintético');
-      await tester.enterText(input('receipt-quantity-'), '3');
-      await tester.enterText(input('receipt-cost-'), '100,01');
-      await tester.ensureVisible(find.byKey(const Key('receive-purchase')));
-      await tester.tap(find.byKey(const Key('receive-purchase')));
-      await tester.pumpAndSettle();
-      expect(store.receipts, hasLength(1));
-      expect(find.text('Reintentar la misma compra'), findsOneWidget);
-      final original = store.receivedCommands.single;
-      await tester.tap(find.text('Sistema'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Catálogo'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Inicio'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Compras'));
-      await tester.pumpAndSettle();
-      expect(
-        tester.widget<TextFormField>(input('receipt-cost-')).controller!.text,
-        '100,01',
-      );
-      expect(
-        tester.widget<TextFormField>(input('receipt-cost-')).enabled,
-        isFalse,
-      );
-      expect(
-        tester
-            .widget<TextFormField>(input('receipt-quantity-'))
-            .controller!
-            .text,
-        '3',
-      );
-      expect(
-        tester
-            .widget<TextFormField>(find.byKey(const Key('receipt-reference')))
-            .controller!
-            .text,
-        'SYN-REC-001',
-      );
-      await tester.ensureVisible(find.byKey(const Key('receive-purchase')));
-      await tester.tap(find.byKey(const Key('receive-purchase')));
-      await tester.pumpAndSettle();
-      expect(identical(store.receivedCommands.last, original), isTrue);
-      expect(store.receipts, hasLength(1));
-      expect(store.stock.single.quantity, 3);
-      expect(store.stock.single.totalCostMinor, 10001);
-      expect(
-        tester.widget<TextFormField>(input('receipt-cost-')).controller!.text,
-        isEmpty,
-      );
-      expect(find.byKey(const Key('receipt-confirmed')), findsOneWidget);
-      await tester.ensureVisible(find.text('Ver productos (1)'));
-      await tester.tap(find.text('Ver productos (1)'));
-      await tester.pumpAndSettle();
-      expect(
-        find.text('Juego sintético · 3 unidades · Costo total: COP 100,01'),
-        findsOneWidget,
-      );
-      await tester.ensureVisible(
-        find.text('Juego sintético · 3 unidades · Costo total: COP 100,01'),
-      );
-      await capture(tester, 'inventory-purchases');
-      await tester.tap(find.text('Catálogo'));
-      await tester.pumpAndSettle();
-      await capture(tester, 'inventory-catalog');
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('configured catalog and receipt form fit a narrow window', (
-    tester,
-  ) async {
+  testWidgets('configured catalog fits a narrow window', (tester) async {
     final store = FakeInventoryStore()
       ..products.add(
         const CatalogProduct(
@@ -331,17 +205,12 @@ void main() {
           name: 'Juego sintético',
           listPriceMinor: 1000,
         ),
-      )
-      ..suppliers.add(
-        const InventorySupplier(id: 'supplier', name: 'Proveedor sintético'),
       );
     await open(tester, store, size: const Size(400, 900));
     await tester.tap(find.text('Catálogo'));
     await tester.pumpAndSettle();
     expect(find.text('Juego sintético'), findsOneWidget);
-    await tester.tap(find.text('Compras'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('receive-purchase')));
+    await capture(tester, 'inventory-catalog');
     expect(tester.takeException(), isNull);
   });
 }

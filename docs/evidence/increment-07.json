@@ -1,0 +1,68 @@
+{
+  "verifiedAtUtc": "2026-10-20T04:36:57.616Z",
+  "version": "0.7.0+8",
+  "schemaVersion": 7,
+  "checks": {
+    "testsPassed": 370,
+    "testsSkipped": 3,
+    "skippedReason": "Host cannot create symbolic links",
+    "dartFormatFiles": 87,
+    "dartFormatClean": true,
+    "analyzeClean": true,
+    "syntheticFlowChecksPassed": 26,
+    "newStockIntakeStoreTests": 16,
+    "newSqlGuardTests": 11,
+    "newCashOpeningTests": 6,
+    "newMigrationTests": 3,
+    "newControllerTests": 10,
+    "newFormWidgetTests": 8,
+    "catalogWidgetRegressionTests": 3,
+    "widgetImageInspected": true,
+    "styleOnlyAutomaticBraceFixes": 40
+  },
+  "build": {
+    "smokeSeconds": 58.1154006,
+    "finalSeconds": 74.5624224,
+    "finalHasNoSanctumOverrides": true,
+    "smokeAndFinalAotDiffer": true,
+    "smokeAotSha256": "B2F9F3C980D7519925F887BE4682C71427493015ABD81C6403B51A409F301E28",
+    "finalAotSha256": "C105CE65C2C616E0A1566182A95568F493CF0A07C10176A5815D30F1DDA6446F",
+    "nativeRequestedFieldsAndPaidHistoryObserved": true,
+    "fourCorrectIndicatorsInSmokeAndFinalObserved": true,
+    "nativeMethod": "Accessibility and keyboard",
+    "nativeFinancialEntryPerformed": false,
+    "nativeWindowsClosed": true,
+    "imageIsWidgetRender": true
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.7.0-windows-x64.zip",
+    "files": 17,
+    "bytes": 14637650,
+    "sha256": "0ADB8E91FA60775347BCFD9A9498C588D28AB3ED733151C08827D193BAB056B1",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe",
+    "version": "0.7.0+8",
+    "allFilesMatchStableAndVersionedCopy": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.7.0/ValinorSanctum2",
+    "hashUnchangedAfterNativeLaunch": true
+  },
+  "developmentMigration": {
+    "ownDevelopmentBackupCreated": true,
+    "backupName": "sanctum2.v6.1792470909758927-fbcc5de.sqlite3",
+    "allLegacyRowsPreserved": true,
+    "tablesChecked": 39,
+    "businessDataEntered": false
+  },
+  "databaseResetOrDowngradePerformed": false,
+  "originalPosOpenedOrModifiedByAgent": false,
+  "productionEnabled": false,
+  "remoteWorkflowResultInspected": false,
+  "evidenceFiles": [
+    "stock-intake-flow.json",
+    "stock-intake-native-observations.json",
+    "stock-intake-final-observations.json",
+    "stock-intake-preservation.json"
+  ]
+}

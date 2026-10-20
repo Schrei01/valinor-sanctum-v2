@@ -397,6 +397,15 @@ ORDER BY c.collected_at_utc DESC, c.document_id
     String id,
   ) async {
     if ((await txn.query(
+      'paid_purchase_requests',
+      where: 'command_id=? OR purchase_command_id=? OR payment_command_id=?',
+      whereArgs: [id, id, id],
+    )).isNotEmpty) {
+      throw const CollectionsValidationException(
+        'Este identificador pertenece a un ingreso de productos.',
+      );
+    }
+    if ((await txn.query(
       'quick_sale_requests',
       where: 'command_id=? OR sale_command_id=? OR collection_command_id=?',
       whereArgs: [id, id, id],

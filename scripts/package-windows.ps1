@@ -88,8 +88,11 @@ Valinor Sanctum 2.0 - Versión de desarrollo
 
 Extrae la carpeta completa y abre valinor_sanctum_2.exe.
 Conserva las DLL y la carpeta data junto al ejecutable.
-Configura tu perfil, categorías, proveedores y catálogo de productos.
-Registra compras recibidas a crédito con su inventario, costo y deuda.
+Configura tu perfil. En Compras ingresa nombre, costo unitario, PVP, proveedor,
+categoría, SKU opcional y cantidad. Puedes crear el producto o reponer uno existente.
+Elige Efectivo o Nequi para pagar: el ingreso y la salida de dinero se guardan juntos.
+Registra el saldo inicial real antes del primer movimiento de cada cuenta si corresponde.
+Consulta el Historial de ingresos desde la misma sección Compras.
 En Ventas crea varias cuentas, agrega productos y elige la forma de pago por línea.
 Registrar venta guarda entrega, stock, costo y cobro de contado en una sola operación.
 Las cuentas de mostrador se guardan automáticamente mientras las preparas.

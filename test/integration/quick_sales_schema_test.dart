@@ -26,7 +26,7 @@ void main() {
         expect(await app.database.query(table), isEmpty);
       }
       final health = await app.readHealth();
-      expect(health['schemaVersion'], 6);
+      expect(health['schemaVersion'], DatabaseSchema.version);
       expect(health['schemaChecksumVerified'], isTrue);
       expect(health['migrationChecksumVerified'], isTrue);
       expect(health['foreignKeyViolations'], 0);

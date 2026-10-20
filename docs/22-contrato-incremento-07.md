@@ -1,0 +1,17 @@
+# Contrato — compras de contado e ingreso al catálogo 0.7.0
+
+El propietario aclaró que Valinor nunca compra a crédito. Compras debe permitir ingresar directamente la mercancía y crear su producto con nombre, precio de compra unitario, PVP unitario, proveedor, categoría Comestible/Artículo/Evento, SKU opcional y cantidad. Se retiran referencia y vencimiento del formulario. El historial muestra ingresos. Confirmó expresamente que el costo también debe descontarse de Efectivo o Nequi.
+
+- Un solo formulario y una acción **Ingresar producto**. Buscar un producto existente permite reponerlo; escribir uno nuevo lo crea. El proveedor se puede elegir o crear por nombre en ese mismo formulario.
+- Cantidades enteras positivas, compra unitaria positiva y PVP no negativo. Total de compra = cantidad × costo unitario, con enteros exactos y validación de rango. La categoría Evento se refiere aquí a productos en unidades, sin añadir reservas ni servicios por tiempo.
+- Se configuran las tres categorías y opciones Efectivo/Nequi sin sobrescribir catálogos existentes ni crear dinero.
+- Preparar guarda la solicitud exacta y sus identidades antes de cualquier efecto comercial. Confirmar crea/actualiza producto, crea/reutiliza proveedor, ingresa inventario/capa FIFO y paga el total desde la cuenta elegida dentro de una sola transacción. No puede quedar un producto nuevo sin su ingreso ni una compra registrada sin su pago.
+- El pago exige saldo registrado suficiente. Un saldo inicial real se declara expresamente, una sola vez por cuenta y antes de su primer movimiento monetario; se contabiliza contra patrimonio y no como una venta. No se rellenan saldos automáticamente.
+- Respuestas inciertas conservan su identidad para reintentar; las preparaciones se recuperan tras cerrar y reabrir. Un rechazo conocido permite corregir y preparar otra solicitud. La concurrencia no permite gastar dos veces el mismo dinero ni sobrescribir silenciosamente un producto cambiado por otra instancia.
+- El historial conserva nombre, SKU, categoría, proveedor, unidades, costo unitario/total, PVP y forma de pago del ingreso original. Cambiar posteriormente el catálogo o el PVP no reescribe esos hechos ni el costo de las ventas anteriores.
+- Se reutilizan internamente la recepción y liquidación existentes, dejando su obligación en cero dentro del mismo commit. No se modifica el esquema publicado de documentos anteriores ni se presenta el campo interno histórico `terms='credit'` como clasificación comercial de estos ingresos.
+- Migración aditiva v7 con respaldo de la base propia v6. Declaraciones/checksums v1–v6 intactos, incluido v6 `fnv1a64:4ccd48022ac15ecc`. No borrar datos propios ni modificar o ejecutar el POS original.
+
+Aceptación: producto nuevo visible en Catálogo y Ventas, stock/costo exactos, dinero descontado y pendiente cero; reponer con otro costo/PVP conserva ambos historiales. Probar insuficiencia de fondos, doble clic/reintento, fallo después del pago con rollback completo, recuperación tras reapertura, conflictos de producto, inmutabilidad e integridad, y migración con historial y solicitudes previas.
+
+Fuera del incremento: crédito, financiación inventada, aportes adicionales/transferencias/caja general, ajustes y devoluciones, servicios por tiempo, importación y transición a producción. Las compras históricas se conservan sin liquidarlas o reclasificarlas automáticamente.
