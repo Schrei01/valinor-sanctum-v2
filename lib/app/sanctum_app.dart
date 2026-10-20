@@ -274,6 +274,8 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                         key: ObjectKey(_inventory),
                                         controller: _inventory!,
                                         profile: controller.profile!,
+                                        referenceStore:
+                                            controller.referenceInventoryStore,
                                       ),
                                 wide,
                               ),
@@ -528,7 +530,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.7.2',
+                    'Versión 0.8.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

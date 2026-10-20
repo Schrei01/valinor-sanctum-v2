@@ -28,6 +28,7 @@ function Get-BundleFiles([string]$BundleRoot) {
         foreach ($item in Get-ChildItem -LiteralPath $queue.Dequeue() -Force) {
             $relative = $item.FullName.Substring($BundleRoot.Length + 1)
             if ($relative -match '^data[\\/](development|test)([\\/]|$)') { continue }
+            if ($item.Name -ieq 'reference-inventory.json') { throw 'Un snapshot privado de inventario está fuera de las rutas runtime excluidas.' }
             # A prior `build bundle --debug` can leave these in shared assets.
             # The Release engine uses data/app.so instead of JIT snapshots.
             if ($relative -match '^data[\\/]flutter_assets[\\/](kernel_blob\.bin|isolate_snapshot_data|vm_snapshot_data|\.last_build_id)$') { continue }
@@ -95,6 +96,9 @@ Registra el saldo inicial real antes del primer movimiento de cada cuenta si cor
 Consulta el Historial de ingresos desde la misma sección Compras.
 Catálogo muestra productos: filtra por Categoría y Proveedor, y busca por nombre o SKU.
 Todos los productos limpia los filtros y la búsqueda. Catálogo es solo consulta.
+Si hay una copia de inventario cargada localmente, Catálogo permite consultarla
+en Inventario de la copia y volver al Catálogo de esta app con el selector de origen.
+La copia muestra su corte, cantidades, PVP y lotes; no está disponible para vender.
 En Ventas crea varias cuentas, agrega productos y elige la forma de pago por línea.
 Registrar venta guarda entrega, stock, costo y cobro de contado en una sola operación.
 Las cuentas de mostrador se guardan automáticamente mientras las preparas.
@@ -105,7 +109,7 @@ Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.
 Registra pagos y abonos a proveedores con saldo disponible, incluso por varios medios.
 Las solicitudes de pago guardadas se recuperan al reabrir sin duplicarse.
 Caja/arqueo y ajustes de inventario siguen pendientes.
-No contiene datos del POS original ni está habilitado para producción.
+El paquete no contiene datos privados ni está habilitado para producción.
 El almacenamiento de desarrollo permanece limitado al repositorio autorizado
 C:\proyectos\valinor_sanctum_2; ejecuta el bundle dentro de ese proyecto.
 '@

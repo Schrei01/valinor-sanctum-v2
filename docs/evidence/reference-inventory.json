@@ -1,0 +1,74 @@
+{
+  "verifiedAtUtc": "2026-10-20T09:21:52.5648495Z",
+  "version": "0.8.0+11",
+  "schemaVersion": 7,
+  "tests": {
+    "uniqueTargetedTestsPassed": 50,
+    "newModelReaderTests": 6,
+    "newExporterTests": 6,
+    "newWidgetTests": 7,
+    "initialPassed": 49,
+    "initialFailed": 1,
+    "initialFailureReason": "New search test matched both input and table text; finder scoped to DataTable",
+    "finalReferenceWidgetRerunPassed": 7,
+    "analyzeClean": true,
+    "formattedModifiedDartFiles": 11,
+    "formatClean": true,
+    "independentReviewFindings": 0,
+    "fullFinancialSuiteRepeated": false
+  },
+  "extraction": {
+    "sourceOpenedReadOnly": true,
+    "queryOnly": true,
+    "onlyProductsExtracted": true,
+    "allIdsNamesQuantitiesPricesLotsMatch": true,
+    "sourceHashUnchanged": true,
+    "realRowsCountsNamesPricesAndSourceHashesExcluded": true,
+    "privateSnapshotIgnoredByGit": true,
+    "sourceDatabaseReadByApp": false,
+    "financialRecordsImported": false
+  },
+  "build": {
+    "seconds": 55.7518009,
+    "executableVersion": "0.8.0+11",
+    "appSha256": "C2F1A6A99558AC04C8F0A4EE21945725BAE241657B245611E9A7668D42F8E48E",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.8.0-windows-x64.zip",
+    "files": 17,
+    "bytes": 14628547,
+    "sha256": "0A98D3631A0466D6297261B1837F07D7B2D025B902206AEFE6C36A7D3C246527",
+    "all17FilesMatchStableAndVersionedCopy": true,
+    "privateSnapshotAndDatabasesAbsent": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.8.0/ValinorSanctum2",
+    "zipHashUnchangedAfterNativeLaunch": true
+  },
+  "native": {
+    "version080Observed": true,
+    "referenceSourceSelected": true,
+    "sourceSelectorObserved": true,
+    "realTotalsMatch": true,
+    "lotLabelsObserved": true,
+    "pvpQuantityStateColumnsObserved": true,
+    "queryOnlyNoticeObserved": true,
+    "noLoadFailure": true,
+    "modificationControlsAbsent": true,
+    "realNamesOrPricesPublished": false,
+    "businessDataEnteredByAgent": false,
+    "windowLeftOpenForUser": true
+  },
+  "appData": {
+    "readOnlyComparison": true,
+    "tablesCompared": 42,
+    "allTableRowsUnchangedAtVerification": true,
+    "schemaMigrationAdded": false,
+    "operationalStockImported": false,
+    "profileMoneyScaleChanged": false,
+    "resetPerformed": false
+  },
+  "originalPosOpenedOrModified": false,
+  "productionEnabled": false,
+  "remoteWorkflowResultInspected": false
+}

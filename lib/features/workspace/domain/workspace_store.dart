@@ -1,5 +1,6 @@
 import 'business_profile.dart';
 import '../../inventory/domain/inventory_store.dart';
+import '../../inventory/domain/reference_inventory.dart';
 import '../../sales/domain/sales_store.dart';
 import '../../collections/domain/collections_store.dart';
 import '../../supplier_payments/domain/supplier_payments_store.dart';
@@ -19,6 +20,7 @@ class WorkspaceSession {
     required this.databasePath,
     required this.profileId,
     this.inventoryStore,
+    this.referenceInventoryStore,
     this.salesStore,
     this.collectionsStore,
     this.supplierPaymentsStore,
@@ -29,6 +31,7 @@ class WorkspaceSession {
   final String databasePath;
   final String profileId;
   final InventoryStore? inventoryStore;
+  final ReferenceInventoryStore? referenceInventoryStore;
   final SalesStore? salesStore;
   final CollectionsStore? collectionsStore;
   final SupplierPaymentsStore? supplierPaymentsStore;

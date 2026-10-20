@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'app/sanctum_app.dart';
 import 'core/infrastructure/app_config.dart';
 import 'core/infrastructure/database/app_database.dart';
@@ -8,6 +9,7 @@ import 'features/workspace/application/workspace_controller.dart';
 import 'features/workspace/data/sqlite_workspace_store.dart';
 import 'features/workspace/domain/workspace_store.dart';
 import 'features/inventory/data/sqlite_inventory_store.dart';
+import 'features/inventory/data/json_reference_inventory_store.dart';
 import 'features/sales/data/sqlite_sales_store.dart';
 import 'features/collections/data/sqlite_collections_store.dart';
 import 'features/supplier_payments/data/sqlite_supplier_payments_store.dart';
@@ -25,6 +27,9 @@ void main() {
         store: SqliteWorkspaceStore(database),
         databasePath: paths.databasePath,
         profileId: config.profileId,
+        referenceInventoryStore: JsonReferenceInventoryStore(
+          p.join(paths.profileDirectory.path, 'reference-inventory.json'),
+        ),
         inventoryStore: SqliteInventoryStore(
           database,
           synthetic: config.environment == AppEnvironment.test,
