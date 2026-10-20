@@ -1,0 +1,70 @@
+{
+  "verifiedAtUtc": "2026-10-20T09:05:01.7968414Z",
+  "version": "0.7.2+10",
+  "schemaVersion": 7,
+  "tests": {
+    "targetedTestsPassed": 41,
+    "catalogWidgetTests": 3,
+    "inventoryModelTests": 3,
+    "inventoryStoreTests": 19,
+    "paidStockIntakeTests": 16,
+    "analyzeClean": true,
+    "formattedModifiedDartFiles": 8,
+    "formatClean": true,
+    "independentReviewFindings": 0,
+    "categoryMenuAndCombinedFilterWidgetImagesInspected": true,
+    "nativeScreenshots": false,
+    "fullFinancialSuiteRepeated": false
+  },
+  "behavior": {
+    "categoryAndSupplierFilterProducts": true,
+    "categorySupplierSearchCombined": true,
+    "allProductsResetsAllCriteria": true,
+    "supplierLinksFromAllPostedReceipts": true,
+    "supplierLinksDeeplyImmutable": true,
+    "catalogRemainsReadOnly": true
+  },
+  "build": {
+    "seconds": 68.3057815,
+    "executableVersion": "0.7.2+10",
+    "appSha256": "CA629D69580C690DFE692BB070DA98C31605EE0EAC0B495A59818C86D3CC9003",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.7.2-windows-x64.zip",
+    "files": 17,
+    "bytes": 14621176,
+    "sha256": "AF95E8A1AD9BA7B534BDD43370EC71CF80E410AE29DE9D183935F849B7A45FD5",
+    "includesSyntheticProfiles": false,
+    "excludesFlutterDebugArtifacts": true,
+    "currentExecutable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe",
+    "all17FilesMatchStableAndVersionedCopy": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.7.2/ValinorSanctum2",
+    "zipHashUnchangedAfterNativeLaunch": true
+  },
+  "native": {
+    "method": "Accessibility and keyboard",
+    "version072Observed": true,
+    "categorySupplierSelectorsObserved": true,
+    "resetSearchColumnsObserved": true,
+    "valuationActionsAndModificationControlsAbsent": true,
+    "dropdownSelectionVerifiedInWidgets": true,
+    "nativeDropdownSelectionExercised": false,
+    "cachedClickIndexFailed": true,
+    "userInputDetected": true,
+    "furtherAutomationStopped": true,
+    "windowLeftOpenForUser": true,
+    "businessDataEnteredByAgent": false,
+    "rawUserTreeExcluded": true
+  },
+  "data": {
+    "schemaMigrationAdded": false,
+    "resetPerformed": false,
+    "allTablesBeforeAfterComparisonPerformed": false,
+    "beforeAfterComparisonOmittedBecauseUserInteracted": true
+  },
+  "originalPosOpenedOrModified": false,
+  "productionEnabled": false,
+  "remoteWorkflowResultInspected": false
+}

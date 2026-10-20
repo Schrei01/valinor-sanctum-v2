@@ -528,7 +528,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.7.1',
+                    'Versión 0.7.2',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

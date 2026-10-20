@@ -5,8 +5,6 @@ import '../application/inventory_controller.dart';
 import '../domain/inventory_store.dart';
 import 'inventory_widgets.dart';
 
-enum _CatalogTab { products, categories, suppliers }
-
 class CatalogPage extends StatefulWidget {
   const CatalogPage({
     super.key,
@@ -21,9 +19,10 @@ class CatalogPage extends StatefulWidget {
 }
 
 class _CatalogPageState extends State<CatalogPage> {
-  _CatalogTab _tab = _CatalogTab.products;
   final _search = TextEditingController();
   String _query = '';
+  String? _categoryId;
+  String? _supplierId;
   int _page = 0;
   static const _pageSize = 15;
 
@@ -45,7 +44,7 @@ class _CatalogPageState extends State<CatalogPage> {
           InventoryPageHeading(
             title: 'Catálogo',
             subtitle:
-                'Consulta productos, categorías y proveedores. Ingresa productos y cantidades desde Compras.',
+                'Filtra productos por categoría o proveedor. Ingresa productos y cantidades desde Compras.',
             busy: controller.busy,
             onRefresh: controller.load,
           ),
@@ -60,41 +59,16 @@ class _CatalogPageState extends State<CatalogPage> {
             else
               const Text('La información del catálogo no está disponible.')
           else ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final tab in _CatalogTab.values)
-                  ChoiceChip(
-                    label: Text(switch (tab) {
-                      _CatalogTab.products => 'Productos',
-                      _CatalogTab.categories => 'Categorías',
-                      _CatalogTab.suppliers => 'Proveedores',
-                    }),
-                    selected: _tab == tab,
-                    onSelected: (_) {
-                      if (_tab == tab) return;
-                      setState(() {
-                        _tab = tab;
-                        _search.clear();
-                        _query = '';
-                        _page = 0;
-                      });
-                    },
-                  ),
-              ],
-            ),
+            _filters(data),
             const SizedBox(height: 20),
             SizedBox(
               width: 320,
               child: TextField(
                 key: const Key('catalog-search'),
                 controller: _search,
-                decoration: InputDecoration(
-                  labelText: _tab == _CatalogTab.products
-                      ? 'Buscar por nombre o SKU'
-                      : 'Buscar por nombre',
-                  prefixIcon: const Icon(Icons.search),
+                decoration: const InputDecoration(
+                  labelText: 'Buscar por nombre o SKU',
+                  prefixIcon: Icon(Icons.search),
                 ),
                 onChanged: (value) => setState(() {
                   _query = value.trim().toLowerCase();
@@ -103,8 +77,109 @@ class _CatalogPageState extends State<CatalogPage> {
               ),
             ),
             const SizedBox(height: 20),
-            if (_tab == _CatalogTab.products) _products(data) else _names(data),
+            _products(data),
           ],
+        ],
+      );
+    },
+  );
+
+  Widget _filters(InventorySnapshot data) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.maxWidth < 260 ? constraints.maxWidth : 260.0;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: width,
+            child: InputDecorator(
+              decoration: const InputDecoration(labelText: 'Categoría'),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  key: const Key('catalog-category-filter'),
+                  value: _categoryId ?? '',
+                  isExpanded: true,
+                  isDense: true,
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('Todas las categorías'),
+                    ),
+                    for (final category in data.categories)
+                      DropdownMenuItem(
+                        value: category.id,
+                        child: Text(
+                          '${category.name}${category.isActive ? '' : ' (Archivada)'}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (_categoryId != null &&
+                        !data.categories.any((item) => item.id == _categoryId))
+                      DropdownMenuItem(
+                        value: _categoryId,
+                        child: const Text('Categoría no disponible'),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _categoryId = value == '' ? null : value;
+                    _page = 0;
+                  }),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: width,
+            child: InputDecorator(
+              decoration: const InputDecoration(labelText: 'Proveedor'),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  key: const Key('catalog-supplier-filter'),
+                  value: _supplierId ?? '',
+                  isExpanded: true,
+                  isDense: true,
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('Todos los proveedores'),
+                    ),
+                    for (final supplier in data.suppliers)
+                      DropdownMenuItem(
+                        value: supplier.id,
+                        child: Text(
+                          '${supplier.name}${supplier.isActive ? '' : ' (Archivado)'}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (_supplierId != null &&
+                        !data.suppliers.any((item) => item.id == _supplierId))
+                      DropdownMenuItem(
+                        value: _supplierId,
+                        child: const Text('Proveedor no disponible'),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _supplierId = value == '' ? null : value;
+                    _page = 0;
+                  }),
+                ),
+              ),
+            ),
+          ),
+          TextButton.icon(
+            key: const Key('catalog-all-products'),
+            onPressed: () => setState(() {
+              _categoryId = null;
+              _supplierId = null;
+              _search.clear();
+              _query = '';
+              _page = 0;
+            }),
+            icon: const Icon(Icons.filter_alt_off_outlined),
+            label: const Text('Todos los productos'),
+          ),
         ],
       );
     },
@@ -114,8 +189,12 @@ class _CatalogPageState extends State<CatalogPage> {
     final rows = data.products
         .where(
           (item) =>
-              item.name.toLowerCase().contains(_query) ||
-              (item.sku?.toLowerCase().contains(_query) ?? false),
+              (_categoryId == null || item.categoryId == _categoryId) &&
+              (_supplierId == null ||
+                  (data.productSupplierIds[item.id]?.contains(_supplierId) ??
+                      false)) &&
+              (item.name.toLowerCase().contains(_query) ||
+                  (item.sku?.toLowerCase().contains(_query) ?? false)),
         )
         .toList();
     final page = _clampedPage(rows.length);
@@ -124,13 +203,17 @@ class _CatalogPageState extends State<CatalogPage> {
       for (final category in data.categories) category.id: category.name,
     };
     if (rows.isEmpty) {
-      return const _EmptyCatalog(
-        'No hay productos para mostrar. Puedes ingresar el primero con su cantidad desde Compras.',
+      return _EmptyCatalog(
+        data.products.isEmpty
+            ? 'No hay productos para mostrar. Puedes ingresar el primero con su cantidad desde Compras.'
+            : 'No hay productos que coincidan con la búsqueda y los filtros.',
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text('${rows.length} ${rows.length == 1 ? 'producto' : 'productos'}'),
+        const SizedBox(height: 8),
         Card(
           clipBehavior: Clip.antiAlias,
           child: SingleChildScrollView(
@@ -193,45 +276,6 @@ class _CatalogPageState extends State<CatalogPage> {
             ),
           ),
         ),
-        _pagination(rows.length, page),
-      ],
-    );
-  }
-
-  Widget _names(InventorySnapshot data) {
-    final entries = _tab == _CatalogTab.categories
-        ? data.categories.map((value) => (value.name, value.isActive)).toList()
-        : data.suppliers.map((value) => (value.name, value.isActive)).toList();
-    final rows = entries
-        .where((value) => value.$1.toLowerCase().contains(_query))
-        .toList();
-    final page = _clampedPage(rows.length);
-    if (rows.isEmpty) {
-      return _EmptyCatalog(
-        _tab == _CatalogTab.categories
-            ? 'No hay categorías para mostrar.'
-            : 'No hay proveedores para mostrar. Puedes registrarlos al ingresar un producto en Compras.',
-      );
-    }
-    return Column(
-      children: [
-        for (final entry in rows.skip(page * _pageSize).take(_pageSize))
-          Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.$1,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  Text(entry.$2 ? 'Activo' : 'Archivado'),
-                ],
-              ),
-            ),
-          ),
         _pagination(rows.length, page),
       ],
     );

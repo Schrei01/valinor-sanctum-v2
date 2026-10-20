@@ -4,14 +4,25 @@ import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart
 void main() {
   test('snapshot copies and freezes every list', () {
     final categories = [const InventoryCategory(id: 'one', name: 'Una')];
+    final supplierIds = ['supplier'];
+    final links = {'product': supplierIds};
     final snapshot = InventorySnapshot(
       categories: categories,
       suppliers: [],
       products: [],
       stock: [],
       receipts: [],
+      productSupplierIds: links,
     );
     categories.clear();
+    supplierIds.clear();
+    links.clear();
+    expect(snapshot.productSupplierIds['product'], ['supplier']);
+    expect(() => snapshot.productSupplierIds.clear(), throwsUnsupportedError);
+    expect(
+      () => snapshot.productSupplierIds['product']!.clear(),
+      throwsUnsupportedError,
+    );
     expect(snapshot.categories.single.id, 'one');
     expect(() => snapshot.categories.clear(), throwsUnsupportedError);
     expect(() => snapshot.suppliers.clear(), throwsUnsupportedError);

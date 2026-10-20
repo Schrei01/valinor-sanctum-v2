@@ -1,5 +1,7 @@
 # Catálogo de consulta — 0.7.1
 
+Documento histórico. La selección de listados se sustituyó en 0.7.2 por [filtros de Categoría y Proveedor sobre los productos](25-filtros-catalogo.md), conforme a la aclaración del propietario.
+
 Por solicitud del propietario, Catálogo pasa a ser únicamente una vista de consulta. Se retiraron las altas, formularios de edición, botones de archivado/reactivación y columnas Acciones y Valoración. Productos muestra Producto (con SKU y categoría), PVP, Unidades y Estado. El estado anterior permanece como información, sin acciones para modificarlo.
 
 Productos, Categorías y Proveedores seleccionan el listado visible. Cada listado conserva búsqueda y paginación; cambiar de listado limpia la búsqueda y vuelve a la primera página. Los ingresos y altas de productos/proveedores siguen en Compras.

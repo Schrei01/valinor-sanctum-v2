@@ -36,6 +36,20 @@ class SqliteInventoryStore implements InventoryStore {
           orderBy: 'name COLLATE NOCASE, id',
         );
         final stock = await _stock(txn);
+        final supplierLinks = await txn.rawQuery('''
+SELECT DISTINCT line.product_id, purchase.supplier_id
+FROM purchase_lines line
+JOIN purchases purchase ON purchase.document_id = line.purchase_id
+JOIN business_documents document ON document.id = purchase.document_id AND document.status = 'posted'
+JOIN journal_entries entry ON entry.document_id = document.id AND entry.status = 'posted'
+ORDER BY line.product_id, purchase.supplier_id
+''');
+        final productSupplierIds = <String, List<String>>{};
+        for (final row in supplierLinks) {
+          productSupplierIds
+              .putIfAbsent(row['product_id'] as String, () => [])
+              .add(row['supplier_id'] as String);
+        }
         final receipts = await txn.rawQuery('''
 SELECT p.* FROM purchases p
 JOIN business_documents d ON d.id = p.document_id AND d.status = 'posted'
@@ -74,6 +88,7 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
               );
         }
         return InventorySnapshot(
+          productSupplierIds: productSupplierIds,
           categories: categories
               .map(
                 (r) => InventoryCategory(

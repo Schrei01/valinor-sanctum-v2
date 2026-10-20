@@ -53,6 +53,7 @@ void main() {
       expect(snapshot.products.single.listPriceMinor, 4500);
       expect(snapshot.stock, isEmpty);
       expect(snapshot.receipts, isEmpty);
+      expect(snapshot.productSupplierIds, isEmpty);
       for (final table in [
         'actors',
         'ledger_accounts',
@@ -75,6 +76,9 @@ void main() {
       expect(snapshot.stock.single.totalCostMinor, 1001);
       expect(snapshot.receipts.single.documentId, result.documentId);
       expect(snapshot.receipts.single.reference, 'FAC-01');
+      expect(snapshot.productSupplierIds, {
+        'product': ['supplier'],
+      });
       expect(
         (await app.database.query('obligations')).single['initial_minor'],
         1001,
@@ -132,6 +136,9 @@ void main() {
       expect(second.documentId, first.documentId);
       expect(second.commandId, first.commandId);
       expect(second.totalMinor, first.totalMinor);
+      expect((await store.load()).productSupplierIds, {
+        'product': ['supplier'],
+      });
       for (final table in [
         'purchases',
         'purchase_lines',
@@ -153,6 +160,30 @@ void main() {
               )
               as Map<String, dynamic>;
       expect(payload['canonicalPayload'], isA<String>());
+    },
+  );
+
+  test(
+    'supplier filter links preserve every supplier without duplicates or guessed associations',
+    () async {
+      await setupCatalog();
+      await store.saveSupplier(
+        const InventorySupplier(id: 'supplier-b', name: 'Otro proveedor'),
+      );
+      await store.saveSupplier(
+        const InventorySupplier(id: 'unused', name: 'Sin ingresos'),
+      );
+      await store.receivePurchase(_command(id: 'first'));
+      await store.receivePurchase(_command(id: 'repeat'));
+      await store.receivePurchase(
+        _command(id: 'other', supplierId: 'supplier-b'),
+      );
+      final snapshot = await store.load();
+      expect(snapshot.productSupplierIds, {
+        'product': ['supplier', 'supplier-b'],
+      });
+      expect(snapshot.stock.single.quantity, 9);
+      expect(snapshot.suppliers, hasLength(3));
     },
   );
 
@@ -615,9 +646,10 @@ ReceiptCommand _command({
   int cost = 1001,
   int quantity = 3,
   String due = '2026-10-19',
+  String supplierId = 'supplier',
 }) => ReceiptCommand(
   commandId: id,
-  supplierId: 'supplier',
+  supplierId: supplierId,
   lines: [
     ReceiptLineInput(
       productId: 'product',

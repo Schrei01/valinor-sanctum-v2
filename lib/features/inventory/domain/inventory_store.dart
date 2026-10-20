@@ -92,16 +92,24 @@ class InventorySnapshot {
     required List<CatalogProduct> products,
     required List<StockPosition> stock,
     required List<PurchaseReceiptSummary> receipts,
+    Map<String, List<String>> productSupplierIds = const {},
   }) : categories = List.unmodifiable(categories),
        suppliers = List.unmodifiable(suppliers),
        products = List.unmodifiable(products),
        stock = List.unmodifiable(stock),
-       receipts = List.unmodifiable(receipts);
+       receipts = List.unmodifiable(receipts),
+       productSupplierIds = Map.unmodifiable({
+         for (final entry in productSupplierIds.entries)
+           entry.key: List<String>.unmodifiable(entry.value),
+       });
   final List<InventoryCategory> categories;
   final List<InventorySupplier> suppliers;
   final List<CatalogProduct> products;
   final List<StockPosition> stock;
   final List<PurchaseReceiptSummary> receipts;
+
+  /// Suppliers that have delivered this product in posted inventory receipts.
+  final Map<String, List<String>> productSupplierIds;
 }
 
 class ReceiptLineInput {

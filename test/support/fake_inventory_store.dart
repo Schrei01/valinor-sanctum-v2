@@ -8,6 +8,7 @@ class FakeInventoryStore implements InventoryStore {
   final products = <CatalogProduct>[];
   final stock = <StockPosition>[];
   final receipts = <PurchaseReceiptSummary>[];
+  final productSupplierIds = <String, List<String>>{};
   final receivedCommands = <ReceiptCommand>[];
   final savedProducts = <CatalogProduct>[];
   final savedCategoryIds = <String>[];
@@ -29,6 +30,7 @@ class FakeInventoryStore implements InventoryStore {
       products: products,
       stock: stock,
       receipts: receipts,
+      productSupplierIds: productSupplierIds,
     );
   }
 

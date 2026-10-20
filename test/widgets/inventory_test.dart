@@ -131,7 +131,7 @@ void main() {
   );
 
   testWidgets(
-    'catalog filters are read only and search resets when changing lists',
+    'category and supplier selectors filter the same product table without writes',
     (tester) async {
       final store = FakeInventoryStore()
         ..categories.addAll(const [
@@ -163,6 +163,13 @@ void main() {
             listPriceMinor: 500000,
             isActive: false,
           ),
+          CatalogProduct(
+            id: 'snack',
+            name: 'Snack sintético',
+            sku: 'SYN-SNACK',
+            categoryId: 'food',
+            listPriceMinor: 200000,
+          ),
         ])
         ..stock.add(
           const StockPosition(
@@ -170,7 +177,12 @@ void main() {
             quantity: 10,
             totalCostMinor: 1200000,
           ),
-        );
+        )
+        ..productSupplierIds.addAll({
+          'water': ['supplier'],
+          'game': ['old-supplier'],
+          'snack': ['old-supplier'],
+        });
       await open(tester, store);
       await tester.tap(find.text('Catálogo'));
       await tester.pumpAndSettle();
@@ -185,7 +197,7 @@ void main() {
       expect(find.byIcon(Icons.edit_outlined), findsNothing);
       expect(find.text('Archivar'), findsNothing);
       expect(find.text('Reactivar'), findsNothing);
-      await capture(tester, 'catalog-readonly');
+      await capture(tester, 'catalog-filters');
 
       await tester.enterText(
         find.byKey(const Key('catalog-search')),
@@ -194,7 +206,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Agua sintética'), findsOneWidget);
       expect(find.text('Juego sintético'), findsNothing);
-      await tester.tap(find.text('Categorías'));
+      await tester.tap(find.byKey(const Key('catalog-all-products')));
       await tester.pumpAndSettle();
       expect(
         tester
@@ -203,32 +215,56 @@ void main() {
             .text,
         isEmpty,
       );
-      expect(find.text('Comestible'), findsOneWidget);
-      expect(find.text('Artículo'), findsOneWidget);
-      expect(find.text('Evento'), findsOneWidget);
-      expect(find.text('Agua sintética'), findsNothing);
+      expect(find.text('Agua sintética'), findsOneWidget);
+      expect(find.text('Juego sintético'), findsOneWidget);
+      expect(find.text('Snack sintético'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('catalog-category-filter')));
+      await tester.pumpAndSettle();
+      expect(find.text('Comestible'), findsWidgets);
+      expect(find.text('Artículo'), findsWidgets);
+      expect(find.text('Evento'), findsWidgets);
+      await capture(tester, 'catalog-category-options');
+      await tester.tap(find.text('Comestible').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Agua sintética'), findsOneWidget);
+      expect(find.text('Snack sintético'), findsOneWidget);
+      expect(find.text('Juego sintético'), findsNothing);
       expect(find.byKey(const Key('catalog-create')), findsNothing);
-      await tester.enterText(find.byKey(const Key('catalog-search')), 'evento');
+      await tester.tap(find.byKey(const Key('catalog-supplier-filter')));
       await tester.pumpAndSettle();
-      expect(find.text('Evento'), findsOneWidget);
-      expect(find.text('Comestible'), findsNothing);
-      await tester.tap(find.text('Proveedores'));
+      expect(find.textContaining('Proveedor sintético'), findsWidgets);
+      expect(find.textContaining('Proveedor anterior'), findsWidgets);
+      await tester.tap(find.textContaining('Proveedor anterior').last);
       await tester.pumpAndSettle();
-      expect(find.text('Proveedor sintético'), findsOneWidget);
-      expect(find.text('Proveedor anterior'), findsOneWidget);
+      expect(find.text('Snack sintético'), findsOneWidget);
+      expect(find.text('Agua sintética'), findsNothing);
+      expect(find.text('Juego sintético'), findsNothing);
+      await capture(tester, 'catalog-filtered');
       expect(find.byIcon(Icons.edit_outlined), findsNothing);
       expect(find.text('Archivar'), findsNothing);
       expect(find.text('Reactivar'), findsNothing);
       await tester.enterText(
         find.byKey(const Key('catalog-search')),
-        'anterior',
+        'SYN-JUEGO',
       );
       await tester.pumpAndSettle();
-      expect(find.text('Proveedor sintético'), findsNothing);
-      expect(find.text('Proveedor anterior'), findsOneWidget);
+      expect(find.text('Snack sintético'), findsNothing);
+      expect(find.text('Juego sintético'), findsNothing);
+      expect(
+        find.textContaining('No hay productos que coincidan'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('catalog-all-products')));
+      await tester.pumpAndSettle();
+      expect(find.text('Agua sintética'), findsOneWidget);
+      expect(find.text('Juego sintético'), findsOneWidget);
+      expect(find.text('Snack sintético'), findsOneWidget);
       expect(store.saves, 0);
       expect(store.stock.single.quantity, 10);
-      expect(store.products.last.isActive, isFalse);
+      expect(
+        store.products.singleWhere((p) => p.id == 'game').isActive,
+        isFalse,
+      );
       expect(store.suppliers.last.isActive, isFalse);
       expect(tester.takeException(), isNull);
     },
