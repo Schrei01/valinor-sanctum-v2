@@ -143,6 +143,14 @@ ORDER BY c.paid_at_utc DESC, c.document_id
           'El identificador ya corresponde a otro comando.',
         );
       }
+      if ((await txn.rawQuery(
+        'SELECT command_id FROM quick_sale_requests WHERE command_id = ? OR sale_command_id = ? OR collection_command_id = ?',
+        [command.commandId, command.commandId, command.commandId],
+      )).isNotEmpty) {
+        throw const SupplierPaymentsValidationException(
+          'El identificador ya corresponde a una venta de mostrador.',
+        );
+      }
       final payable = await _payable(txn, command.payableId);
       final parts = <SupplierPaymentPart>[];
       for (final input in inputs) {

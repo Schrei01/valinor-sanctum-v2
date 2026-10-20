@@ -87,6 +87,11 @@ void main() {
         'supplier_payments',
         'supplier_payment_parts',
         'payable_settlements',
+        'quick_payment_options',
+        'quick_sales_accounts',
+        'quick_sales_lines',
+        'quick_sale_requests',
+        'quick_sale_line_payments',
       ]) {
         expect(await app.database.query(table), isEmpty, reason: table);
       }
@@ -353,6 +358,7 @@ void main() {
     expect(DatabaseSchema.migration2Checksum, 'fnv1a64:7c3f94396eb01ba3');
     expect(DatabaseSchema.migration3Checksum, 'fnv1a64:c719534b847edc09');
     expect(DatabaseSchema.migration4Checksum, 'fnv1a64:b669041fbf59266d');
+    expect(DatabaseSchema.migration5Checksum, 'fnv1a64:aaf6156fd67b9099');
   });
 
   test(
@@ -734,7 +740,7 @@ void main() {
   });
 
   test(
-    'v4 collections and money survive v5 with a complete WAL backup',
+    'v4 collections and money survive current schema with a complete WAL backup',
     () async {
       final path = p.join(fixtureDirectory.path, 'upgrade_v4.sqlite3');
       final old = await _createVersion4(path);
@@ -745,7 +751,7 @@ void main() {
       final app = await AppDatabase.open(path: path);
       await old.close();
       final health = await app.readHealth();
-      expect(health['schemaVersion'], 5);
+      expect(health['schemaVersion'], DatabaseSchema.version);
       expect(health['schemaChecksumVerified'], isTrue);
       expect(health['migrationChecksumVerified'], isTrue);
       for (final table in before.keys) {
@@ -824,6 +830,106 @@ void main() {
     await old.update('schema_migrations', {
       'migration_checksum': 'changed-v4',
     }, where: 'version = 4');
+    await old.close();
+    await expectLater(
+      AppDatabase.open(path: path),
+      throwsA(isA<DatabaseValidationException>()),
+    );
+    expect(
+      await Directory(p.join(fixtureDirectory.path, 'backups')).exists(),
+      isFalse,
+    );
+  });
+
+  test(
+    'v5 supplier payment and money survive v6 with a complete WAL backup',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'upgrade_v5.sqlite3');
+      final old = await _createVersion5(path);
+      await old.rawQuery('PRAGMA journal_mode = WAL');
+      await _insertVersion5Payment(old);
+      final before = await _allRows(old);
+      expect(await File('$path-wal').exists(), isTrue);
+      final app = await AppDatabase.open(path: path);
+      await old.close();
+      final health = await app.readHealth();
+      expect(health['schemaVersion'], 6);
+      expect(health['schemaChecksumVerified'], isTrue);
+      expect(health['migrationChecksumVerified'], isTrue);
+      for (final table in before.keys) {
+        final after = await app.database.query(table);
+        expect(
+          table == 'schema_migrations' ? after.take(5).toList() : after,
+          before[table],
+          reason: table,
+        );
+      }
+      for (final table in [
+        'quick_payment_options',
+        'quick_sales_accounts',
+        'quick_sales_lines',
+        'quick_sale_requests',
+        'quick_sale_line_payments',
+      ]) {
+        expect(await app.database.query(table), isEmpty);
+      }
+      expect(
+        (await app.database.query('supplier_payments')).single['total_minor'],
+        20,
+      );
+      expect(
+        (await app.database.query(
+          'supplier_payments',
+        )).single['remaining_minor'],
+        80,
+      );
+      await app.close();
+      final backups = await Directory(
+        p.join(fixtureDirectory.path, 'backups'),
+      ).list().toList();
+      expect(backups, hasLength(1));
+      expect(p.basename(backups.single.path), contains('.v5.'));
+      final backup = await databaseFactoryFfi.openDatabase(
+        backups.single.path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      expect(await backup.getVersion(), 5);
+      expect(await _allRows(backup), before);
+      expect(await backup.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      expect(
+        (await backup.rawQuery('PRAGMA quick_check')).single.values.single,
+        'ok',
+      );
+      await backup.close();
+      final reopened = await AppDatabase.open(path: path);
+      await reopened.close();
+      expect(
+        await Directory(p.join(fixtureDirectory.path, 'backups')).list().length,
+        1,
+      );
+    },
+  );
+
+  test('v5 backup failure preserves posted payments and old file', () async {
+    final path = p.join(fixtureDirectory.path, 'backup_failure_v5.sqlite3');
+    final old = await _createVersion5(path);
+    await _insertVersion5Payment(old);
+    await old.close();
+    await File(p.join(fixtureDirectory.path, 'backups')).writeAsString('keep');
+    final before = await File(path).readAsBytes();
+    await expectLater(
+      AppDatabase.open(path: path),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await File(path).readAsBytes(), before);
+  });
+
+  test('historical v5 drift is refused before migration or backup', () async {
+    final path = p.join(fixtureDirectory.path, 'history_failure_v5.sqlite3');
+    final old = await _createVersion5(path);
+    await old.update('schema_migrations', {
+      'migration_checksum': 'changed-v5',
+    }, where: 'version = 5');
     await old.close();
     await expectLater(
       AppDatabase.open(path: path),
@@ -1183,6 +1289,132 @@ Future<Database> _createVersion4(String path) async {
     'applied_at_utc': _timestamp,
   });
   return db;
+}
+
+Future<Database> _createVersion5(String path) async {
+  final db = await _createVersion4(path);
+  for (final statement in DatabaseSchema.migration5Statements) {
+    await db.execute(statement);
+  }
+  await db.execute('PRAGMA user_version = 5');
+  await db.insert('schema_migrations', {
+    'version': 5,
+    'name': DatabaseSchema.migration5Name,
+    'migration_checksum': DatabaseSchema.migration5Checksum,
+    'schema_checksum': await _testSchemaChecksum(db),
+    'applied_at_utc': _timestamp,
+  });
+  return db;
+}
+
+/// Actual released-v5 facts, assembled without current adapters or downgrades.
+Future<void> _insertVersion5Payment(DatabaseExecutor db) async {
+  await _insertVersion4Collection(db);
+  const occurred = '2026-01-01T17:00:00.000Z';
+  await db.insert('supplier_payment_requests', {
+    'command_id': 'old-payment-command',
+    'canonical_payload': '{"fixture":"released-v5"}',
+    'payable_id': 'obligation',
+    'occurred_at_utc': occurred,
+    'prepared_at_utc': occurred,
+    'status': 'prepared',
+  });
+  await db.insert('command_log', {
+    'id': 'old-payment-command',
+    'command_type': 'pay_supplier',
+    'payload_hash': 'synthetic-payment',
+    'actor_id': 'synthetic-actor',
+    'response_json': '{"synthetic":true}',
+    'response_version': 1,
+    'committed_at_utc': occurred,
+    'authorization_policy_version': 'development-single-user-v1',
+  });
+  await db.insert('business_documents', {
+    'id': 'old-payment',
+    'command_id': 'old-payment-command',
+    'command_sequence': 0,
+    'profile_id': 'synthetic-profile',
+    'actor_id': 'synthetic-actor',
+    'type': 'supplier_payment',
+    'status': 'draft',
+    'occurred_at_utc': occurred,
+    'business_date': '2026-01-01',
+    'recorded_at_utc': occurred,
+    'source_kind': 'synthetic',
+    'date_quality': 'documented',
+  });
+  await db.insert('supplier_payments', {
+    'document_id': 'old-payment',
+    'payable_id': 'obligation',
+    'purchase_label_snapshot': 'purchase-document',
+    'supplier_name_snapshot': 'Synthetic supplier',
+    'paid_at_utc': occurred,
+    'total_minor': 20,
+    'remaining_minor': 80,
+  });
+  await db.insert('supplier_payment_parts', {
+    'id': 'old-payment-part',
+    'supplier_payment_id': 'old-payment',
+    'sequence': 0,
+    'cash_account_id': 'old-cash',
+    'payment_method_id': 'old-method',
+    'cash_account_name_snapshot': 'Caja sintética',
+    'cash_account_kind_snapshot': 'cash',
+    'payment_method_code_snapshot': 'CASH',
+    'payment_method_name_snapshot': 'Efectivo',
+    'amount_minor': 20,
+  });
+  await db.insert('payable_settlements', {
+    'id': 'old-payable-settlement',
+    'payable_id': 'obligation',
+    'supplier_payment_id': 'old-payment',
+    'amount_minor': 20,
+  });
+  await db.insert('journal_entries', {
+    'id': 'old-payment-entry',
+    'document_id': 'old-payment',
+    'status': 'draft',
+    'cost_completeness': 'not_applicable',
+  });
+  for (final (sequence, account, debit, credit) in [
+    (0, 'payable-account', 20, 0),
+    (1, 'old-money-ledger', 0, 20),
+  ]) {
+    await db.insert('journal_lines', {
+      'id': 'old-payment-line-$sequence',
+      'entry_id': 'old-payment-entry',
+      'sequence': sequence,
+      'account_id': account,
+      'debit_minor': debit,
+      'credit_minor': credit,
+    });
+  }
+  await db.update(
+    'business_documents',
+    {'status': 'posted'},
+    where: 'id = ?',
+    whereArgs: ['old-payment'],
+  );
+  await db.update(
+    'journal_entries',
+    {'status': 'posted', 'posted_at_utc': occurred},
+    where: 'id = ?',
+    whereArgs: ['old-payment-entry'],
+  );
+  await db.update(
+    'supplier_payment_requests',
+    {'status': 'confirmed'},
+    where: 'command_id = ?',
+    whereArgs: ['old-payment-command'],
+  );
+  await db.insert('supplier_payment_requests', {
+    'command_id': 'old-prepared-payment',
+    'canonical_payload': '{"fixture":"prepared-v5"}',
+    'payable_id': 'obligation',
+    'occurred_at_utc': occurred,
+    'prepared_at_utc': occurred,
+    'status': 'prepared',
+  });
 }
 
 /// True released-v4 collection: no current adapter, downgrade, or reset.

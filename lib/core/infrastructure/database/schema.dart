@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 5;
+  static const int version = 6;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -27,12 +27,17 @@ abstract final class DatabaseSchema {
   static String get migration5Checksum =>
       checksum(migration5Statements.join('\n;\n'));
 
+  static const String migration6Name = 'quick_counter_sales_v6';
+  static String get migration6Checksum =>
+      checksum(migration6Statements.join('\n;\n'));
+
   static String nameForVersion(int version) => switch (version) {
     1 => migrationName,
     2 => migration2Name,
     3 => migration3Name,
     4 => migration4Name,
     5 => migration5Name,
+    6 => migration6Name,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -42,6 +47,7 @@ abstract final class DatabaseSchema {
     3 => migration3Checksum,
     4 => migration4Checksum,
     5 => migration5Checksum,
+    6 => migration6Checksum,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -1579,6 +1585,382 @@ END
     ),
     ..._freezeSupplierPaymentJournal(),
   ]);
+
+  /// Quick checkout composes the released sale and collection facts in one
+  /// transaction. Its durable parent reserves both internal command IDs.
+  static final List<String> migration6Statements = List<String>.unmodifiable([
+    '''
+CREATE TABLE quick_payment_options (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  label TEXT NOT NULL CHECK (length(trim(label)) BETWEEN 1 AND 160),
+  cash_account_id TEXT NOT NULL REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  payment_method_id TEXT NOT NULL REFERENCES payment_methods(id) ON DELETE RESTRICT,
+  is_active INTEGER NOT NULL CHECK (typeof(is_active) = 'integer' AND is_active IN (0, 1))
+)
+''',
+    '''
+CREATE TABLE quick_sales_accounts (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  label TEXT NOT NULL CHECK (length(label) <= 160),
+  revision INTEGER NOT NULL CHECK (typeof(revision) = 'integer' AND revision > 0),
+  status TEXT NOT NULL CHECK (status IN ('open', 'prepared', 'confirmed', 'cancelled')),
+  updated_at_utc TEXT NOT NULL CHECK (${_collectionUtc('updated_at_utc')}),
+  confirmed_document_id TEXT UNIQUE REFERENCES sales(document_id) ON DELETE RESTRICT,
+  CHECK ((status = 'confirmed') = (confirmed_document_id IS NOT NULL))
+)
+''',
+    '''
+CREATE TABLE quick_sales_lines (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  account_id TEXT NOT NULL REFERENCES quick_sales_accounts(id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  product_id TEXT REFERENCES catalog_items(id) ON DELETE RESTRICT,
+  quantity_text TEXT NOT NULL,
+  unit_price_minor INTEGER CHECK (unit_price_minor IS NULL OR
+    (typeof(unit_price_minor) = 'integer' AND unit_price_minor >= 0)),
+  payment_option_id TEXT REFERENCES quick_payment_options(id) ON DELETE RESTRICT,
+  UNIQUE (account_id, sequence)
+)
+''',
+    '''
+CREATE TABLE quick_sale_requests (
+  command_id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(command_id)) > 0),
+  account_id TEXT NOT NULL REFERENCES quick_sales_accounts(id) ON DELETE RESTRICT,
+  account_revision INTEGER NOT NULL CHECK (typeof(account_revision) = 'integer' AND account_revision > 0),
+  canonical_payload TEXT NOT NULL CHECK (length(trim(canonical_payload)) > 0),
+  occurred_at_utc TEXT NOT NULL CHECK (${_collectionUtc('occurred_at_utc')}),
+  prepared_at_utc TEXT NOT NULL CHECK (${_collectionUtc('prepared_at_utc')}),
+  status TEXT NOT NULL CHECK (status IN ('prepared', 'executing', 'rejected', 'cancelled', 'confirmed')),
+  rejection_reason TEXT,
+  sale_command_id TEXT NOT NULL UNIQUE CHECK (length(trim(sale_command_id)) > 0),
+  collection_command_id TEXT NOT NULL UNIQUE CHECK (length(trim(collection_command_id)) > 0),
+  legacy_draft_id TEXT NOT NULL UNIQUE CHECK (length(trim(legacy_draft_id)) > 0),
+  CHECK (command_id <> sale_command_id AND command_id <> collection_command_id
+    AND sale_command_id <> collection_command_id),
+  CHECK ((status IN ('prepared', 'executing', 'confirmed') AND rejection_reason IS NULL)
+    OR (status IN ('rejected', 'cancelled') AND rejection_reason IS NOT NULL
+      AND length(trim(rejection_reason)) > 0))
+)
+''',
+    '''
+CREATE TABLE quick_sale_line_payments (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  request_id TEXT NOT NULL REFERENCES quick_sale_requests(command_id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  source_line_id TEXT NOT NULL UNIQUE REFERENCES quick_sales_lines(id) ON DELETE RESTRICT,
+  sale_document_id TEXT NOT NULL REFERENCES sales(document_id) ON DELETE RESTRICT,
+  sale_line_id TEXT NOT NULL REFERENCES sale_lines(id) ON DELETE RESTRICT,
+  collection_document_id TEXT NOT NULL REFERENCES collections(document_id) ON DELETE RESTRICT,
+  product_id TEXT NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+  product_name_snapshot TEXT NOT NULL CHECK (length(trim(product_name_snapshot)) BETWEEN 1 AND 160),
+  quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+  unit_price_minor INTEGER NOT NULL CHECK (typeof(unit_price_minor) = 'integer' AND unit_price_minor >= 0),
+  total_minor INTEGER NOT NULL CHECK (typeof(total_minor) = 'integer' AND total_minor >= 0
+    AND typeof(quantity * unit_price_minor) = 'integer' AND quantity * unit_price_minor = total_minor),
+  payment_option_id TEXT NOT NULL REFERENCES quick_payment_options(id) ON DELETE RESTRICT,
+  payment_option_label_snapshot TEXT NOT NULL CHECK (length(trim(payment_option_label_snapshot)) BETWEEN 1 AND 160),
+  cash_account_id TEXT NOT NULL REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  payment_method_id TEXT NOT NULL REFERENCES payment_methods(id) ON DELETE RESTRICT,
+  cash_account_name_snapshot TEXT NOT NULL CHECK (length(trim(cash_account_name_snapshot)) BETWEEN 1 AND 160),
+  cash_account_kind_snapshot TEXT NOT NULL CHECK (cash_account_kind_snapshot IN ('cash', 'bank', 'mobile', 'clearing')),
+  payment_method_code_snapshot TEXT NOT NULL CHECK (length(trim(payment_method_code_snapshot)) BETWEEN 1 AND 32),
+  payment_method_name_snapshot TEXT NOT NULL CHECK (length(trim(payment_method_name_snapshot)) BETWEEN 1 AND 160),
+  UNIQUE (request_id, sequence)
+)
+''',
+    'CREATE INDEX idx_quick_requests_account ON quick_sale_requests(account_id)',
+    'CREATE INDEX idx_quick_line_payments_sale ON quick_sale_line_payments(sale_document_id)',
+    '''
+CREATE TRIGGER quick_payment_options_no_replace
+BEFORE INSERT ON quick_payment_options
+WHEN EXISTS (SELECT 1 FROM quick_payment_options WHERE id = NEW.id)
+BEGIN
+  SELECT RAISE(ABORT, 'Payment options cannot be replaced');
+END
+''',
+    '''
+CREATE TRIGGER quick_payment_options_identity_immutable
+BEFORE UPDATE ON quick_payment_options
+WHEN NEW.id <> OLD.id OR NEW.cash_account_id <> OLD.cash_account_id
+  OR NEW.payment_method_id <> OLD.payment_method_id
+BEGIN
+  SELECT RAISE(ABORT, 'Payment option identity is immutable; archive it instead');
+END
+''',
+    '''
+CREATE TRIGGER quick_payment_options_no_delete
+BEFORE DELETE ON quick_payment_options
+BEGIN
+  SELECT RAISE(ABORT, 'Archive payment options instead of deleting them');
+END
+''',
+    '''
+CREATE TRIGGER quick_sales_accounts_insert_open
+BEFORE INSERT ON quick_sales_accounts
+WHEN NEW.status <> 'open' OR NEW.revision <> 1
+  OR EXISTS (SELECT 1 FROM quick_sales_accounts WHERE id = NEW.id)
+BEGIN
+  SELECT RAISE(ABORT, 'Create a new quick account as open at revision one');
+END
+''',
+    '''
+CREATE TRIGGER quick_sales_accounts_validate_update
+BEFORE UPDATE ON quick_sales_accounts
+BEGIN
+  SELECT CASE WHEN NEW.id <> OLD.id OR OLD.status IN ('confirmed', 'cancelled')
+    THEN RAISE(ABORT, 'Closed quick accounts are immutable') END;
+  SELECT CASE WHEN NOT (
+    (OLD.status = 'open' AND NEW.status IN ('open', 'prepared', 'cancelled'))
+    OR (OLD.status = 'prepared' AND NEW.status IN ('open', 'confirmed')))
+    THEN RAISE(ABORT, 'Invalid quick account transition') END;
+  SELECT CASE WHEN OLD.status = 'open' AND NEW.status = 'open'
+    AND (NEW.revision <> OLD.revision + 1 OR EXISTS (SELECT 1 FROM quick_sale_requests
+      WHERE account_id = OLD.id AND status <> 'cancelled'))
+    THEN RAISE(ABORT, 'Edit only the latest open quick account') END;
+  SELECT CASE WHEN NEW.status = 'prepared' AND (
+    NEW.revision <> OLD.revision OR NEW.label <> OLD.label OR NOT EXISTS (
+      SELECT 1 FROM quick_sale_requests WHERE account_id = OLD.id
+        AND account_revision = OLD.revision AND status = 'prepared'))
+    THEN RAISE(ABORT, 'Prepare the exact saved quick account') END;
+  SELECT CASE WHEN OLD.status = 'prepared' AND NEW.status = 'open' AND (
+    NEW.revision <> OLD.revision + 1 OR NEW.label <> OLD.label OR EXISTS (
+      SELECT 1 FROM quick_sale_requests WHERE account_id = OLD.id AND status <> 'cancelled'))
+    THEN RAISE(ABORT, 'Only a cancelled rejection may reopen a quick account') END;
+  SELECT CASE WHEN NEW.status = 'cancelled' AND (
+    NEW.revision <> OLD.revision OR NEW.label <> OLD.label OR EXISTS (
+      SELECT 1 FROM quick_sale_requests WHERE account_id = OLD.id AND status <> 'cancelled'))
+    THEN RAISE(ABORT, 'Only an unprepared open quick account may be cancelled') END;
+  SELECT CASE WHEN NEW.status = 'confirmed' AND (
+    NEW.revision <> OLD.revision OR NEW.label <> OLD.label OR NOT EXISTS (
+      SELECT 1 FROM quick_sale_requests request JOIN business_documents doc
+        ON doc.command_id = request.sale_command_id
+      WHERE request.account_id = OLD.id AND request.account_revision = OLD.revision
+        AND request.status = 'confirmed' AND doc.id = NEW.confirmed_document_id))
+    THEN RAISE(ABORT, 'Complete checkout before closing its quick account') END;
+END
+''',
+    '''
+CREATE TRIGGER quick_sales_accounts_no_delete
+BEFORE DELETE ON quick_sales_accounts
+BEGIN
+  SELECT RAISE(ABORT, 'Saved quick accounts cannot be deleted');
+END
+''',
+    ..._freezeQuickDraftLines(),
+    '''
+CREATE TRIGGER quick_sale_requests_validate_insert
+BEFORE INSERT ON quick_sale_requests
+BEGIN
+  SELECT CASE WHEN NEW.status <> 'prepared'
+    OR EXISTS (SELECT 1 FROM quick_sale_requests WHERE command_id IN
+      (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id)
+      OR sale_command_id IN (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id)
+      OR collection_command_id IN (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id)
+      OR legacy_draft_id = NEW.legacy_draft_id
+      OR (account_id = NEW.account_id AND status <> 'cancelled'))
+    OR EXISTS (SELECT 1 FROM command_log WHERE id IN
+      (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id))
+    OR EXISTS (SELECT 1 FROM sale_confirmations WHERE command_id IN
+      (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id))
+    OR EXISTS (SELECT 1 FROM collection_requests WHERE command_id IN
+      (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id))
+    OR EXISTS (SELECT 1 FROM supplier_payment_requests WHERE command_id IN
+      (NEW.command_id, NEW.sale_command_id, NEW.collection_command_id))
+    OR EXISTS (SELECT 1 FROM sales_drafts WHERE id = NEW.legacy_draft_id)
+    THEN RAISE(ABORT, 'Create a unique prepared quick sale and reserve its child identifiers') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM quick_sales_accounts
+    WHERE id = NEW.account_id AND status = 'open' AND revision = NEW.account_revision
+      AND length(trim(label)) BETWEEN 1 AND 160)
+    OR NOT EXISTS (SELECT 1 FROM quick_sales_lines WHERE account_id = NEW.account_id)
+    THEN RAISE(ABORT, 'Prepare the current saved open quick account') END;
+END
+''',
+    '''
+CREATE TRIGGER quick_sale_requests_validate_update
+BEFORE UPDATE ON quick_sale_requests
+BEGIN
+  SELECT CASE WHEN NEW.command_id <> OLD.command_id OR NEW.account_id <> OLD.account_id
+    OR NEW.account_revision <> OLD.account_revision OR NEW.canonical_payload <> OLD.canonical_payload
+    OR NEW.occurred_at_utc <> OLD.occurred_at_utc OR NEW.prepared_at_utc <> OLD.prepared_at_utc
+    OR NEW.sale_command_id <> OLD.sale_command_id OR NEW.collection_command_id <> OLD.collection_command_id
+    OR NEW.legacy_draft_id <> OLD.legacy_draft_id
+    THEN RAISE(ABORT, 'Prepared quick sale input and child identities are immutable') END;
+  SELECT CASE WHEN NOT ((OLD.status = 'prepared' AND NEW.status IN ('executing', 'rejected'))
+    OR (OLD.status = 'executing' AND NEW.status = 'confirmed')
+    OR (OLD.status = 'rejected' AND NEW.status = 'cancelled'))
+    THEN RAISE(ABORT, 'Invalid quick sale request transition') END;
+  SELECT CASE WHEN NEW.status IN ('rejected', 'cancelled') AND (
+    EXISTS (SELECT 1 FROM command_log WHERE id IN
+      (OLD.command_id, OLD.sale_command_id, OLD.collection_command_id))
+    OR EXISTS (SELECT 1 FROM sale_confirmations WHERE command_id = OLD.sale_command_id)
+    OR EXISTS (SELECT 1 FROM collection_requests WHERE command_id = OLD.collection_command_id)
+    OR EXISTS (SELECT 1 FROM quick_sale_line_payments WHERE request_id = OLD.command_id))
+    THEN RAISE(ABORT, 'A committed quick sale cannot be rejected or cancelled') END;
+  SELECT CASE WHEN NEW.status = 'cancelled' AND NEW.rejection_reason IS NOT OLD.rejection_reason
+    THEN RAISE(ABORT, 'Quick sale rejection reasons are historical') END;
+  SELECT CASE WHEN NEW.status = 'executing' AND NOT EXISTS (
+    SELECT 1 FROM quick_sales_accounts WHERE id = OLD.account_id
+      AND status = 'prepared' AND revision = OLD.account_revision)
+    THEN RAISE(ABORT, 'Execute only the exact prepared quick account') END;
+  SELECT CASE WHEN NEW.status = 'confirmed' AND NOT (${_quickConfirmedResult()})
+    THEN RAISE(ABORT, 'Quick checkout requires a posted sale, full collection, and exact line payments') END;
+END
+''',
+    '''
+CREATE TRIGGER quick_sale_requests_no_delete
+BEFORE DELETE ON quick_sale_requests
+BEGIN
+  SELECT RAISE(ABORT, 'Durable quick sale requests cannot be deleted');
+END
+''',
+    '''
+CREATE TRIGGER quick_sale_requests_reserve_command_ids
+BEFORE INSERT ON command_log
+WHEN EXISTS (SELECT 1 FROM quick_sale_requests request WHERE
+  (NEW.id = request.command_id AND (request.status <> 'executing' OR NEW.command_type <> 'quick_sale'))
+  OR (NEW.id = request.sale_command_id AND (request.status <> 'executing' OR NEW.command_type <> 'confirm_sale'))
+  OR (NEW.id = request.collection_command_id AND (request.status <> 'executing' OR NEW.command_type <> 'collect_receivable')))
+BEGIN
+  SELECT RAISE(ABORT, 'Quick checkout identifiers are reserved for its executing parent and children');
+END
+''',
+    for (final table in [
+      'sale_confirmations',
+      'collection_requests',
+      'supplier_payment_requests',
+    ])
+      '''
+CREATE TRIGGER ${table}_respect_quick_command_ids
+BEFORE INSERT ON $table
+WHEN EXISTS (SELECT 1 FROM quick_sale_requests request WHERE
+  NEW.command_id IN (request.command_id, request.sale_command_id, request.collection_command_id)
+  AND NOT (request.status = 'executing' AND ${table == 'sale_confirmations'
+          ? 'NEW.command_id = request.sale_command_id AND NEW.draft_id = request.legacy_draft_id'
+          : table == 'collection_requests'
+          ? 'NEW.command_id = request.collection_command_id'
+          : '0'}))
+BEGIN
+  SELECT RAISE(ABORT, 'Only an executing quick checkout may prepare its exact child command');
+END
+''',
+    '''
+CREATE TRIGGER sales_drafts_respect_quick_reserved_draft
+BEFORE INSERT ON sales_drafts
+WHEN EXISTS (SELECT 1 FROM quick_sale_requests request
+  WHERE request.legacy_draft_id = NEW.id AND request.status <> 'executing')
+BEGIN
+  SELECT RAISE(ABORT, 'An internal quick checkout draft is reserved for its executing request');
+END
+''',
+    '''
+CREATE TRIGGER quick_line_payments_validate_insert
+BEFORE INSERT ON quick_sale_line_payments
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM quick_sale_line_payments existing
+    WHERE existing.id = NEW.id OR existing.source_line_id = NEW.source_line_id
+      OR (existing.request_id = NEW.request_id AND existing.sequence = NEW.sequence))
+    THEN RAISE(ABORT, 'Quick sale payment facts cannot be replaced') END;
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM quick_sale_requests request
+    JOIN quick_sales_lines source ON source.account_id = request.account_id
+    JOIN quick_payment_options option ON option.id = source.payment_option_id
+    JOIN sale_lines line ON line.id = NEW.sale_line_id
+    JOIN business_documents sale_doc ON sale_doc.id = line.sale_id
+    JOIN journal_entries sale_entry ON sale_entry.document_id = sale_doc.id
+    JOIN collections collection ON collection.document_id = NEW.collection_document_id
+    JOIN business_documents collection_doc ON collection_doc.id = collection.document_id
+    JOIN journal_entries collection_entry ON collection_entry.document_id = collection_doc.id
+    JOIN customer_receivables receivable ON receivable.id = collection.receivable_id
+    WHERE request.command_id = NEW.request_id AND request.status = 'executing'
+      AND source.id = NEW.source_line_id AND source.sequence = NEW.sequence
+      AND source.product_id = NEW.product_id AND source.unit_price_minor = NEW.unit_price_minor
+      AND trim(source.quantity_text) NOT GLOB '*[^0-9]*'
+      AND ltrim(trim(source.quantity_text), '0') = CAST(NEW.quantity AS TEXT)
+      AND option.id = NEW.payment_option_id AND option.is_active = 1 AND option.cash_account_id = NEW.cash_account_id
+      AND option.payment_method_id = NEW.payment_method_id
+      AND line.sale_id = NEW.sale_document_id AND line.product_id = NEW.product_id
+      AND line.unit_price_minor = NEW.unit_price_minor AND line.name_snapshot = NEW.product_name_snapshot
+      AND sale_doc.command_id = request.sale_command_id AND sale_doc.status = 'posted'
+      AND sale_entry.status = 'posted' AND collection_doc.command_id = request.collection_command_id
+      AND collection_doc.status = 'posted' AND collection_entry.status = 'posted'
+      AND receivable.origin_document_id = sale_doc.id AND collection.remaining_minor = 0
+      AND collection.total_minor = receivable.initial_minor
+      AND (NEW.total_minor = 0 OR EXISTS (SELECT 1 FROM collection_parts part
+        WHERE part.collection_id = collection.document_id
+          AND part.cash_account_id = NEW.cash_account_id AND part.payment_method_id = NEW.payment_method_id
+          AND part.cash_account_name_snapshot = NEW.cash_account_name_snapshot
+          AND part.cash_account_kind_snapshot = NEW.cash_account_kind_snapshot
+          AND part.payment_method_code_snapshot = NEW.payment_method_code_snapshot
+          AND part.payment_method_name_snapshot = NEW.payment_method_name_snapshot)))
+    THEN RAISE(ABORT, 'Quick line payment must match its source and posted sale and collection') END;
+END
+''',
+    for (final action in ['UPDATE', 'DELETE'])
+      '''
+CREATE TRIGGER quick_line_payments_no_${action.toLowerCase()}
+BEFORE $action ON quick_sale_line_payments
+BEGIN
+  SELECT RAISE(ABORT, 'Quick sale payment history is immutable');
+END
+''',
+  ]);
+
+  static List<String> _freezeQuickDraftLines() {
+    String locked(String row) =>
+        '''EXISTS (SELECT 1 FROM quick_sales_accounts account
+WHERE account.id = $row.account_id AND (account.status <> 'open' OR EXISTS (
+  SELECT 1 FROM quick_sale_requests request WHERE request.account_id = account.id
+    AND request.status <> 'cancelled')))''';
+    return [
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER quick_sales_lines_locked_no_${action.toLowerCase()}
+BEFORE $action ON quick_sales_lines
+WHEN ${action == 'INSERT'
+            ? '(${locked('NEW')} OR EXISTS (SELECT 1 FROM quick_sales_lines existing WHERE (existing.id = NEW.id OR (existing.account_id = NEW.account_id AND existing.sequence = NEW.sequence)) AND ${locked('existing')}))'
+            : action == 'DELETE'
+            ? locked('OLD')
+            : '(${locked('OLD')} OR ${locked('NEW')} OR EXISTS (SELECT 1 FROM quick_sales_lines existing WHERE existing.id <> OLD.id AND (existing.id = NEW.id OR (existing.account_id = NEW.account_id AND existing.sequence = NEW.sequence)) AND ${locked('existing')}))'}
+BEGIN
+  SELECT RAISE(ABORT, 'Prepared and closed quick account lines are locked');
+END
+''',
+    ];
+  }
+
+  static String _quickConfirmedResult() =>
+      '''EXISTS (
+    SELECT 1 FROM command_log parent
+    JOIN business_documents sale_doc ON sale_doc.command_id = OLD.sale_command_id
+    JOIN sales sale ON sale.document_id = sale_doc.id
+    JOIN journal_entries sale_entry ON sale_entry.document_id = sale_doc.id
+    JOIN customer_receivables receivable ON receivable.origin_document_id = sale_doc.id
+    JOIN business_documents collection_doc ON collection_doc.command_id = OLD.collection_command_id
+    JOIN collections collection ON collection.document_id = collection_doc.id
+    JOIN journal_entries collection_entry ON collection_entry.document_id = collection_doc.id
+    JOIN sale_confirmations sale_request ON sale_request.command_id = OLD.sale_command_id
+    JOIN collection_requests collection_request ON collection_request.command_id = OLD.collection_command_id
+    WHERE parent.id = OLD.command_id AND parent.command_type = 'quick_sale'
+      AND parent.actor_id = sale_doc.actor_id AND sale_doc.actor_id = collection_doc.actor_id
+      AND parent.authorization_policy_version = 'development-single-user-v1'
+      AND sale.draft_id = OLD.legacy_draft_id AND sale_doc.status = 'posted' AND sale_entry.status = 'posted'
+      AND sale_doc.occurred_at_utc = OLD.occurred_at_utc AND collection_doc.occurred_at_utc = OLD.occurred_at_utc
+      AND collection_doc.status = 'posted' AND collection_entry.status = 'posted'
+      AND sale_request.status = 'confirmed' AND collection_request.status = 'confirmed'
+      AND collection.receivable_id = receivable.id AND collection.total_minor = sale.receivable_minor
+      AND collection.remaining_minor = 0
+      AND (SELECT count(*) FROM quick_sale_line_payments WHERE request_id = OLD.command_id)
+        = (SELECT count(*) FROM quick_sales_lines WHERE account_id = OLD.account_id)
+      AND EXISTS (SELECT 1 FROM quick_sale_line_payments WHERE request_id = OLD.command_id)
+      AND ${_supplierBoundedRemainder('sale.receivable_minor', 'quick_sale_line_payments payment', 'payment.request_id = OLD.command_id', 'payment.total_minor', 'payment.sequence')} = 0
+      AND NOT EXISTS (SELECT 1 FROM sale_lines line WHERE line.sale_id = sale.document_id
+        AND ${_supplierBoundedRemainder('line.quantity', 'quick_sale_line_payments payment', 'payment.request_id = OLD.command_id AND payment.sale_line_id = line.id', 'payment.quantity', 'payment.sequence')} <> 0)
+      AND NOT EXISTS (SELECT 1 FROM collection_parts part WHERE part.collection_id = collection.document_id
+        AND ${_supplierBoundedRemainder('part.amount_minor', 'quick_sale_line_payments payment', 'payment.request_id = OLD.command_id AND payment.cash_account_id = part.cash_account_id AND payment.payment_method_id = part.payment_method_id', 'payment.total_minor', 'payment.sequence')} <> 0)
+      AND NOT EXISTS (SELECT 1 FROM quick_sale_line_payments payment WHERE payment.request_id = OLD.command_id
+        AND payment.total_minor > 0 AND NOT EXISTS (SELECT 1 FROM collection_parts part
+          WHERE part.collection_id = collection.document_id AND part.cash_account_id = payment.cash_account_id
+            AND part.payment_method_id = payment.payment_method_id)))''';
 
   // Subtract positive facts from an int64 budget rather than SUMming them.
   // A malformed aggregate becomes -1 without overflowing or using floats.

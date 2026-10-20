@@ -6,6 +6,7 @@ import '../../inventory/domain/inventory_store.dart';
 import '../../sales/domain/sales_store.dart';
 import '../../collections/domain/collections_store.dart';
 import '../../supplier_payments/domain/supplier_payments_store.dart';
+import '../../quick_sales/domain/quick_sales_store.dart';
 
 enum WorkspaceState { loading, ready, failed }
 
@@ -26,6 +27,7 @@ class WorkspaceController extends ChangeNotifier {
   CollectionsStore? get collectionsStore => _session?.collectionsStore;
   SupplierPaymentsStore? get supplierPaymentsStore =>
       _session?.supplierPaymentsStore;
+  QuickSalesStore? get quickSalesStore => _session?.quickSalesStore;
 
   Future<void> initialize() async {
     if (busy || _disposed || state == WorkspaceState.ready) return;

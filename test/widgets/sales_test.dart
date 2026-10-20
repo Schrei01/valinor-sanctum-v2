@@ -6,16 +6,14 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:valinor_sanctum_2/app/sanctum_app.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart';
+import 'package:valinor_sanctum_2/features/sales/application/sales_controller.dart';
 import 'package:valinor_sanctum_2/features/sales/domain/sales_store.dart';
-import 'package:valinor_sanctum_2/features/workspace/application/workspace_controller.dart';
+import 'package:valinor_sanctum_2/features/sales/presentation/sales_page.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
-import 'package:valinor_sanctum_2/features/workspace/domain/workspace_store.dart';
 
 import '../support/fake_sales_store.dart';
-import '../support/fake_workspace_store.dart';
 
 void main() {
   setUpAll(() async {
@@ -73,24 +71,24 @@ void main() {
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final workspace = FakeWorkspaceStore()..profile = profile;
-    final controller = WorkspaceController(
-      openSession: () async => WorkspaceSession(
-        store: workspace,
-        databasePath: 'perfil-sintetico/sanctum2.sqlite3',
-        profileId: 'test',
-        salesStore: store,
-      ),
-    );
-    await controller.initialize();
+    // Exercise historical presentation in isolation; the app shell no longer
+    // exposes this route.
+    final controller = SalesController(store: store);
+    await controller.load();
     await tester.pumpWidget(
       RepaintBoundary(
         key: const Key('sales-preview'),
-        child: SanctumApp(controller: controller),
+        child: MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: SalesPage(controller: controller, profile: profile),
+            ),
+          ),
+        ),
       ),
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Ventas'));
     await tester.pumpAndSettle();
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
@@ -169,15 +167,11 @@ void main() {
   }
 
   testWidgets(
-    'navigation preserves unsaved editor and warning without claiming persisted changes',
+    'historical editor reports unsaved changes without claiming persistence',
     (tester) async {
       final fake = store();
       await open(tester, fake, size: const Size(400, 900));
       await fill(tester);
-      await tester.tap(find.text('Sistema'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Ventas'));
-      await tester.pumpAndSettle();
       expect(
         tester
             .widget<TextFormField>(find.byKey(const Key('sale-label')))

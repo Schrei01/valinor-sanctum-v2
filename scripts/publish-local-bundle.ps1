@@ -67,7 +67,11 @@ if (Test-Path -LiteralPath $currentExecutable) {
     $currentVersion = (Get-Item -LiteralPath $currentExecutable).VersionInfo.FileVersion
     if ([version]($bundleVersionText.Split('+')[0]) -lt [version]($currentVersion.Split('+')[0])) { throw 'El ZIP es anterior a la entrega publicada. No se permite retroceder.' }
 }
-if (@(Get-CimInstance Win32_Process -Filter "Name = 'valinor_sanctum_2.exe'" | Where-Object { [string]::Equals($_.ExecutablePath, $currentExecutable, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { throw 'Cierra la aplicacion abierta desde dist\ValinorSanctum2 antes de actualizarla.' }
+$projectBoundary = [IO.Path]::GetFullPath($projectRoot).TrimEnd('\') + '\'
+$runningProjectApps = @(Get-CimInstance Win32_Process -Filter "Name = 'valinor_sanctum_2.exe'" | Where-Object {
+    $_.ExecutablePath -and $_.ExecutablePath.StartsWith($projectBoundary, [StringComparison]::OrdinalIgnoreCase)
+})
+if ($runningProjectApps.Count -gt 0) { throw 'Cierra las ventanas de Valinor Sanctum 2.0 de este proyecto, incluidas las copias versionadas, antes de actualizar la entrega y su base compartida.' }
 
 $preservedPrevious = $false
 if (Test-Path -LiteralPath $currentBundle) {

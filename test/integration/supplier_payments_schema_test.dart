@@ -33,7 +33,7 @@ void main() {
         DatabaseSchema.migration4Checksum,
       );
       final health = await app.readHealth();
-      expect(health['schemaVersion'], 5);
+      expect(health['schemaVersion'], DatabaseSchema.version);
       expect(health['integrityOk'], isTrue);
       expect(health['foreignKeyViolations'], 0);
     },

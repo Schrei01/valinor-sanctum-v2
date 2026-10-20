@@ -1,0 +1,9 @@
+{
+  "verifiedAtUtc": "2026-10-20T03:55:52.424Z",
+  "readOnly": true,
+  "allOtherRowsStillUnchangedAfterNativeLaunch": true,
+  "removedDraftsRemainAbsent": true,
+  "tablesCompared": 39,
+  "integrityCheck": "ok",
+  "foreignKeyViolations": 0
+}

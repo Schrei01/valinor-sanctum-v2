@@ -90,7 +90,10 @@ Extrae la carpeta completa y abre valinor_sanctum_2.exe.
 Conserva las DLL y la carpeta data junto al ejecutable.
 Configura tu perfil, categorías, proveedores y catálogo de productos.
 Registra compras recibidas a crédito con su inventario, costo y deuda.
-Guarda cuentas abiertas y confirma entregas a crédito con stock y costo histórico.
+En Ventas crea varias cuentas, agrega productos y elige la forma de pago por línea.
+Registrar venta guarda entrega, stock, costo y cobro de contado en una sola operación.
+Las cuentas de mostrador se guardan automáticamente mientras las preparas.
+Ventas es la única pantalla de ventas; no hay acceso al formulario anterior.
 Las confirmaciones pendientes se recuperan al reabrir para reintentar sin duplicar.
 Configura cuentas y medios locales y registra cobros o abonos de las ventas.
 Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.

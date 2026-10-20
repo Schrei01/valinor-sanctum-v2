@@ -223,105 +223,144 @@ ORDER BY c.collected_at_utc DESC, c.document_id
   }
 
   @override
-  Future<PreparedCollection> prepareCollection(
-    CollectionCommand command,
-  ) async {
+  Future<PreparedCollection> prepareCollection(CollectionCommand command) =>
+      _database.database.transaction((txn) async {
+        await _rejectQuickCommand(txn, command.commandId);
+        return prepareCollectionInTransaction(txn, command);
+      }, exclusive: true);
+
+  /// Composition seam for one atomic sale and receipt.
+  Future<PreparedCollection> prepareCollectionInTransaction(
+    Transaction txn,
+    CollectionCommand command, {
+    List<CollectionPart>? snapshots,
+  }) async {
     _id(command.commandId);
     _id(command.receivableId);
     _businessDate(command.occurredAtUtc);
     final inputs = _inputs(command.parts);
-    return _database.database.transaction((txn) async {
-      final profile = await _profile(txn);
-      final prior = await txn.query(
-        'collection_requests',
-        where: 'command_id = ?',
-        whereArgs: [command.commandId],
-      );
-      if (prior.isNotEmpty) {
-        final old = _prepared(prior.single);
-        if (old.receivableId != command.receivableId ||
-            old.occurredAtUtc.microsecondsSinceEpoch !=
-                command.occurredAtUtc.microsecondsSinceEpoch ||
-            !_sameInputs(old.parts, inputs)) {
-          throw const CollectionsValidationException(
-            'El identificador ya corresponde a otro cobro.',
-          );
-        }
-        return old;
-      }
-      if ((await txn.query(
-            'command_log',
-            where: 'id = ?',
-            whereArgs: [command.commandId],
-          )).isNotEmpty ||
-          (await txn.query(
-            'sale_confirmations',
-            where: 'command_id = ?',
-            whereArgs: [command.commandId],
-          )).isNotEmpty ||
-          (await txn.query(
-            'supplier_payment_requests',
-            where: 'command_id = ?',
-            whereArgs: [command.commandId],
-          )).isNotEmpty) {
+    final profile = await _profile(txn);
+    final prior = await txn.query(
+      'collection_requests',
+      where: 'command_id = ?',
+      whereArgs: [command.commandId],
+    );
+    if (prior.isNotEmpty) {
+      final old = _prepared(prior.single);
+      if (old.receivableId != command.receivableId ||
+          old.occurredAtUtc.microsecondsSinceEpoch !=
+              command.occurredAtUtc.microsecondsSinceEpoch ||
+          !_sameInputs(old.parts, inputs)) {
         throw const CollectionsValidationException(
-          'El identificador ya corresponde a otro comando.',
+          'El identificador ya corresponde a otro cobro.',
         );
       }
-      final receivable = await _receivable(txn, command.receivableId);
-      final parts = <CollectionPart>[];
-      for (final input in inputs) {
-        final account = await _activeAccount(txn, input.cashAccountId);
-        final method = await _activeMethod(txn, input.paymentMethodId);
-        parts.add(
-          CollectionPart(
-            cashAccountId: input.cashAccountId,
-            paymentMethodId: input.paymentMethodId,
-            cashAccountName: account['name'] as String,
-            cashAccountKind: account['kind'] as String,
-            paymentMethodCode: method['code'] as String,
-            paymentMethodName: method['name'] as String,
-            amountMinor: input.amountMinor,
-          ),
-        );
-      }
-      final total = _total(parts);
-      await _validateTimingAndAmount(
-        txn,
-        receivable,
-        command.occurredAtUtc,
-        total,
+      return old;
+    }
+    if ((await txn.query(
+          'command_log',
+          where: 'id = ?',
+          whereArgs: [command.commandId],
+        )).isNotEmpty ||
+        (await txn.query(
+          'sale_confirmations',
+          where: 'command_id = ?',
+          whereArgs: [command.commandId],
+        )).isNotEmpty ||
+        (await txn.query(
+          'supplier_payment_requests',
+          where: 'command_id = ?',
+          whereArgs: [command.commandId],
+        )).isNotEmpty) {
+      throw const CollectionsValidationException(
+        'El identificador ya corresponde a otro comando.',
       );
-      final canonical = jsonEncode({
-        'version': 1,
-        'profileId': profile.profileId,
-        'currency': profile.currencyCode,
-        'scale': profile.moneyScale,
-        'receivableId': receivable.receivableId,
-        'saleDocumentId': receivable.saleDocumentId,
-        'label': receivable.label,
-        'customerName': receivable.customerName,
-        'occurredAtUtc': command.occurredAtUtc.toIso8601String(),
-        'totalMinor': total,
-        'parts': parts.map(_partPayload).toList(),
-      });
-      final preparedAt = DateTime.now().toUtc();
-      final row = <String, Object?>{
-        'command_id': command.commandId,
-        'canonical_payload': canonical,
-        'receivable_id': command.receivableId,
-        'occurred_at_utc': command.occurredAtUtc.toIso8601String(),
-        'prepared_at_utc': preparedAt.toIso8601String(),
-        'status': 'prepared',
-      };
-      await txn.insert('collection_requests', row);
-      return _prepared(row);
-    }, exclusive: true);
+    }
+    final receivable = await _receivable(txn, command.receivableId);
+    final parts = <CollectionPart>[];
+    for (final input in inputs) {
+      final account = await _activeAccount(txn, input.cashAccountId);
+      final method = await _activeMethod(txn, input.paymentMethodId);
+      parts.add(
+        CollectionPart(
+          cashAccountId: input.cashAccountId,
+          paymentMethodId: input.paymentMethodId,
+          cashAccountName: account['name'] as String,
+          cashAccountKind: account['kind'] as String,
+          paymentMethodCode: method['code'] as String,
+          paymentMethodName: method['name'] as String,
+          amountMinor: input.amountMinor,
+        ),
+      );
+    }
+    final total = _total(parts);
+    if (snapshots != null) {
+      final captured = snapshots.toList()
+        ..sort((a, b) {
+          final account = a.cashAccountId.compareTo(b.cashAccountId);
+          return account == 0
+              ? a.paymentMethodId.compareTo(b.paymentMethodId)
+              : account;
+        });
+      if (captured.length != parts.length ||
+          !List.generate(
+            parts.length,
+            (i) =>
+                parts[i].cashAccountId == captured[i].cashAccountId &&
+                parts[i].paymentMethodId == captured[i].paymentMethodId &&
+                parts[i].cashAccountKind == captured[i].cashAccountKind &&
+                parts[i].paymentMethodCode == captured[i].paymentMethodCode &&
+                parts[i].amountMinor == captured[i].amountMinor,
+          ).every((v) => v)) {
+        throw const CollectionsValidationException(
+          'La identidad del cobro preparado cambió.',
+        );
+      }
+      parts
+        ..clear()
+        ..addAll(captured);
+    }
+    await _validateTimingAndAmount(
+      txn,
+      receivable,
+      command.occurredAtUtc,
+      total,
+    );
+    final canonical = jsonEncode({
+      'version': 1,
+      'profileId': profile.profileId,
+      'currency': profile.currencyCode,
+      'scale': profile.moneyScale,
+      'receivableId': receivable.receivableId,
+      'saleDocumentId': receivable.saleDocumentId,
+      'label': receivable.label,
+      'customerName': receivable.customerName,
+      'occurredAtUtc': command.occurredAtUtc.toIso8601String(),
+      'totalMinor': total,
+      'parts': parts.map(_partPayload).toList(),
+    });
+    final preparedAt = DateTime.now().toUtc();
+    final row = <String, Object?>{
+      'command_id': command.commandId,
+      'canonical_payload': canonical,
+      'receivable_id': command.receivableId,
+      'occurred_at_utc': command.occurredAtUtc.toIso8601String(),
+      'prepared_at_utc': preparedAt.toIso8601String(),
+      'status': 'prepared',
+    };
+    await txn.insert('collection_requests', row);
+    return _prepared(row);
   }
+
+  Future<CollectionResult> confirmInTransaction(
+    Transaction txn,
+    String commandId,
+  ) => _confirm(txn, commandId);
 
   @override
   Future<CollectionResult> confirmPrepared(String commandId) async {
     _id(commandId);
+    await _rejectQuickCommand(_database.database, commandId);
     try {
       return await _database.database.transaction(
         (txn) => _confirm(txn, commandId),
@@ -350,6 +389,21 @@ ORDER BY c.collected_at_utc DESC, c.document_id
         }
       }, exclusive: true);
       rethrow;
+    }
+  }
+
+  static Future<void> _rejectQuickCommand(
+    DatabaseExecutor txn,
+    String id,
+  ) async {
+    if ((await txn.query(
+      'quick_sale_requests',
+      where: 'command_id=? OR sale_command_id=? OR collection_command_id=?',
+      whereArgs: [id, id, id],
+    )).isNotEmpty) {
+      throw const CollectionsValidationException(
+        'Este identificador pertenece a una venta rápida; recupérala desde Ventas.',
+      );
     }
   }
 

@@ -1,0 +1,15 @@
+{
+  "observedAtUtc": "2026-10-19T23:16:18.247Z",
+  "version": "0.6.0+6",
+  "schemaVersion": 6,
+  "method": "Accessibility and keyboard",
+  "screenshotCaptured": false,
+  "rootLauncherOpenedFinalBundle": true,
+  "profileConfiguredAfterMigration": true,
+  "quickSalesIsPrimaryPage": true,
+  "fourCorrectIndicatorsObserved": true,
+  "defaultDevelopmentPathObserved": true,
+  "businessDataEntered": false,
+  "windowClosed": true,
+  "rawUserTreeExcluded": true
+}

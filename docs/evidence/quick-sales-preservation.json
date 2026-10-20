@@ -1,0 +1,13 @@
+{
+  "verifiedAtUtc": "2026-10-19T23:16:26.973Z",
+  "readOnly": true,
+  "backupName": "sanctum2.v5.1792451659499365-64b6eded.sqlite3",
+  "backupSchema": 5,
+  "currentSchema": 6,
+  "applicationIdVerified": true,
+  "tablesChecked": 34,
+  "allLegacyRowsPreserved": true,
+  "profilePreserved": true,
+  "catalogPreserved": true,
+  "rawBusinessDataIncluded": false
+}

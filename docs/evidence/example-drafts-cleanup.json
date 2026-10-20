@@ -1,0 +1,16 @@
+{
+  "verifiedAtUtc": "2026-10-20T03:46:37.968Z",
+  "authorization": "User explicitly requested removal of two named example accounts",
+  "backupName": "sanctum2.before-example-cleanup.1792467997913.sqlite3",
+  "trialOnCopyPassed": true,
+  "draftsRemoved": 2,
+  "linesRemoved": 2,
+  "uncommittedRequestsRemoved": 1,
+  "allOtherRowsUnchanged": true,
+  "schemaAndGuardsUnchanged": true,
+  "integrityCheck": "ok",
+  "foreignKeyViolations": 0,
+  "tablesCompared": 39,
+  "noConfirmedSaleRemoved": true,
+  "rawNamesAndIdsExcluded": true
+}

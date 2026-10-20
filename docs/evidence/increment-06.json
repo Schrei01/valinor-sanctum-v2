@@ -1,0 +1,80 @@
+{
+  "verifiedAtUtc": "2026-10-20T03:56:19.584Z",
+  "version": "0.6.1+7",
+  "schemaVersion": 6,
+  "checks": {
+    "testsPassed": 317,
+    "testsSkipped": 3,
+    "skippedReason": "Host cannot create symbolic links",
+    "dartFormatFiles": 76,
+    "dartFormatClean": true,
+    "analyzeClean": true,
+    "syntheticFlowChecksPassed": 30,
+    "newQuickSalesStoreTests": 17,
+    "newQuickSalesSqlGuardTests": 8,
+    "newQuickSalesControllerTests": 13,
+    "quickSalesWidgetTests": 7,
+    "quickSalesShellTests": 4,
+    "widgetImageInspected": true,
+    "legacySalesPageNotMountedInApp": true
+  },
+  "build": {
+    "seconds": 78.2724271,
+    "aotSha256": "CA3D05BF6356146B5B72DC85D0A2A3216D273C95AF0673599F703B76AC6EA986",
+    "noSanctumOverrides": true,
+    "exeVersion": "0.6.1+7",
+    "smokeVersion": "0.6.0+6",
+    "nativeSyntheticFlowObservedIn060": true,
+    "nativeOnlySalesPageObservedIn061": true,
+    "nativeFourCorrectIndicatorsObservedIn060": true,
+    "nativeSystemPanelRecheckedIn061": false,
+    "nativeMethod": "Accessibility and keyboard",
+    "nativeFinancialEntryPerformed": false,
+    "nativeWindowsClosed": true,
+    "imageIsWidgetRender": true
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.6.1-windows-x64.zip",
+    "files": 17,
+    "bytes": 14578890,
+    "sha256": "84D5A6BC67264EED7B2C6CB1E88732FE097A34FC153D20799917D8386A2B60E0",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe",
+    "version": "0.6.1+7",
+    "all17FilesMatchStableAndVersionedCopy": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.6.1/ValinorSanctum2",
+    "hashUnchangedAfterNativeLaunch": true
+  },
+  "developmentMigration": {
+    "fromSchema": 5,
+    "toSchema": 6,
+    "ownDevelopmentBackupCreated": true,
+    "allLegacyRowsPreservedBeforeAuthorizedCleanup": true,
+    "tablesCompared": 34
+  },
+  "authorizedExampleCleanup": {
+    "draftsRemoved": 2,
+    "linesRemoved": 2,
+    "uncommittedRequestsRemoved": 1,
+    "backupCreated": true,
+    "noConfirmedSalesRemoved": true,
+    "allOtherRowsPreservedAfterFinalNativeLaunch": true,
+    "tablesCompared": 39,
+    "schemaAndGuardsUnchanged": true
+  },
+  "databaseResetOrDowngradePerformed": false,
+  "originalPosOpenedOrModifiedByAgent": false,
+  "productionEnabled": false,
+  "remoteWorkflowResultInspected": false,
+  "evidenceFiles": [
+    "quick-sales-flow.json",
+    "quick-sales-native-observations.json",
+    "quick-sales-final-observations.json",
+    "quick-sales-preservation.json",
+    "example-drafts-cleanup.json",
+    "sales-only-final-observations.json",
+    "sales-only-data-verification.json"
+  ]
+}

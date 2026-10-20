@@ -1,0 +1,19 @@
+{
+  "observedAtUtc": "2026-10-20T03:55:52.283Z",
+  "version": "0.6.1+7",
+  "schemaVersion": 6,
+  "method": "Accessibility and keyboard",
+  "screenshotCaptured": false,
+  "screenshotFailure": "FrameArrived timed out",
+  "profileConfigured": true,
+  "versionObserved": true,
+  "headingVentas": true,
+  "oldTitleAbsent": true,
+  "oldNavigationAbsent": true,
+  "remainingOwnDraftObserved": true,
+  "nativeSystemPanelRechecked": false,
+  "previous060SystemPanelHadFourCorrect": true,
+  "businessDataEntered": false,
+  "windowClosed": true,
+  "rawUserTreeExcluded": true
+}

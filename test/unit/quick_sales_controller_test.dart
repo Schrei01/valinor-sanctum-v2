@@ -1,0 +1,303 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:valinor_sanctum_2/features/quick_sales/application/quick_sales_controller.dart';
+import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
+
+import '../support/fake_quick_sales_store.dart';
+
+void main() {
+  late FakeQuickSalesStore store;
+  late QuickSalesController controller;
+  setUp(() async {
+    store = FakeQuickSalesStore();
+    controller = QuickSalesController(
+      store: store,
+      autosaveDelay: const Duration(days: 1),
+    );
+    await controller.load();
+  });
+  tearDown(() => controller.dispose());
+
+  String account() => controller.addAccount()!;
+  void fill(String id, {String product = 'water', String payment = 'cash'}) {
+    final line = controller.accounts
+        .firstWhere((item) => item.id == id)
+        .lines
+        .first;
+    controller.editLine(
+      id,
+      QuickSaleLine(
+        id: line.id,
+        productId: product,
+        unitPriceMinor: product == 'water' ? 300000 : 200000,
+        paymentOptionId: payment,
+      ),
+    );
+  }
+
+  test(
+    'independent cards autosave incomplete lines and preserve them across reload errors',
+    () async {
+      final first = account();
+      final second = account();
+      controller.rename(second, 'Mesa dos');
+      controller.addLine(first);
+      expect(await controller.flushAll(), isTrue);
+      expect(store.accounts, hasLength(2));
+      expect(
+        store.accounts.firstWhere((item) => item.id == first).lines,
+        hasLength(2),
+      );
+      expect(
+        store.accounts
+            .firstWhere((item) => item.id == first)
+            .lines
+            .first
+            .productId,
+        isNull,
+      );
+      controller.rename(second, 'Mesa con cambios');
+      store.loadFailure = StateError('offline');
+      await controller.load();
+      expect(
+        controller.accounts.firstWhere((item) => item.id == second).label,
+        'Mesa con cambios',
+      );
+      expect(controller.isDirty(second), isTrue);
+      expect(controller.loadError, isNotNull);
+      expect(store.defaultsCalls, 1);
+    },
+  );
+
+  test(
+    'serial save queue coalesces newer edits without overlapping a card write',
+    () async {
+      final id = account();
+      store.saveGate = Completer<void>();
+      final saving = controller.flush(id);
+      controller.rename(id, 'Última versión');
+      controller.addLine(id);
+      store.saveGate!.complete();
+      expect(await saving, isTrue);
+      expect(store.maximumActiveSaves, 1);
+      expect(store.savedInputs, hasLength(2));
+      expect(store.accounts.single.label, 'Última versión');
+      expect(store.accounts.single.lines, hasLength(2));
+      expect(controller.isDirty(id), isFalse);
+    },
+  );
+
+  test(
+    'lost save response replays exact input before saving later edits',
+    () async {
+      final id = account();
+      store.saveFailure = StateError('response lost');
+      store.saveBeforeFailure = true;
+      expect(await controller.flush(id), isFalse);
+      final firstInput = store.savedInputs.single;
+      controller.rename(id, 'Cambio posterior');
+      store.saveFailure = null;
+      expect(await controller.flush(id), isTrue);
+      expect(identical(store.savedInputs[1], firstInput), isTrue);
+      expect(store.accounts.single.revision, 2);
+      expect(store.accounts.single.label, 'Cambio posterior');
+    },
+  );
+
+  test(
+    'register flushes current values and closes only its own card',
+    () async {
+      final first = account();
+      final second = account();
+      fill(first);
+      fill(second, product: 'snack', payment: 'nequi');
+      expect(await controller.register(first), isTrue);
+      expect(store.sales.single.result.totalMinor, 300000);
+      expect(controller.accounts.single.id, second);
+      expect(controller.accounts.single.lines.single.paymentOptionId, 'nequi');
+      expect(await controller.flush(second), isTrue);
+    },
+  );
+
+  test(
+    'unknown preparation locks only that card and retries the exact command',
+    () async {
+      final first = account();
+      final second = account();
+      fill(first);
+      store.preparationFailure = StateError('lost preparation');
+      store.prepareBeforeFailure = true;
+      expect(await controller.register(first), isFalse);
+      final pendingId = controller.pendingFor(first)!.commandId;
+      controller.rename(first, 'Blocked edit');
+      controller.rename(second, 'Otra cuenta editable');
+      expect(
+        controller.accounts.firstWhere((item) => item.id == first).label,
+        'Cuenta 1',
+      );
+      expect(
+        controller.accounts.firstWhere((item) => item.id == second).label,
+        'Otra cuenta editable',
+      );
+      store.preparationFailure = null;
+      expect(await controller.retry(first), isTrue);
+      expect(store.preparedIds.toSet(), {pendingId});
+      expect(store.sales, hasLength(1));
+    },
+  );
+
+  test(
+    'prepared operation survives controller restart and confirms once',
+    () async {
+      final id = account();
+      fill(id);
+      store.confirmationFailure = StateError('unavailable');
+      expect(await controller.register(id), isFalse);
+      final command = controller.pendingFor(id)!.commandId;
+      controller.dispose();
+      controller = QuickSalesController(store: store);
+      await controller.load();
+      expect(controller.isLocked(id), isTrue);
+      store.confirmationFailure = null;
+      expect(await controller.retry(id), isTrue);
+      expect(store.confirmedIds.toSet(), {command});
+      expect(store.sales, hasLength(1));
+    },
+  );
+
+  test(
+    'load recovers committed result after response loss without repeating sale',
+    () async {
+      final id = account();
+      fill(id);
+      store.confirmationFailure = StateError('response lost');
+      store.commitBeforeFailure = true;
+      expect(await controller.register(id), isFalse);
+      expect(controller.isLocked(id), isTrue);
+      await controller.load();
+      expect(controller.accounts, isEmpty);
+      expect(controller.notice, contains('recuperada'));
+      expect(store.sales, hasLength(1));
+    },
+  );
+
+  test(
+    'deterministic rejection unlocks current durable revision for correction',
+    () async {
+      final id = account();
+      fill(id);
+      store.confirmationFailure = const QuickSalesValidationException(
+        'Stock insuficiente.',
+      );
+      expect(await controller.register(id), isFalse);
+      expect(controller.pendingFor(id)!.status, 'rejected');
+      expect(await controller.unlockRejected(id), isTrue);
+      final previous = controller.accounts.single.revision;
+      controller.rename(id, 'Cuenta corregida');
+      store.confirmationFailure = null;
+      expect(await controller.register(id), isTrue);
+      expect(store.savedInputs.last.expectedRevision, previous);
+      expect(store.sales.single.label, 'Cuenta corregida');
+    },
+  );
+
+  test(
+    'positive partial total still validates unselected lines before confirming',
+    () async {
+      final id = account();
+      fill(id);
+      controller.addLine(id);
+      expect(await controller.register(id), isFalse);
+      expect(controller.pendingFor(id), isNull);
+      expect(controller.isLocked(id), isFalse);
+      expect(controller.errorFor(id), contains('cada línea'));
+      expect(store.sales, isEmpty);
+    },
+  );
+
+  test(
+    'refresh recovers a rejected card unlocked before its read failed',
+    () async {
+      final id = account();
+      fill(id);
+      store.confirmationFailure = const QuickSalesValidationException(
+        'Stock insuficiente.',
+      );
+      await controller.register(id);
+      store.loadFailure = StateError('read failed after unlock');
+      expect(await controller.unlockRejected(id), isFalse);
+      expect(controller.isLocked(id), isTrue);
+      store.loadFailure = null;
+      await controller.load();
+      expect(controller.pendingFor(id), isNull);
+      expect(controller.isLocked(id), isFalse);
+      controller.rename(id, 'Cuenta recuperada');
+      expect(await controller.flush(id), isTrue);
+      expect(store.accounts.single.label, 'Cuenta recuperada');
+    },
+  );
+
+  test(
+    'known revision conflict preserves edits until explicit recovery of saved account',
+    () async {
+      final id = account();
+      await controller.flush(id);
+      final original = store.accounts.single;
+      store.accounts[0] = QuickSaleAccount(
+        id: id,
+        label: 'Guardada externamente',
+        revision: original.revision + 1,
+        status: 'open',
+        updatedAtUtc: original.updatedAtUtc,
+        lines: original.lines,
+      );
+      controller.rename(id, 'Edición local');
+      expect(await controller.flush(id), isFalse);
+      expect(controller.canRecoverSaved(id), isTrue);
+      await controller.load();
+      expect(controller.accounts.single.label, 'Edición local');
+      expect(await controller.recoverSavedAccount(id), isTrue);
+      expect(controller.accounts.single.label, 'Guardada externamente');
+      controller.rename(id, 'Cambio sobre revisión actual');
+      expect(await controller.flush(id), isTrue);
+      expect(store.accounts.single.revision, 3);
+    },
+  );
+
+  test(
+    'authoritative refresh removes closed clean cards but preserves dirty cards',
+    () async {
+      final clean = account();
+      final dirty = account();
+      await controller.flushAll();
+      controller.rename(dirty, 'Edición por recuperar');
+      store.accounts.clear();
+      await controller.load();
+      expect(controller.accounts.map((item) => item.id), [dirty]);
+      expect(controller.accounts.any((item) => item.id == clean), isFalse);
+      expect(controller.canRecoverSaved(dirty), isTrue);
+      expect(await controller.recoverSavedAccount(dirty), isTrue);
+      expect(controller.accounts, isEmpty);
+    },
+  );
+
+  test(
+    'an older concurrent refresh cannot resurrect a just registered account',
+    () async {
+      final id = account();
+      fill(id);
+      await controller.flush(id);
+      final gate = Completer<void>();
+      store.loadGate = gate;
+      final staleRefresh = controller.load();
+      store.loadGate = null;
+      expect(await controller.register(id), isTrue);
+      gate.complete();
+      await staleRefresh;
+      expect(controller.accounts, isEmpty);
+      expect(controller.snapshot!.sales, hasLength(1));
+      expect(store.sales, hasLength(1));
+    },
+  );
+}

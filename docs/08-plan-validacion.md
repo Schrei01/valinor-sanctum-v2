@@ -1,6 +1,6 @@
 # Plan de implementación y estrategia de validación
 
-Estado: etapa 3 completada; 4A parcial (catálogo y recepción a crédito), 4B con cuentas/ventas a crédito y cobros/abonos, y 4C con cuentas, saldos registrados y pagos a proveedores. Ajustes, reversas, aperturas y caja/arqueo siguen pendientes. Alcance actual en [contrato 05](18-contrato-incremento-05.md) y [validación 05](19-incremento-05.md).
+Prioridad corregida por el propietario: el MVP debe atender rápido en mostrador, con varias cuentas en una pantalla y forma de pago por línea. Incremento 06: Registrar venta confirma entrega y cobro inmediato; crédito queda fuera del flujo principal. Etapa 3 completada; 4A parcial y 4C con cuentas, saldos y pagos a proveedores. Ajustes, reversas, aperturas y caja/arqueo siguen pendientes. Alcance actual en [contrato 06](20-contrato-incremento-06.md) y [validación 06](21-incremento-06.md).
 
 ## 1. Prioridades y puertas de avance
 
@@ -12,7 +12,7 @@ P0 en este plan significa requisito previo al uso operativo, no severidad de un 
 | 2. Diseño | Arquitectura, datos, matriz negocio, importador futuro y plan | Propietario aprueba enfoque y decisiones de núcleo | Aprobado el 18/10/2026 |
 | 3. Proyecto nuevo | Flutter Windows mínimo, Git propio, composición, configuración y SQLite exclusivos, migración inicial | Arranca/cierra/reabre perfil sintético; rutas originales inaccesibles para escritura; pruebas de esquema | Completada para la fundación 0.1.0: perfil persistido, reapertura y diagnóstico del bundle final verificados |
 | 4A. Catálogo/entradas | Productos/categorías, compras/proveedores, recepción y capas, ajustes | Stock y valoración reconstruibles; compras diferenciadas de gastos | Parcial: catálogo y recepción a crédito implementados y probados; ajustes pendientes |
-| 4B. Venta/pago | Cuenta persistida, venta confirmada, precio/costo histórico, cobro y obligaciones | Venta completa atómica, doble clic/reintento seguro, cierre/reapertura sin pérdida | Núcleo verificado por fases: cuentas, ventas a crédito y cobros/abonos; reversas pendientes |
+| 4B. Venta/pago | Varias cuentas de mostrador, líneas con forma de pago y registro inmediato; precio/costo histórico | Venta y cobro completos atómicos, doble clic/reintento seguro, cierre/reapertura sin pérdida | Pantalla única Ventas en 0.6.1; acceso al formulario antiguo retirado. Reversas pendientes |
 | 4C. Tesorería | Cuentas/medios, apertura, gastos, transferencias, capital, abonos, arqueo | Saldos desde libro y conciliación; transferencias no alteran resultado | Parcial: cuentas/medios, saldos registrados, cobros y pagos a proveedores; aperturas, gastos, transferencias, capital y arqueos pendientes |
 | 4D. Servicios/eventos | Cumplimiento/consumo de servicios, eventos, torneos/pasadías, costo directo, anticipos | Reconocimiento y costo conforme a estados, sin ventas ficticias de stock | Pendiente |
 | 5. Reportes | Ventas/cobros, CMV, bruto/operativo, caja, CxC/CxP y stock | Resultado conciliado con hechos y cobertura; sin recalcular pasado con catálogo | Pendiente |

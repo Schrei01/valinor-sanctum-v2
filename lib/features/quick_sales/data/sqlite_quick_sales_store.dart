@@ -1,0 +1,1001 @@
+import 'dart:convert';
+
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../../core/domain/money.dart';
+import '../../../core/infrastructure/database/app_database.dart';
+import '../../../core/infrastructure/database/schema.dart';
+import '../../collections/data/sqlite_collections_store.dart';
+import '../../collections/domain/collections_store.dart';
+import '../../inventory/domain/inventory_store.dart';
+import '../../sales/data/sqlite_sales_store.dart';
+import '../../sales/domain/sales_store.dart';
+import '../../workspace/domain/business_profile.dart';
+import '../domain/quick_sales_store.dart';
+
+/// A quick sale composes the established FIFO sale and its full receipt inside
+/// one transaction. Its durable parent request precedes every business effect.
+class SqliteQuickSalesStore implements QuickSalesStore {
+  SqliteQuickSalesStore(this._database, {this.synthetic = false});
+  final AppDatabase _database;
+  final bool synthetic;
+  SqliteSalesStore get _sales =>
+      SqliteSalesStore(_database, synthetic: synthetic);
+  SqliteCollectionsStore get _collections =>
+      SqliteCollectionsStore(_database, synthetic: synthetic);
+
+  @override
+  Future<void> ensureDefaults() => _database.database.transaction((txn) async {
+    await _profile(txn);
+    for (final spec in [
+      ('cash', 'Caja', 'EFECTIVO', 'Efectivo'),
+      ('mobile', 'Nequi', 'NEQUI', 'Nequi'),
+    ]) {
+      final optionId = 'quick-default:${spec.$3}';
+      if ((await txn.query(
+        'quick_payment_options',
+        where: 'id = ?',
+        whereArgs: [optionId],
+      )).isNotEmpty) {
+        continue;
+      }
+      final accounts = await txn.rawQuery(
+        '''
+SELECT c.* FROM cash_accounts c JOIN ledger_accounts l ON l.id=c.ledger_account_id
+WHERE c.kind=? AND c.is_active=1 AND c.is_available=1 AND l.is_active=1
+AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
+''',
+        [spec.$1],
+      );
+      final suitable = accounts
+          .where(
+            (a) =>
+                spec.$1 == 'cash' ||
+                (a['name'] as String).trim().toLowerCase() == 'nequi',
+          )
+          .toList();
+      final String accountId;
+      if (suitable.isNotEmpty) {
+        accountId = suitable.first['id'] as String;
+      } else {
+        accountId = InventoryIds.next();
+        await txn.insert('ledger_accounts', {
+          'id': 'money:$accountId',
+          'code': 'CASH:$accountId',
+          'name': spec.$2,
+          'class': 'asset',
+          'role': 'cash',
+          'is_active': 1,
+        });
+        await txn.insert('cash_accounts', {
+          'id': accountId,
+          'ledger_account_id': 'money:$accountId',
+          'name': spec.$2,
+          'kind': spec.$1,
+          'is_available': 1,
+          'is_active': 1,
+        });
+      }
+      // An existing code is an immutable identity, including when disabled.
+      final methods = await txn.query(
+        'payment_methods',
+        where: 'UPPER(code) = ?',
+        whereArgs: [spec.$3],
+        orderBy: 'id',
+      );
+      final String methodId;
+      if (methods.isNotEmpty) {
+        methodId = methods.first['id'] as String;
+      } else {
+        methodId = InventoryIds.next();
+        await txn.insert('payment_methods', {
+          'id': methodId,
+          'code': spec.$3,
+          'name': spec.$4,
+          'is_active': 1,
+        });
+      }
+      await txn.insert('quick_payment_options', {
+        'id': optionId,
+        'label': spec.$4,
+        'cash_account_id': accountId,
+        'payment_method_id': methodId,
+        'is_active': 1,
+      });
+    }
+  }, exclusive: true);
+
+  @override
+  Future<QuickSalesSnapshot> load() async {
+    final commercial = await _sales.load();
+    return _database.database.transaction((txn) async {
+      await _profile(txn);
+      final rows = await txn.query(
+        'quick_sales_accounts',
+        where: "status IN ('open','prepared')",
+        orderBy: 'updated_at_utc,id',
+      );
+      final accounts = <QuickSaleAccount>[];
+      for (final row in rows) {
+        accounts.add(await _account(txn, row));
+      }
+      final options = await _options(txn);
+      final requests = await txn.query(
+        'quick_sale_requests',
+        where: "status IN ('prepared','rejected')",
+        orderBy: 'prepared_at_utc,command_id',
+      );
+      final history = await txn.query(
+        'quick_sale_requests',
+        where: "status='confirmed'",
+        orderBy: 'occurred_at_utc DESC,command_id',
+      );
+      final sales = <ConfirmedQuickSale>[];
+      for (final row in history) {
+        final logged = (await txn.query(
+          'command_log',
+          where: 'id=?',
+          whereArgs: [row['command_id']],
+        )).single;
+        final facts = await txn.query(
+          'quick_sale_line_payments',
+          where: 'request_id=?',
+          whereArgs: [row['command_id']],
+          orderBy: 'sequence',
+        );
+        final payload =
+            jsonDecode(row['canonical_payload'] as String)
+                as Map<String, dynamic>;
+        sales.add(
+          ConfirmedQuickSale(
+            commandId: row['command_id'] as String,
+            label: payload['label'] as String,
+            soldAtUtc: DateTime.parse(row['occurred_at_utc'] as String).toUtc(),
+            result: _prior(logged, row['canonical_payload'] as String),
+            lines: facts
+                .map(
+                  (f) => ConfirmedQuickSaleLine(
+                    productName: f['product_name_snapshot'] as String,
+                    quantity: f['quantity'] as int,
+                    unitPriceMinor: f['unit_price_minor'] as int,
+                    totalMinor: f['total_minor'] as int,
+                    paymentLabel: f['payment_option_label_snapshot'] as String,
+                  ),
+                )
+                .toList(),
+          ),
+        );
+      }
+      return QuickSalesSnapshot(
+        accounts: accounts,
+        products: commercial.products,
+        stock: commercial.stock,
+        paymentOptions: options,
+        pendingSales: requests.map(_prepared).toList(),
+        sales: sales,
+      );
+    });
+  }
+
+  @override
+  Future<QuickSaleAccount> saveAccount(SaveQuickSaleAccount input) async {
+    _id(input.id);
+    if (input.expectedRevision < 0 ||
+        input.label.length > 120 ||
+        input.lines.length > 100) {
+      throw const QuickSalesValidationException(
+        'La cuenta admite hasta 100 líneas y un nombre de 120 caracteres.',
+      );
+    }
+    final seen = <String>{};
+    for (final line in input.lines) {
+      _id(line.id);
+      if (!seen.add(line.id) ||
+          line.quantityText.length > 32 ||
+          (line.unitPriceMinor != null && line.unitPriceMinor! < 0)) {
+        throw const QuickSalesValidationException(
+          'Revisa las líneas de la cuenta.',
+        );
+      }
+      if (line.productId != null) _id(line.productId!);
+      if (line.paymentOptionId != null) _id(line.paymentOptionId!);
+    }
+    return _database.database.transaction((txn) async {
+      await _profile(txn);
+      final rows = await txn.query(
+        'quick_sales_accounts',
+        where: 'id=?',
+        whereArgs: [input.id],
+      );
+      if (rows.isEmpty && input.expectedRevision != 0) {
+        throw const QuickSalesValidationException(
+          'La cuenta ya no existe. Actualiza la vista.',
+        );
+      }
+      if (rows.isNotEmpty) {
+        final old = await _account(txn, rows.single);
+        if (old.status == 'open' &&
+            old.revision == input.expectedRevision + 1 &&
+            old.label == input.label &&
+            _sameLines(old.lines, input.lines)) {
+          return old;
+        }
+        if (old.status != 'open' || old.revision != input.expectedRevision) {
+          throw const QuickSalesValidationException(
+            'La cuenta cambió o tiene una venta pendiente. Actualiza la vista.',
+          );
+        }
+      }
+      final revision = _int(
+        BigInt.from(input.expectedRevision) + BigInt.one,
+        'Revisión',
+      );
+      final now = DateTime.now().toUtc();
+      if (rows.isEmpty) {
+        await txn.insert('quick_sales_accounts', {
+          'id': input.id,
+          'label': input.label,
+          'revision': revision,
+          'status': 'open',
+          'updated_at_utc': now.toIso8601String(),
+        });
+      } else {
+        await txn.update(
+          'quick_sales_accounts',
+          {
+            'label': input.label,
+            'revision': revision,
+            'updated_at_utc': now.toIso8601String(),
+          },
+          where: 'id=?',
+          whereArgs: [input.id],
+        );
+        await txn.delete(
+          'quick_sales_lines',
+          where: 'account_id=?',
+          whereArgs: [input.id],
+        );
+      }
+      for (var i = 0; i < input.lines.length; i++) {
+        final line = input.lines[i];
+        await txn.insert('quick_sales_lines', {
+          'id': line.id,
+          'account_id': input.id,
+          'sequence': i,
+          'product_id': line.productId,
+          'quantity_text': line.quantityText,
+          'unit_price_minor': line.unitPriceMinor,
+          'payment_option_id': line.paymentOptionId,
+        });
+      }
+      return QuickSaleAccount(
+        id: input.id,
+        label: input.label,
+        revision: revision,
+        status: 'open',
+        updatedAtUtc: now,
+        lines: input.lines,
+      );
+    }, exclusive: true);
+  }
+
+  @override
+  Future<void> cancelAccount({
+    required String accountId,
+    required int expectedRevision,
+  }) => _database.database.transaction((txn) async {
+    _id(accountId);
+    final rows = await txn.query(
+      'quick_sales_accounts',
+      where: 'id=?',
+      whereArgs: [accountId],
+    );
+    if (rows.isEmpty) {
+      throw const QuickSalesValidationException('La cuenta no existe.');
+    }
+    final row = rows.single;
+    if (row['status'] == 'cancelled' && row['revision'] == expectedRevision) {
+      return;
+    }
+    if (row['status'] != 'open' || row['revision'] != expectedRevision) {
+      throw const QuickSalesValidationException(
+        'Solo se puede quitar una cuenta abierta sin venta pendiente.',
+      );
+    }
+    await txn.update(
+      'quick_sales_accounts',
+      {
+        'status': 'cancelled',
+        'updated_at_utc': DateTime.now().toUtc().toIso8601String(),
+      },
+      where: 'id=?',
+      whereArgs: [accountId],
+    );
+  }, exclusive: true);
+
+  @override
+  Future<PreparedQuickSale> prepareSale({
+    required String commandId,
+    required String accountId,
+    required int expectedRevision,
+    required DateTime occurredAtUtc,
+  }) async {
+    _id(commandId);
+    _id(accountId);
+    _date(occurredAtUtc);
+    return _database.database.transaction((txn) async {
+      final profile = await _profile(txn);
+      final prior = await txn.query(
+        'quick_sale_requests',
+        where: 'command_id=?',
+        whereArgs: [commandId],
+      );
+      if (prior.isNotEmpty) {
+        final row = prior.single;
+        if (row['account_id'] != accountId ||
+            row['account_revision'] != expectedRevision ||
+            DateTime.parse(
+                  row['occurred_at_utc'] as String,
+                ).microsecondsSinceEpoch !=
+                occurredAtUtc.microsecondsSinceEpoch) {
+          throw const QuickSalesValidationException(
+            'El identificador ya pertenece a otra venta.',
+          );
+        }
+        return _prepared(row);
+      }
+      await _unusedCommand(txn, commandId);
+      final rows = await txn.query(
+        'quick_sales_accounts',
+        where: 'id=?',
+        whereArgs: [accountId],
+      );
+      if (rows.isEmpty) {
+        throw const QuickSalesValidationException('La cuenta no existe.');
+      }
+      final account = await _account(txn, rows.single);
+      if (account.status != 'open' || account.revision != expectedRevision) {
+        throw const QuickSalesValidationException(
+          'La cuenta cambió o tiene una venta pendiente. Actualiza la vista.',
+        );
+      }
+      if (account.label.trim().isEmpty || account.lines.isEmpty) {
+        throw const QuickSalesValidationException(
+          'Escribe un nombre y agrega productos a la cuenta.',
+        );
+      }
+      final lines = <Map<String, Object?>>[];
+      final prices = <String, int>{};
+      var total = BigInt.zero;
+      for (final line in account.lines) {
+        if (line.productId == null ||
+            line.unitPriceMinor == null ||
+            line.paymentOptionId == null ||
+            !RegExp(r'^[0-9]+$').hasMatch(line.quantityText.trim())) {
+          throw const QuickSalesValidationException(
+            'Completa producto, cantidad, precio y forma de pago de cada línea.',
+          );
+        }
+        final quantity = _int(
+          BigInt.parse(line.quantityText.trim()),
+          'Cantidad',
+        );
+        if (quantity <= 0) {
+          throw const QuickSalesValidationException(
+            'La cantidad debe ser un entero positivo.',
+          );
+        }
+        final price = line.unitPriceMinor!;
+        Money.fromMinorUnits(
+          price,
+          currency: profile.currencyCode,
+          scale: profile.moneyScale,
+        );
+        if (prices.containsKey(line.productId) &&
+            prices[line.productId] != price) {
+          throw const QuickSalesValidationException(
+            'El mismo producto debe tener el mismo precio en esta cuenta. Usa otra cuenta para otro precio.',
+          );
+        }
+        prices[line.productId!] = price;
+        final products = await txn.rawQuery(
+          'SELECT p.* FROM catalog_items p LEFT JOIN categories c ON c.id=p.category_id WHERE p.id=? AND p.is_active=1 AND (p.category_id IS NULL OR c.is_active=1)',
+          [line.productId],
+        );
+        if (products.length != 1) {
+          throw const QuickSalesValidationException(
+            'Uno de los productos ya no está activo.',
+          );
+        }
+        final option = await _optionFact(txn, line.paymentOptionId!);
+        final amount = _int(
+          BigInt.from(quantity) * BigInt.from(price),
+          'Total de línea',
+        );
+        total += BigInt.from(amount);
+        lines.add({
+          'lineId': line.id,
+          'productId': line.productId,
+          'productName': products.single['name'],
+          'quantity': quantity,
+          'unitPriceMinor': price,
+          'totalMinor': amount,
+          ...option,
+        });
+      }
+      final totalMinor = _int(total, 'Total de venta');
+      if (totalMinor <= 0) {
+        throw const QuickSalesValidationException(
+          'El total de venta debe ser positivo.',
+        );
+      }
+      final now = DateTime.now().toUtc();
+      final row = <String, Object?>{
+        'command_id': commandId,
+        'account_id': accountId,
+        'account_revision': expectedRevision,
+        'canonical_payload': jsonEncode({
+          'version': 1,
+          'profileId': profile.profileId,
+          'currency': profile.currencyCode,
+          'scale': profile.moneyScale,
+          'label': account.label,
+          'occurredAtUtc': occurredAtUtc.toIso8601String(),
+          'totalMinor': totalMinor,
+          'lines': lines,
+        }),
+        'occurred_at_utc': occurredAtUtc.toIso8601String(),
+        'prepared_at_utc': now.toIso8601String(),
+        'status': 'prepared',
+        'sale_command_id': InventoryIds.next(),
+        'collection_command_id': InventoryIds.next(),
+        'legacy_draft_id': InventoryIds.next(),
+      };
+      await txn.insert('quick_sale_requests', row);
+      await txn.update(
+        'quick_sales_accounts',
+        {'status': 'prepared', 'updated_at_utc': now.toIso8601String()},
+        where: 'id=?',
+        whereArgs: [accountId],
+      );
+      return _prepared(row);
+    }, exclusive: true);
+  }
+
+  @override
+  Future<QuickSaleResult> confirmPrepared(String commandId) async {
+    _id(commandId);
+    try {
+      return await _database.database.transaction(
+        (txn) => _confirm(txn, commandId),
+        exclusive: true,
+      );
+    } on SalesValidationException catch (e) {
+      await _reject(commandId, e.message);
+      throw QuickSalesValidationException(e.message);
+    } on CollectionsValidationException catch (e) {
+      await _reject(commandId, e.message);
+      throw QuickSalesValidationException(e.message);
+    } on QuickSalesValidationException catch (e) {
+      await _reject(commandId, e.message);
+      rethrow;
+    }
+  }
+
+  Future<QuickSaleResult> _confirm(Transaction txn, String commandId) async {
+    final rows = await txn.query(
+      'quick_sale_requests',
+      where: 'command_id=?',
+      whereArgs: [commandId],
+    );
+    if (rows.isEmpty) {
+      throw const QuickSalesValidationException(
+        'No existe la venta pendiente.',
+      );
+    }
+    final request = rows.single;
+    final canonical = request['canonical_payload'] as String;
+    final logged = await txn.query(
+      'command_log',
+      where: 'id=?',
+      whereArgs: [commandId],
+    );
+    if (logged.isNotEmpty) return _prior(logged.single, canonical);
+    if (request['status'] != 'prepared') {
+      throw const QuickSalesValidationException(
+        'Esta venta fue rechazada o descartada. Libera la cuenta para corregirla.',
+      );
+    }
+    final payload = jsonDecode(canonical) as Map<String, dynamic>;
+    final profile = await _profile(txn);
+    final accounts = await txn.query(
+      'quick_sales_accounts',
+      where: 'id=?',
+      whereArgs: [request['account_id']],
+    );
+    if (accounts.length != 1 ||
+        accounts.single['status'] != 'prepared' ||
+        accounts.single['revision'] != request['account_revision'] ||
+        payload['profileId'] != profile.profileId ||
+        payload['currency'] != profile.currencyCode ||
+        payload['scale'] != profile.moneyScale ||
+        payload['version'] != 1 ||
+        payload['occurredAtUtc'] != request['occurred_at_utc']) {
+      throw const QuickSalesValidationException(
+        'La cuenta no coincide con la solicitud guardada.',
+      );
+    }
+    final lines = (payload['lines'] as List).cast<Map<String, dynamic>>();
+    for (final line in lines) {
+      final current = await _optionFact(txn, line['paymentOptionId'] as String);
+      if (current['cashAccountId'] != line['cashAccountId'] ||
+          current['paymentMethodId'] != line['paymentMethodId'] ||
+          current['cashAccountKind'] != line['cashAccountKind'] ||
+          current['paymentMethodCode'] != line['paymentMethodCode']) {
+        throw const QuickSalesValidationException(
+          'La identidad de la forma de pago cambió.',
+        );
+      }
+      final product = await txn.query(
+        'catalog_items',
+        where: 'id=?',
+        whereArgs: [line['productId']],
+      );
+      // The prepared snapshot is the customer-facing name. Requiring the same
+      // name keeps the composed legacy sale and line-payment history identical.
+      if (product.length != 1 ||
+          product.single['name'] != line['productName']) {
+        throw const QuickSalesValidationException(
+          'Un producto cambió después de preparar la venta. Libera y revisa la cuenta.',
+        );
+      }
+    }
+    await txn.update(
+      'quick_sale_requests',
+      {'status': 'executing'},
+      where: 'command_id=?',
+      whereArgs: [commandId],
+    );
+    final grouped = <String, ({int price, BigInt quantity})>{};
+    for (final line in lines) {
+      final id = line['productId'] as String;
+      final old = grouped[id];
+      grouped[id] = (
+        price: line['unitPriceMinor'] as int,
+        quantity:
+            (old?.quantity ?? BigInt.zero) +
+            BigInt.from(line['quantity'] as int),
+      );
+    }
+    final draft = await _sales.saveDraftInTransaction(
+      txn,
+      SaveSaleDraft(
+        id: request['legacy_draft_id'] as String,
+        label: payload['label'] as String,
+        customerName: 'Consumidor final',
+        expectedRevision: 0,
+        lines: grouped.entries
+            .map(
+              (g) => SaleDraftLine(
+                productId: g.key,
+                quantity: _int(g.value.quantity, 'Cantidad acumulada'),
+                unitPriceMinor: g.value.price,
+              ),
+            )
+            .toList(),
+      ),
+    );
+    final occurred = DateTime.parse(
+      request['occurred_at_utc'] as String,
+    ).toUtc();
+    final saleCommand = request['sale_command_id'] as String;
+    await _sales.prepareConfirmationInTransaction(
+      txn,
+      commandId: saleCommand,
+      draftId: draft.id,
+      expectedRevision: draft.revision,
+      occurredAtUtc: occurred,
+      dueDate: _date(occurred),
+    );
+    final sale = await _sales.confirmInTransaction(txn, saleCommand);
+    if (sale.totalMinor != payload['totalMinor']) {
+      throw const QuickSalesValidationException(
+        'El total no coincide con la venta preparada.',
+      );
+    }
+    final receivable = (await txn.query(
+      'customer_receivables',
+      where: 'origin_document_id=?',
+      whereArgs: [sale.documentId],
+    )).single;
+    final payments =
+        <String, ({String account, String method, BigInt amount})>{};
+    for (final line in lines) {
+      final amount = line['totalMinor'] as int;
+      if (amount == 0) continue;
+      final key = '${line['cashAccountId']}\u0000${line['paymentMethodId']}';
+      final old = payments[key];
+      payments[key] = (
+        account: line['cashAccountId'] as String,
+        method: line['paymentMethodId'] as String,
+        amount: (old?.amount ?? BigInt.zero) + BigInt.from(amount),
+      );
+    }
+    final collectionCommand = request['collection_command_id'] as String;
+    await _collections.prepareCollectionInTransaction(
+      txn,
+      CollectionCommand(
+        commandId: collectionCommand,
+        receivableId: receivable['id'] as String,
+        occurredAtUtc: occurred,
+        parts: payments.values
+            .map(
+              (p) => CollectionPartInput(
+                cashAccountId: p.account,
+                paymentMethodId: p.method,
+                amountMinor: _int(p.amount, 'Cobro por forma de pago'),
+              ),
+            )
+            .toList(),
+      ),
+      snapshots: payments.values.map((p) {
+        final line = lines.firstWhere(
+          (l) =>
+              l['cashAccountId'] == p.account &&
+              l['paymentMethodId'] == p.method,
+        );
+        return CollectionPart(
+          cashAccountId: p.account,
+          paymentMethodId: p.method,
+          cashAccountName: line['cashAccountName'] as String,
+          cashAccountKind: line['cashAccountKind'] as String,
+          paymentMethodCode: line['paymentMethodCode'] as String,
+          paymentMethodName: line['paymentMethodName'] as String,
+          amountMinor: _int(p.amount, 'Cobro por forma de pago'),
+        );
+      }).toList(),
+    );
+    final collection = await _collections.confirmInTransaction(
+      txn,
+      collectionCommand,
+    );
+    if (collection.remainingMinor != 0 ||
+        collection.totalMinor != sale.totalMinor) {
+      throw const QuickSalesValidationException(
+        'La venta debe quedar cobrada en su totalidad.',
+      );
+    }
+    final legacyLines = await txn.query(
+      'sale_lines',
+      where: 'sale_id=?',
+      whereArgs: [sale.documentId],
+    );
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final saleLine = legacyLines.singleWhere(
+        (l) => l['product_id'] == line['productId'],
+      );
+      await txn.insert('quick_sale_line_payments', {
+        'id': InventoryIds.next(),
+        'request_id': commandId,
+        'sequence': i,
+        'source_line_id': line['lineId'],
+        'sale_document_id': sale.documentId,
+        'sale_line_id': saleLine['id'],
+        'collection_document_id': collection.documentId,
+        'product_id': line['productId'],
+        'product_name_snapshot': line['productName'],
+        'quantity': line['quantity'],
+        'unit_price_minor': line['unitPriceMinor'],
+        'total_minor': line['totalMinor'],
+        'payment_option_id': line['paymentOptionId'],
+        'payment_option_label_snapshot': line['paymentOptionLabel'],
+        'cash_account_id': line['cashAccountId'],
+        'payment_method_id': line['paymentMethodId'],
+        'cash_account_name_snapshot': line['cashAccountName'],
+        'cash_account_kind_snapshot': line['cashAccountKind'],
+        'payment_method_code_snapshot': line['paymentMethodCode'],
+        'payment_method_name_snapshot': line['paymentMethodName'],
+      });
+    }
+    final result = QuickSaleResult(
+      commandId: commandId,
+      saleDocumentId: sale.documentId,
+      collectionDocumentId: collection.documentId,
+      totalMinor: sale.totalMinor,
+      totalCostMinor: sale.totalCostMinor,
+    );
+    final now = DateTime.now().toUtc().toIso8601String();
+    await txn.insert('command_log', {
+      'id': commandId,
+      'command_type': 'quick_sale',
+      'payload_hash': DatabaseSchema.checksum(canonical),
+      'actor_id': 'system:local-operator',
+      'response_json': jsonEncode({
+        'canonicalPayload': canonical,
+        'result': {
+          'commandId': commandId,
+          'saleDocumentId': sale.documentId,
+          'collectionDocumentId': collection.documentId,
+          'totalMinor': result.totalMinor,
+          'totalCostMinor': result.totalCostMinor,
+        },
+      }),
+      'response_version': 1,
+      'committed_at_utc': now,
+      'authorization_policy_version': 'development-single-user-v1',
+    });
+    await txn.update(
+      'quick_sale_requests',
+      {'status': 'confirmed'},
+      where: 'command_id=?',
+      whereArgs: [commandId],
+    );
+    await txn.update(
+      'quick_sales_accounts',
+      {
+        'status': 'confirmed',
+        'confirmed_document_id': sale.documentId,
+        'updated_at_utc': now,
+      },
+      where: 'id=?',
+      whereArgs: [request['account_id']],
+    );
+    return result;
+  }
+
+  Future<void> _reject(String id, String reason) =>
+      _database.database.transaction((txn) async {
+        if ((await txn.query(
+          'command_log',
+          where: 'id=?',
+          whereArgs: [id],
+        )).isNotEmpty) {
+          return;
+        }
+        await txn.update(
+          'quick_sale_requests',
+          {'status': 'rejected', 'rejection_reason': reason},
+          where: "command_id=? AND status='prepared'",
+          whereArgs: [id],
+        );
+      }, exclusive: true);
+
+  @override
+  Future<void> discardRejected(String commandId) =>
+      _database.database.transaction((txn) async {
+        _id(commandId);
+        final rows = await txn.query(
+          'quick_sale_requests',
+          where: 'command_id=?',
+          whereArgs: [commandId],
+        );
+        if (rows.isEmpty) {
+          throw const QuickSalesValidationException(
+            'La venta pendiente no existe.',
+          );
+        }
+        final row = rows.single;
+        if (row['status'] == 'cancelled') return;
+        if (row['status'] != 'rejected' ||
+            (await txn.query(
+              'command_log',
+              where: 'id=?',
+              whereArgs: [commandId],
+            )).isNotEmpty) {
+          throw const QuickSalesValidationException(
+            'Solo se libera una venta rechazada sin operación registrada.',
+          );
+        }
+        await txn.update(
+          'quick_sale_requests',
+          {'status': 'cancelled'},
+          where: 'command_id=?',
+          whereArgs: [commandId],
+        );
+        await txn.update(
+          'quick_sales_accounts',
+          {
+            'status': 'open',
+            'revision': _int(
+              BigInt.from(row['account_revision'] as int) + BigInt.one,
+              'Revisión',
+            ),
+            'updated_at_utc': DateTime.now().toUtc().toIso8601String(),
+          },
+          where: 'id=?',
+          whereArgs: [row['account_id']],
+        );
+      }, exclusive: true);
+
+  static Future<List<QuickPaymentOption>> _options(DatabaseExecutor txn) async {
+    final rows = await txn.rawQuery(
+      '''SELECT o.*, (o.is_active=1 AND c.is_active=1 AND l.is_active=1 AND l.class='asset' AND l.role='cash' AND m.is_active=1) available FROM quick_payment_options o JOIN cash_accounts c ON c.id=o.cash_account_id JOIN ledger_accounts l ON l.id=c.ledger_account_id JOIN payment_methods m ON m.id=o.payment_method_id ORDER BY o.label COLLATE NOCASE,o.id''',
+    );
+    return rows
+        .map(
+          (r) => QuickPaymentOption(
+            id: r['id'] as String,
+            label: r['label'] as String,
+            cashAccountId: r['cash_account_id'] as String,
+            paymentMethodId: r['payment_method_id'] as String,
+            isActive: r['available'] == 1,
+          ),
+        )
+        .toList();
+  }
+
+  static Future<Map<String, Object?>> _optionFact(
+    DatabaseExecutor txn,
+    String id,
+  ) async {
+    final rows = await txn.rawQuery(
+      '''SELECT o.*,c.name account_name,c.kind account_kind,m.code method_code,m.name method_name FROM quick_payment_options o JOIN cash_accounts c ON c.id=o.cash_account_id JOIN ledger_accounts l ON l.id=c.ledger_account_id JOIN payment_methods m ON m.id=o.payment_method_id WHERE o.id=? AND o.is_active=1 AND c.is_active=1 AND l.is_active=1 AND l.class='asset' AND l.role='cash' AND m.is_active=1''',
+      [id],
+    );
+    if (rows.length != 1) {
+      throw const QuickSalesValidationException(
+        'La forma de pago no está disponible.',
+      );
+    }
+    final row = rows.single;
+    return {
+      'paymentOptionId': row['id'],
+      'paymentOptionLabel': row['label'],
+      'cashAccountId': row['cash_account_id'],
+      'paymentMethodId': row['payment_method_id'],
+      'cashAccountName': row['account_name'],
+      'cashAccountKind': row['account_kind'],
+      'paymentMethodCode': row['method_code'],
+      'paymentMethodName': row['method_name'],
+    };
+  }
+
+  static Future<void> _unusedCommand(DatabaseExecutor txn, String id) async {
+    for (final table in [
+      'command_log',
+      'sale_confirmations',
+      'collection_requests',
+      'supplier_payment_requests',
+    ]) {
+      if ((await txn.query(
+        table,
+        where: '${table == 'command_log' ? 'id' : 'command_id'}=?',
+        whereArgs: [id],
+      )).isNotEmpty) {
+        throw const QuickSalesValidationException(
+          'El identificador ya corresponde a otra operación.',
+        );
+      }
+    }
+    if ((await txn.query(
+      'quick_sale_requests',
+      where: 'command_id=? OR sale_command_id=? OR collection_command_id=?',
+      whereArgs: [id, id, id],
+    )).isNotEmpty) {
+      throw const QuickSalesValidationException(
+        'El identificador está reservado por otra venta rápida.',
+      );
+    }
+  }
+
+  static Future<BusinessProfile> _profile(DatabaseExecutor txn) async {
+    final rows = await txn.query('app_profile');
+    if (rows.length != 1) {
+      throw const QuickSalesValidationException(
+        'Configura el espacio de trabajo primero.',
+      );
+    }
+    final profile = BusinessProfile.fromRow(rows.single);
+    if (profile.timezone != 'America/Bogota') {
+      throw const QuickSalesValidationException(
+        'Las ventas requieren la zona horaria America/Bogota.',
+      );
+    }
+    return profile;
+  }
+
+  static Future<QuickSaleAccount> _account(
+    DatabaseExecutor txn,
+    Map<String, Object?> row,
+  ) async {
+    final lines = await txn.query(
+      'quick_sales_lines',
+      where: 'account_id=?',
+      whereArgs: [row['id']],
+      orderBy: 'sequence',
+    );
+    return QuickSaleAccount(
+      id: row['id'] as String,
+      label: row['label'] as String,
+      revision: row['revision'] as int,
+      status: row['status'] as String,
+      updatedAtUtc: DateTime.parse(row['updated_at_utc'] as String).toUtc(),
+      confirmedDocumentId: row['confirmed_document_id'] as String?,
+      lines: lines
+          .map(
+            (l) => QuickSaleLine(
+              id: l['id'] as String,
+              productId: l['product_id'] as String?,
+              quantityText: l['quantity_text'] as String,
+              unitPriceMinor: l['unit_price_minor'] as int?,
+              paymentOptionId: l['payment_option_id'] as String?,
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  static PreparedQuickSale _prepared(Map<String, Object?> row) {
+    final p =
+        jsonDecode(row['canonical_payload'] as String) as Map<String, dynamic>;
+    return PreparedQuickSale(
+      commandId: row['command_id'] as String,
+      accountId: row['account_id'] as String,
+      accountRevision: row['account_revision'] as int,
+      label: p['label'] as String,
+      totalMinor: p['totalMinor'] as int,
+      occurredAtUtc: DateTime.parse(row['occurred_at_utc'] as String).toUtc(),
+      preparedAtUtc: DateTime.parse(row['prepared_at_utc'] as String).toUtc(),
+      status: row['status'] as String,
+      rejectionReason: row['rejection_reason'] as String?,
+    );
+  }
+
+  static QuickSaleResult _prior(Map<String, Object?> row, String canonical) {
+    final response =
+        jsonDecode(row['response_json'] as String) as Map<String, dynamic>;
+    if (row['command_type'] != 'quick_sale' ||
+        row['payload_hash'] != DatabaseSchema.checksum(canonical) ||
+        response['canonicalPayload'] != canonical ||
+        row['response_version'] != 1) {
+      throw const QuickSalesValidationException(
+        'La respuesta guardada pertenece a otra operación.',
+      );
+    }
+    final r = response['result'] as Map<String, dynamic>;
+    return QuickSaleResult(
+      commandId: r['commandId'] as String,
+      saleDocumentId: r['saleDocumentId'] as String,
+      collectionDocumentId: r['collectionDocumentId'] as String,
+      totalMinor: r['totalMinor'] as int,
+      totalCostMinor: r['totalCostMinor'] as int,
+    );
+  }
+
+  static bool _sameLines(List<QuickSaleLine> a, List<QuickSaleLine> b) =>
+      a.length == b.length &&
+      List.generate(
+        a.length,
+        (i) =>
+            a[i].id == b[i].id &&
+            a[i].productId == b[i].productId &&
+            a[i].quantityText == b[i].quantityText &&
+            a[i].unitPriceMinor == b[i].unitPriceMinor &&
+            a[i].paymentOptionId == b[i].paymentOptionId,
+      ).every((v) => v);
+  static int _int(BigInt value, String label) {
+    if (value < BigInt.zero || value > Money.maxMinorUnits) {
+      throw QuickSalesValidationException('$label fuera del rango permitido.');
+    }
+    return value.toInt();
+  }
+
+  static void _id(String id) {
+    if (id.trim().isEmpty || id.length > 160) {
+      throw const QuickSalesValidationException(
+        'El identificador no es válido.',
+      );
+    }
+  }
+
+  static String _date(DateTime at) {
+    if (!at.isUtc || at.year < 2000 || at.year > 9999) {
+      throw const QuickSalesValidationException(
+        'La fecha de venta no es válida.',
+      );
+    }
+    final local = at.subtract(const Duration(hours: 5));
+    return '${local.year.toString().padLeft(4, '0')}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+  }
+}

@@ -353,6 +353,14 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
           'Este identificador ya corresponde a una solicitud de pago.',
         );
       }
+      if ((await txn.rawQuery(
+        'SELECT command_id FROM quick_sale_requests WHERE command_id = ? OR sale_command_id = ? OR collection_command_id = ?',
+        [command.commandId, command.commandId, command.commandId],
+      )).isNotEmpty) {
+        throw const InventoryValidationException(
+          'Este identificador ya corresponde a una venta de mostrador.',
+        );
+      }
       final suppliers = await txn.query(
         'counterparties',
         where: 'id = ? AND is_supplier = 1 AND is_active = 1',

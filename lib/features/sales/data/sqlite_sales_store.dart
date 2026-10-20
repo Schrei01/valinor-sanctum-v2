@@ -135,7 +135,25 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
   });
 
   @override
-  Future<SaleDraft> saveDraft(SaveSaleDraft input) async {
+  Future<SaleDraft> saveDraft(SaveSaleDraft input) =>
+      _database.database.transaction((txn) async {
+        if ((await txn.query(
+          'quick_sale_requests',
+          where: 'legacy_draft_id = ?',
+          whereArgs: [input.id],
+        )).isNotEmpty) {
+          throw const SalesValidationException(
+            'Esta cuenta pertenece a una venta rápida.',
+          );
+        }
+        return saveDraftInTransaction(txn, input);
+      }, exclusive: true);
+
+  /// Composition seam: the caller owns the surrounding atomic transaction.
+  Future<SaleDraft> saveDraftInTransaction(
+    Transaction txn,
+    SaveSaleDraft input,
+  ) async {
     _id(input.id);
     final label = _text(input.label, 'Nombre de cuenta', 120);
     final customer = _text(input.customerName, 'Cliente', 120);
@@ -143,101 +161,119 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
       throw const SalesValidationException('La revisión no es válida.');
     }
     final lines = _lines(input.lines);
-    return _database.database.transaction((txn) async {
-      final profile = await _profile(txn);
-      for (final line in lines) {
-        _amount(line.unitPriceMinor, profile, 'Precio');
-        _int64(
-          BigInt.from(line.quantity) * BigInt.from(line.unitPriceMinor),
-          'Total de línea',
-        );
-      }
-      final rows = await txn.query(
-        'sales_drafts',
-        where: 'id = ?',
-        whereArgs: [input.id],
+    final profile = await _profile(txn);
+    for (final line in lines) {
+      _amount(line.unitPriceMinor, profile, 'Precio');
+      _int64(
+        BigInt.from(line.quantity) * BigInt.from(line.unitPriceMinor),
+        'Total de línea',
       );
-      if (rows.isEmpty && input.expectedRevision != 0) {
+    }
+    final rows = await txn.query(
+      'sales_drafts',
+      where: 'id = ?',
+      whereArgs: [input.id],
+    );
+    if (rows.isEmpty && input.expectedRevision != 0) {
+      throw const SalesValidationException(
+        'La cuenta ya no existe. Actualiza la vista.',
+      );
+    }
+    if (rows.isNotEmpty) {
+      final old = await _draft(txn, rows.single);
+      // A response may have been lost after save. Replaying the same intended
+      // revision and complete value is safe even after reopening the app.
+      if (old.status == 'open' &&
+          old.revision == input.expectedRevision + 1 &&
+          old.label == label &&
+          old.customerName == customer &&
+          _sameLines(old.lines, lines)) {
+        return old;
+      }
+      if (old.status != 'open' || old.revision != input.expectedRevision) {
         throw const SalesValidationException(
-          'La cuenta ya no existe. Actualiza la vista.',
+          'La cuenta cambió o tiene una confirmación pendiente. Actualiza la vista.',
         );
       }
-      if (rows.isNotEmpty) {
-        final old = await _draft(txn, rows.single);
-        // A response may have been lost after save. Replaying the same intended
-        // revision and complete value is safe even after reopening the app.
-        if (old.status == 'open' &&
-            old.revision == input.expectedRevision + 1 &&
-            old.label == label &&
-            old.customerName == customer &&
-            _sameLines(old.lines, lines)) {
-          return old;
-        }
-        if (old.status != 'open' || old.revision != input.expectedRevision) {
-          throw const SalesValidationException(
-            'La cuenta cambió o tiene una confirmación pendiente. Actualiza la vista.',
-          );
-        }
-      }
-      for (final line in lines) {
-        await _activeProduct(txn, line.productId);
-      }
-      final revision = _int64(
-        BigInt.from(input.expectedRevision) + BigInt.one,
-        'Revisión',
-      );
-      final now = DateTime.now().toUtc();
-      if (rows.isEmpty) {
-        await txn.insert('sales_drafts', {
-          'id': input.id,
+    }
+    for (final line in lines) {
+      await _activeProduct(txn, line.productId);
+    }
+    final revision = _int64(
+      BigInt.from(input.expectedRevision) + BigInt.one,
+      'Revisión',
+    );
+    final now = DateTime.now().toUtc();
+    if (rows.isEmpty) {
+      await txn.insert('sales_drafts', {
+        'id': input.id,
+        'label': label,
+        'customer_name': customer,
+        'revision': revision,
+        'status': 'open',
+        'updated_at_utc': now.toIso8601String(),
+      });
+    } else {
+      await txn.update(
+        'sales_drafts',
+        {
           'label': label,
           'customer_name': customer,
           'revision': revision,
-          'status': 'open',
           'updated_at_utc': now.toIso8601String(),
-        });
-      } else {
-        await txn.update(
-          'sales_drafts',
-          {
-            'label': label,
-            'customer_name': customer,
-            'revision': revision,
-            'updated_at_utc': now.toIso8601String(),
-          },
-          where: 'id = ?',
-          whereArgs: [input.id],
-        );
-        await txn.delete(
-          'sales_draft_lines',
-          where: 'draft_id = ?',
-          whereArgs: [input.id],
-        );
-      }
-      for (var index = 0; index < lines.length; index++) {
-        final line = lines[index];
-        await txn.insert('sales_draft_lines', {
-          'draft_id': input.id,
-          'sequence': index,
-          'product_id': line.productId,
-          'quantity': line.quantity,
-          'unit_price_minor': line.unitPriceMinor,
-        });
-      }
-      return SaleDraft(
-        id: input.id,
-        label: label,
-        customerName: customer,
-        revision: revision,
-        status: 'open',
-        updatedAtUtc: now,
-        lines: lines,
+        },
+        where: 'id = ?',
+        whereArgs: [input.id],
       );
-    }, exclusive: true);
+      await txn.delete(
+        'sales_draft_lines',
+        where: 'draft_id = ?',
+        whereArgs: [input.id],
+      );
+    }
+    for (var index = 0; index < lines.length; index++) {
+      final line = lines[index];
+      await txn.insert('sales_draft_lines', {
+        'draft_id': input.id,
+        'sequence': index,
+        'product_id': line.productId,
+        'quantity': line.quantity,
+        'unit_price_minor': line.unitPriceMinor,
+      });
+    }
+    return SaleDraft(
+      id: input.id,
+      label: label,
+      customerName: customer,
+      revision: revision,
+      status: 'open',
+      updatedAtUtc: now,
+      lines: lines,
+    );
   }
 
   @override
   Future<SaleConfirmation> prepareConfirmation({
+    required String commandId,
+    required String draftId,
+    required int expectedRevision,
+    required DateTime occurredAtUtc,
+    required String dueDate,
+  }) => _database.database.transaction((txn) async {
+    await _rejectQuickCommand(txn, commandId);
+    return prepareConfirmationInTransaction(
+      txn,
+      commandId: commandId,
+      draftId: draftId,
+      expectedRevision: expectedRevision,
+      occurredAtUtc: occurredAtUtc,
+      dueDate: dueDate,
+    );
+  }, exclusive: true);
+
+  /// Composition seam; never opens a nested transaction.
+  Future<SaleConfirmation> prepareConfirmationInTransaction(
+    Transaction txn, {
     required String commandId,
     required String draftId,
     required int expectedRevision,
@@ -248,102 +284,105 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
     _id(draftId);
     final businessDate = _businessDate(occurredAtUtc);
     _dueDate(dueDate, businessDate);
-    return _database.database.transaction((txn) async {
-      final profile = await _profile(txn);
-      final prior = await txn.query(
-        'sale_confirmations',
-        where: 'command_id = ?',
-        whereArgs: [commandId],
-      );
-      if (prior.isNotEmpty) {
-        final old = prior.single;
-        if (old['draft_id'] != draftId ||
-            old['draft_revision'] != expectedRevision ||
-            old['occurred_at_utc'] != occurredAtUtc.toIso8601String() ||
-            old['due_date'] != dueDate) {
-          throw const SalesValidationException(
-            'El identificador ya corresponde a otra confirmación.',
-          );
-        }
-        return _confirmation(old);
-      }
-      if ((await txn.query(
-        'command_log',
-        where: 'id = ?',
-        whereArgs: [commandId],
-      )).isNotEmpty) {
+    final profile = await _profile(txn);
+    final prior = await txn.query(
+      'sale_confirmations',
+      where: 'command_id = ?',
+      whereArgs: [commandId],
+    );
+    if (prior.isNotEmpty) {
+      final old = prior.single;
+      if (old['draft_id'] != draftId ||
+          old['draft_revision'] != expectedRevision ||
+          old['occurred_at_utc'] != occurredAtUtc.toIso8601String() ||
+          old['due_date'] != dueDate) {
         throw const SalesValidationException(
-          'El identificador ya corresponde a otro comando.',
+          'El identificador ya corresponde a otra confirmación.',
         );
       }
-      if ((await txn.query(
-        'collection_requests',
-        columns: ['command_id'],
-        where: 'command_id = ?',
-        whereArgs: [commandId],
-      )).isNotEmpty) {
-        throw const SalesValidationException(
-          'El identificador ya corresponde a una solicitud de cobro.',
-        );
-      }
-      if ((await txn.query(
-        'supplier_payment_requests',
-        columns: ['command_id'],
-        where: 'command_id = ?',
-        whereArgs: [commandId],
-      )).isNotEmpty) {
-        throw const SalesValidationException(
-          'El identificador ya corresponde a una solicitud de pago.',
-        );
-      }
-      final rows = await txn.query(
-        'sales_drafts',
-        where: 'id = ?',
-        whereArgs: [draftId],
+      return _confirmation(old);
+    }
+    if ((await txn.query(
+      'command_log',
+      where: 'id = ?',
+      whereArgs: [commandId],
+    )).isNotEmpty) {
+      throw const SalesValidationException(
+        'El identificador ya corresponde a otro comando.',
       );
-      if (rows.isEmpty) {
-        throw const SalesValidationException('La cuenta no existe.');
-      }
-      final draft = await _draft(txn, rows.single);
-      if (draft.status != 'open' || draft.revision != expectedRevision) {
-        throw const SalesValidationException(
-          'La cuenta cambió o tiene una confirmación pendiente. Actualiza la vista.',
-        );
-      }
-      _saleTotal(draft.lines, profile);
-      final now = DateTime.now().toUtc();
-      final canonical = _payload(profile, draft, occurredAtUtc, dueDate);
-      await txn.insert('sale_confirmations', {
-        'command_id': commandId,
-        'draft_id': draftId,
-        'draft_revision': expectedRevision,
-        'canonical_payload': canonical,
-        'occurred_at_utc': occurredAtUtc.toIso8601String(),
-        'due_date': dueDate,
-        'prepared_at_utc': now.toIso8601String(),
-        'status': 'prepared',
-      });
-      await txn.update(
-        'sales_drafts',
-        {'status': 'prepared', 'updated_at_utc': now.toIso8601String()},
-        where: 'id = ?',
-        whereArgs: [draftId],
+    }
+    if ((await txn.query(
+      'collection_requests',
+      columns: ['command_id'],
+      where: 'command_id = ?',
+      whereArgs: [commandId],
+    )).isNotEmpty) {
+      throw const SalesValidationException(
+        'El identificador ya corresponde a una solicitud de cobro.',
       );
-      return SaleConfirmation(
-        commandId: commandId,
-        draftId: draftId,
-        draftRevision: expectedRevision,
-        occurredAtUtc: occurredAtUtc,
-        dueDate: dueDate,
-        preparedAtUtc: now,
-        status: 'prepared',
+    }
+    if ((await txn.query(
+      'supplier_payment_requests',
+      columns: ['command_id'],
+      where: 'command_id = ?',
+      whereArgs: [commandId],
+    )).isNotEmpty) {
+      throw const SalesValidationException(
+        'El identificador ya corresponde a una solicitud de pago.',
       );
-    }, exclusive: true);
+    }
+    final rows = await txn.query(
+      'sales_drafts',
+      where: 'id = ?',
+      whereArgs: [draftId],
+    );
+    if (rows.isEmpty) {
+      throw const SalesValidationException('La cuenta no existe.');
+    }
+    final draft = await _draft(txn, rows.single);
+    if (draft.status != 'open' || draft.revision != expectedRevision) {
+      throw const SalesValidationException(
+        'La cuenta cambió o tiene una confirmación pendiente. Actualiza la vista.',
+      );
+    }
+    _saleTotal(draft.lines, profile);
+    final now = DateTime.now().toUtc();
+    final canonical = _payload(profile, draft, occurredAtUtc, dueDate);
+    await txn.insert('sale_confirmations', {
+      'command_id': commandId,
+      'draft_id': draftId,
+      'draft_revision': expectedRevision,
+      'canonical_payload': canonical,
+      'occurred_at_utc': occurredAtUtc.toIso8601String(),
+      'due_date': dueDate,
+      'prepared_at_utc': now.toIso8601String(),
+      'status': 'prepared',
+    });
+    await txn.update(
+      'sales_drafts',
+      {'status': 'prepared', 'updated_at_utc': now.toIso8601String()},
+      where: 'id = ?',
+      whereArgs: [draftId],
+    );
+    return SaleConfirmation(
+      commandId: commandId,
+      draftId: draftId,
+      draftRevision: expectedRevision,
+      occurredAtUtc: occurredAtUtc,
+      dueDate: dueDate,
+      preparedAtUtc: now,
+      status: 'prepared',
+    );
   }
+
+  /// All normal validations and immutable facts are reused by quick sales.
+  Future<SaleResult> confirmInTransaction(Transaction txn, String commandId) =>
+      _confirm(txn, commandId);
 
   @override
   Future<SaleResult> confirmPrepared(String commandId) async {
     _id(commandId);
+    await _rejectQuickCommand(_database.database, commandId);
     try {
       return await _database.database.transaction(
         (txn) => _confirm(txn, commandId),
@@ -372,6 +411,21 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
         }
       }, exclusive: true);
       rethrow;
+    }
+  }
+
+  static Future<void> _rejectQuickCommand(
+    DatabaseExecutor txn,
+    String id,
+  ) async {
+    if ((await txn.query(
+      'quick_sale_requests',
+      where: 'command_id=? OR sale_command_id=? OR collection_command_id=?',
+      whereArgs: [id, id, id],
+    )).isNotEmpty) {
+      throw const SalesValidationException(
+        'Este identificador pertenece a una venta rápida; recupérala desde Ventas.',
+      );
     }
   }
 

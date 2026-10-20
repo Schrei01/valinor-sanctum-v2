@@ -1,15 +1,16 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 import 'package:flutter/material.dart';
 import '../features/workspace/application/workspace_controller.dart';
 import '../features/inventory/application/inventory_controller.dart';
 import '../features/inventory/presentation/catalog_page.dart';
 import '../features/inventory/presentation/purchases_page.dart';
-import '../features/sales/application/sales_controller.dart';
-import '../features/sales/presentation/sales_page.dart';
 import '../features/collections/application/collections_controller.dart';
 import '../features/collections/presentation/collections_page.dart';
 import '../features/supplier_payments/application/supplier_payments_controller.dart';
 import '../features/supplier_payments/presentation/supplier_payments_page.dart';
+import '../features/quick_sales/application/quick_sales_controller.dart';
+import '../features/quick_sales/presentation/quick_sales_page.dart';
 
 const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
@@ -61,25 +62,48 @@ class _WorkspaceShell extends StatefulWidget {
 class _WorkspaceShellState extends State<_WorkspaceShell> {
   int _section = 0;
   InventoryController? _inventory;
-  SalesController? _sales;
   CollectionsController? _collections;
   SupplierPaymentsController? _supplierPayments;
+  QuickSalesController? _quickSales;
+  late final AppLifecycleListener _exitListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _exitListener = AppLifecycleListener(
+      onExitRequested: () async {
+        final saved = await _quickSales?.flushAll() ?? true;
+        if (saved) return AppExitResponse.exit;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Hay cambios sin guardar. Reintenta el guardado de las cuentas antes de cerrar.',
+              ),
+            ),
+          );
+        }
+        return AppExitResponse.cancel;
+      },
+    );
+  }
 
   void _selectSection(int index) {
     setState(() => _section = index);
     if (widget.controller.profile == null) return;
     if (index == 1 || index == 2) unawaited(_inventory?.load());
-    if (index == 3) unawaited(_sales?.load());
+    if (index == 3) unawaited(_quickSales?.load());
     if (index == 4) unawaited(_collections?.load());
     if (index == 5) unawaited(_supplierPayments?.load());
   }
 
   @override
   void dispose() {
+    _exitListener.dispose();
     _inventory?.dispose();
-    _sales?.dispose();
     _collections?.dispose();
     _supplierPayments?.dispose();
+    _quickSales?.dispose();
     super.dispose();
   }
 
@@ -100,17 +124,19 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
           _inventory!.loadError == null) {
         unawaited(_inventory!.load());
       }
-      final salesStore = controller.salesStore;
-      if (!identical(_sales?.store, salesStore)) {
-        _sales?.dispose();
-        _sales = salesStore == null ? null : SalesController(store: salesStore);
+      final quickSalesStore = controller.quickSalesStore;
+      if (!identical(_quickSales?.store, quickSalesStore)) {
+        _quickSales?.dispose();
+        _quickSales = quickSalesStore == null
+            ? null
+            : QuickSalesController(store: quickSalesStore);
       }
-      if (_sales != null &&
+      if (_quickSales != null &&
           controller.profile != null &&
-          _sales!.snapshot == null &&
-          !_sales!.loading &&
-          _sales!.loadError == null) {
-        unawaited(_sales!.load());
+          _quickSales!.snapshot == null &&
+          !_quickSales!.loading &&
+          _quickSales!.loadError == null) {
+        unawaited(_quickSales!.load());
       }
       final collectionsStore = controller.collectionsStore;
       if (!identical(_collections?.store, collectionsStore)) {
@@ -248,13 +274,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                               _scrollPage(
                                 controller.profile == null
                                     ? const _ConfigureFirst()
-                                    : _sales == null
-                                    ? const _ModuleUnavailable()
-                                    : SalesPage(
-                                        key: ObjectKey(_sales),
-                                        controller: _sales!,
-                                        profile: controller.profile!,
-                                      ),
+                                    : _salesContent(controller),
                                 wide,
                               ),
                               _scrollPage(
@@ -316,6 +336,15 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
       ),
     ),
   );
+
+  Widget _salesContent(WorkspaceController controller) {
+    if (_quickSales == null) return const _ModuleUnavailable();
+    return QuickSalesPage(
+      key: ObjectKey(_quickSales),
+      controller: _quickSales!,
+      profile: controller.profile!,
+    );
+  }
 }
 
 class _ConfigureFirst extends StatelessWidget {
@@ -481,7 +510,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.5.0',
+                    'Versión 0.6.1',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -583,7 +612,7 @@ class _Home extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   const Text(
-                    'Ya puedes organizar el catálogo, recibir compras, confirmar ventas a crédito, registrar cobros y pagar a proveedores desde el menú.',
+                    'Entra en Ventas para atender varias cuentas y registrar productos y formas de pago desde una sola pantalla.',
                     style: TextStyle(color: Color(0xFF65716A)),
                   ),
                 ],
@@ -610,8 +639,8 @@ class _Home extends StatelessWidget {
                   ),
                   (
                     Icons.point_of_sale_outlined,
-                    'Ventas y cuentas abiertas',
-                    'Cuentas guardadas, entregas a crédito, cobros completos y abonos.',
+                    'Ventas de mostrador',
+                    'Varias cuentas, varias líneas y forma de pago por línea. Registrar venta guarda la entrega y el cobro.',
                     'Disponible',
                   ),
                   (
@@ -878,7 +907,7 @@ class _System extends StatelessWidget {
       ),
       const SizedBox(height: 24),
       const Text(
-        'Entorno de desarrollo. Catálogo, compras, ventas a crédito, cobros y pagos a proveedores disponibles. Arqueo, usuarios e importación aún están pendientes.',
+        'Entorno de desarrollo. Ventas de mostrador con cobro inmediato, catálogo, compras y pagos disponibles. Arqueo, usuarios e importación aún están pendientes.',
         style: TextStyle(color: Color(0xFF65716A), height: 1.5),
       ),
     ],
