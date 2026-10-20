@@ -16,6 +16,7 @@ import 'features/collections/data/sqlite_collections_store.dart';
 import 'features/supplier_payments/data/sqlite_supplier_payments_store.dart';
 import 'features/quick_sales/data/sqlite_quick_sales_store.dart';
 import 'features/stock_intake/data/sqlite_stock_intake_store.dart';
+import 'features/treasury/data/sqlite_treasury_store.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,6 +63,7 @@ void main() {
           database,
           synthetic: config.environment == AppEnvironment.test,
         ),
+        treasuryStore: SqliteTreasuryStore(database),
       );
     },
   );

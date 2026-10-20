@@ -2,7 +2,7 @@
 
 Repositorio independiente para la nueva aplicación de gestión comercial de Valinor.
 
-**Estado: inventario inicial vendible, catálogo con existencias, compras de contado y ventas de mostrador (0.9.1, esquema v8).** La carga inicial verificada deja productos y cantidades disponibles en **Ventas**, en un espacio limpio que conserva aparte las pruebas anteriores. **Catálogo** muestra solo productos con unidades, con filtros de **Categoría**, **Proveedor** y nombre o SKU; **Todos los productos** limpia los criterios. Sus columnas son **Producto, PVP, Unidades y Proveedor**, según el [ajuste 0.9.1](docs/28-proveedor-catalogo.md). No crea ni modifica registros. Los agotados permanecen guardados para reponerlos desde **Compras**, donde se ingresa costo unitario, PVP, proveedor, categoría, SKU opcional y cantidad. **Ingresar producto** guarda catálogo, inventario y pago total desde Efectivo o Nequi juntos. **Ventas** conserva varias cuentas con varias líneas y pago por línea; Registrar venta confirma entrega y cobro juntos. Ajustes y caja/arqueo siguen pendientes; el entorno sigue siendo local de desarrollo.
+**Estado: inventario inicial vendible, catálogo con existencias, compras de contado y ventas de mostrador (0.10.0, esquema v8).** La carga inicial verificada deja productos y cantidades disponibles en **Ventas**, en un espacio limpio que conserva aparte las pruebas anteriores. **Catálogo** muestra solo productos con unidades, con filtros de **Categoría**, **Proveedor** y nombre o SKU; **Todos los productos** limpia los criterios. Sus columnas son **Producto, PVP, Unidades y Proveedor**, según el [ajuste 0.9.1](docs/28-proveedor-catalogo.md). No crea ni modifica registros. Los agotados permanecen guardados para reponerlos desde **Compras**, donde se ingresa costo unitario, PVP, proveedor, categoría, SKU opcional y cantidad. **Ingresar producto** guarda catálogo, inventario y pago total desde Efectivo o Nequi juntos. **Ventas** conserva varias cuentas con varias líneas y pago por línea; Registrar venta confirma entrega y cobro juntos. **Tesorería** reemplaza Pagos con Caja, Nequi, Caja mayor, Deudas de clientes y movimientos por cuenta. El total disponible suma Caja + Nequi. Consulta [el alcance de Tesorería](docs/29-tesoreria.md). Ajustes y arqueo siguen pendientes; el entorno sigue siendo local de desarrollo.
 
 La [apertura de inventario 0.9.0](docs/27-inventario-inicial.md) usa la copia ajustada con categoría/proveedor, con costos cero confirmados, conversión monetaria exacta y conciliación. Es una apertura de Inventario contra Patrimonio: no crea compras, deudas ni pagos. Efectivo y Nequi empiezan sin dinero importado; si corresponde, declara saldo inicial antes del primer movimiento de cada cuenta. Los perfiles, el selector local y el JSON de origen quedan privados en `data`, fuera de Git y ZIP. La [consulta separada de 0.8.0](docs/26-inventario-copia.md) sigue disponible para perfiles con un snapshot local. No hay sincronización con el POS original.
 
@@ -10,7 +10,7 @@ Consulta [el incremento 07 y sus verificaciones](docs/23-incremento-07.md), [su 
 
 El ajuste 0.7.2 se describe en [Filtros del catálogo](docs/25-filtros-catalogo.md), con [lista de categorías](docs/images/catalog-category-options.png) y [productos filtrados](docs/images/catalog-filtered.png). Son vistas de pruebas con datos sintéticos. La entrega 0.7.1 se conserva como antecedente en [Catálogo de consulta](docs/24-catalogo-consulta.md).
 
-Para abrir el programa, haz doble clic en **Iniciar Valinor Sanctum.cmd** en la raíz del proyecto. Inicia la entrega vigente de `dist/ValinorSanctum2`; esa ruta se actualiza al empaquetar. La copia versionada 0.9.1 está en `dist/0.9.1/ValinorSanctum2/valinor_sanctum_2.exe` y su ZIP en `dist/valinor-sanctum-2-0.9.1-windows-x64.zip`. Conserva las DLL y la carpeta data junto al ejecutable. El selector local abre el perfil `valinor`; las pruebas siguen conservadas en `development`. Las bases propias v1–v7 se actualizan con respaldo SQLite previo; las versiones anteriores no pueden abrir v8. El almacenamiento sigue dentro de `C:/proyectos/valinor_sanctum_2`.
+Para abrir el programa, haz doble clic en **Iniciar Valinor Sanctum.cmd** en la raíz del proyecto. Inicia la entrega vigente de `dist/ValinorSanctum2`; esa ruta se actualiza al empaquetar. La copia versionada 0.10.0 está en `dist/0.10.0/ValinorSanctum2/valinor_sanctum_2.exe` y su ZIP en `dist/valinor-sanctum-2-0.10.0-windows-x64.zip`. Conserva las DLL y la carpeta data junto al ejecutable. El selector local abre el perfil `valinor`; las pruebas siguen conservadas en `development`. Las bases propias v1–v7 se actualizan con respaldo SQLite previo; las versiones anteriores no pueden abrir v8. El almacenamiento sigue dentro de `C:/proyectos/valinor_sanctum_2`.
 
 Si aparece `database v8 is newer than supported v7` u otro aviso de base más nueva, se ha abierto un bundle antiguo. Cierra esa ventana e inicia el programa con el archivo de la raíz; no borres ni reinicies la base para resolver un ejecutable antiguo.
 
@@ -49,6 +49,11 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 22. [Contrato de compras de contado e ingreso al catálogo](docs/22-contrato-incremento-07.md).
 23. [Compras, historial de ingresos y validación 0.7.0](docs/23-incremento-07.md).
 24. [Catálogo de consulta y validación 0.7.1](docs/24-catalogo-consulta.md).
+25. [Filtros combinados del catálogo 0.7.2](docs/25-filtros-catalogo.md).
+26. [Consulta separada de inventario 0.8.0](docs/26-inventario-copia.md).
+27. [Inventario inicial disponible para vender 0.9.0](docs/27-inventario-inicial.md).
+28. [Columna Proveedor en Catálogo 0.9.1](docs/28-proveedor-catalogo.md).
+29. [Tesorería, saldos y movimientos 0.10.0](docs/29-tesoreria.md).
 
 ## Decisiones aprobadas
 
@@ -82,6 +87,6 @@ El SDK portable y sus cachés están en .tooling, ignorados por Git. Los scripts
 ./scripts/package-windows.ps1
 ~~~
 
-El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.9.1-windows-x64.zip`. Conserva el bundle previo bajo tmp y rechaza versiones anteriores al proyecto o a la entrega vigente. Hay que cerrar todas las copias de la aplicación de este proyecto antes de actualizarla.
+El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.10.0-windows-x64.zip`. Conserva el bundle previo bajo tmp y rechaza versiones anteriores al proyecto o a la entrega vigente. Hay que cerrar todas las copias de la aplicación de este proyecto antes de actualizarla.
 
-Resultados 0.9.1: doce pruebas de interfaz de Catálogo aprobadas, análisis y formato limpios. No cambia el esquema ni la persistencia. La suite general del corte 0.9.0 aprobó 428 pruebas y omitió tres por permisos de symlinks; ese recorrido se documenta en su informe histórico.
+Resultados 0.10.0: 449 pruebas aprobadas y tres omitidas por permisos de enlaces del host. Incluyen saldos y movimientos de Tesorería, filtros y recuperación; análisis limpio y formato de 109 Dart sin cambios. Se conserva el esquema v8 y se configura Caja mayor sin crear dinero.

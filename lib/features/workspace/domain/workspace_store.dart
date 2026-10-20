@@ -6,6 +6,7 @@ import '../../collections/domain/collections_store.dart';
 import '../../supplier_payments/domain/supplier_payments_store.dart';
 import '../../quick_sales/domain/quick_sales_store.dart';
 import '../../stock_intake/domain/stock_intake_store.dart';
+import '../../treasury/domain/treasury_store.dart';
 
 abstract interface class WorkspaceStore {
   Future<BusinessProfile?> readProfile();
@@ -26,6 +27,7 @@ class WorkspaceSession {
     this.supplierPaymentsStore,
     this.quickSalesStore,
     this.stockIntakeStore,
+    this.treasuryStore,
   });
   final WorkspaceStore store;
   final String databasePath;
@@ -37,4 +39,5 @@ class WorkspaceSession {
   final SupplierPaymentsStore? supplierPaymentsStore;
   final QuickSalesStore? quickSalesStore;
   final StockIntakeStore? stockIntakeStore;
+  final TreasuryStore? treasuryStore;
 }

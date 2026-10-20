@@ -12,6 +12,8 @@ import '../features/supplier_payments/presentation/supplier_payments_page.dart';
 import '../features/quick_sales/application/quick_sales_controller.dart';
 import '../features/quick_sales/presentation/quick_sales_page.dart';
 import '../features/stock_intake/application/stock_intake_controller.dart';
+import '../features/treasury/application/treasury_controller.dart';
+import '../features/treasury/presentation/treasury_page.dart';
 
 const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
@@ -22,7 +24,7 @@ const _destinations = [
   (Icons.local_shipping_outlined, 'Compras'),
   (Icons.point_of_sale_outlined, 'Ventas'),
   (Icons.payments_outlined, 'Cobros'),
-  (Icons.outbound_outlined, 'Pagos'),
+  (Icons.account_balance_outlined, 'Tesorería'),
   (Icons.settings_outlined, 'Sistema'),
 ];
 
@@ -67,6 +69,8 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   SupplierPaymentsController? _supplierPayments;
   QuickSalesController? _quickSales;
   StockIntakeController? _stockIntake;
+  TreasuryController? _treasury;
+  bool _supplierWasConfirming = false;
   late final AppLifecycleListener _exitListener;
 
   @override
@@ -97,7 +101,17 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     if (index == 2) unawaited(_stockIntake?.load());
     if (index == 3) unawaited(_quickSales?.load());
     if (index == 4) unawaited(_collections?.load());
-    if (index == 5) unawaited(_supplierPayments?.load());
+    if (index == 5) {
+      unawaited(_treasury?.load());
+      unawaited(_supplierPayments?.load());
+    }
+  }
+
+  void _supplierPaymentsChanged() {
+    final confirming = _supplierPayments?.confirming ?? false;
+    final completed = _supplierWasConfirming && !confirming;
+    _supplierWasConfirming = confirming;
+    if (completed && _section == 5) unawaited(_treasury?.load());
   }
 
   @override
@@ -105,9 +119,11 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     _exitListener.dispose();
     _inventory?.dispose();
     _collections?.dispose();
+    _supplierPayments?.removeListener(_supplierPaymentsChanged);
     _supplierPayments?.dispose();
     _quickSales?.dispose();
     _stockIntake?.dispose();
+    _treasury?.dispose();
     super.dispose();
   }
 
@@ -172,10 +188,13 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
       }
       final supplierPaymentsStore = controller.supplierPaymentsStore;
       if (!identical(_supplierPayments?.store, supplierPaymentsStore)) {
+        _supplierPayments?.removeListener(_supplierPaymentsChanged);
         _supplierPayments?.dispose();
         _supplierPayments = supplierPaymentsStore == null
             ? null
             : SupplierPaymentsController(store: supplierPaymentsStore);
+        _supplierWasConfirming = false;
+        _supplierPayments?.addListener(_supplierPaymentsChanged);
       }
       if (_supplierPayments != null &&
           controller.profile != null &&
@@ -183,6 +202,20 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
           !_supplierPayments!.loading &&
           _supplierPayments!.loadError == null) {
         unawaited(_supplierPayments!.load());
+      }
+      final treasuryStore = controller.treasuryStore;
+      if (!identical(_treasury?.store, treasuryStore)) {
+        _treasury?.dispose();
+        _treasury = treasuryStore == null
+            ? null
+            : TreasuryController(store: treasuryStore);
+      }
+      if (_treasury != null &&
+          controller.profile != null &&
+          _treasury!.snapshot == null &&
+          !_treasury!.loading &&
+          _treasury!.loadError == null) {
+        unawaited(_treasury!.load());
       }
       if (controller.state == WorkspaceState.loading) {
         return const Scaffold(
@@ -312,12 +345,22 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                               _scrollPage(
                                 controller.profile == null
                                     ? const _ConfigureFirst()
-                                    : _supplierPayments == null
+                                    : _treasury == null
                                     ? const _ModuleUnavailable()
-                                    : SupplierPaymentsPage(
-                                        key: ObjectKey(_supplierPayments),
-                                        controller: _supplierPayments!,
+                                    : TreasuryPage(
+                                        key: ObjectKey(_treasury),
+                                        controller: _treasury!,
                                         profile: controller.profile!,
+                                        supplierPaymentsPanel:
+                                            _supplierPayments == null
+                                            ? null
+                                            : SupplierPaymentsPage(
+                                                key: ObjectKey(
+                                                  _supplierPayments,
+                                                ),
+                                                controller: _supplierPayments!,
+                                                profile: controller.profile!,
+                                              ),
                                       ),
                                 wide,
                               ),
@@ -374,7 +417,7 @@ class _ConfigureFirst extends StatelessWidget {
     child: Padding(
       padding: EdgeInsets.all(28),
       child: Text(
-        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras, ventas, cobros y pagos.',
+        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras, ventas, cobros y tesorería.',
       ),
     ),
   );
@@ -530,7 +573,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.9.1',
+                    'Versión 0.10.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

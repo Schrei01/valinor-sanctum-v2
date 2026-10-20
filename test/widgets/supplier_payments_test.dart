@@ -9,11 +9,13 @@ import 'package:valinor_sanctum_2/app/sanctum_app.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/features/collections/domain/collections_store.dart';
 import 'package:valinor_sanctum_2/features/supplier_payments/domain/supplier_payments_store.dart';
+import 'package:valinor_sanctum_2/features/supplier_payments/presentation/supplier_payments_page.dart';
 import 'package:valinor_sanctum_2/features/workspace/application/workspace_controller.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/workspace_store.dart';
 import '../support/fake_supplier_payments_store.dart';
 import '../support/fake_workspace_store.dart';
+import '../support/fake_treasury_store.dart';
 
 void main() {
   setUpAll(() async {
@@ -103,6 +105,7 @@ void main() {
         databasePath: 'perfil-sintetico/sanctum2.sqlite3',
         profileId: 'test',
         supplierPaymentsStore: fake,
+        treasuryStore: FakeTreasuryStore(),
       ),
     );
     await controller.initialize();
@@ -113,7 +116,16 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pagos'));
+    await tester.tap(find.text('Tesorería'));
+    await tester.pumpAndSettle();
+    final paymentsPanel = find.byKey(const Key('treasury-supplier-payments'));
+    await tester.ensureVisible(paymentsPanel);
+    await tester.tap(
+      find.descendant(
+        of: paymentsPanel,
+        matching: find.text('Pagos a proveedores'),
+      ),
+    );
     await tester.pumpAndSettle();
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
@@ -159,7 +171,7 @@ void main() {
     }
     await tester.binding.setSurfaceSize(const Size(1120, 2400));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Pagos a proveedores'));
+    await tester.ensureVisible(find.text('Pagos a proveedores').last);
     await tester.pumpAndSettle();
     final boundary = tester.renderObject<RenderRepaintBoundary>(
       find.byKey(const Key('supplier-payments-preview')),
@@ -377,7 +389,15 @@ void main() {
         isFalse,
       );
       fake.loadFailure = null;
-      await tap(tester, find.text('Actualizar').first);
+      await tap(
+        tester,
+        find
+            .descendant(
+              of: find.byType(SupplierPaymentsPage),
+              matching: find.text('Actualizar'),
+            )
+            .first,
+      );
       expect(fake.payables.single.remainingMinor, 6000);
       expect(tester.takeException(), isNull);
     },
@@ -398,7 +418,15 @@ void main() {
             .enabled,
         isFalse,
       );
-      await tap(tester, find.text('Actualizar').first);
+      await tap(
+        tester,
+        find
+            .descendant(
+              of: find.byType(SupplierPaymentsPage),
+              matching: find.text('Actualizar'),
+            )
+            .first,
+      );
       final amount = tester.widget<TextFormField>(
         keyed('supplier-payment-amount-').first,
       );
@@ -421,7 +449,7 @@ void main() {
       await open(tester, fake, size: const Size(400, 900));
       await fill(tester, '40,00');
       await tap(tester, find.text('Sistema'));
-      await tap(tester, find.text('Pagos'));
+      await tap(tester, find.text('Tesorería'));
       expect(
         tester
             .widget<TextFormField>(keyed('supplier-payment-amount-').first)

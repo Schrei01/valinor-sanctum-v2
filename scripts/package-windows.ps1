@@ -106,6 +106,10 @@ En Ventas crea varias cuentas, agrega productos y elige la forma de pago por lí
 Registrar venta guarda entrega, stock, costo y cobro de contado en una sola operación.
 Las cuentas de mostrador se guardan automáticamente mientras las preparas.
 Ventas es la única pantalla de ventas; no hay acceso al formulario anterior.
+Tesorería reemplaza Pagos: consulta Caja, Nequi, Caja mayor y Deudas de clientes.
+Total disponible suma Caja y Nequi; la reserva y las deudas se muestran aparte.
+Filtra los últimos movimientos por cuenta y pulsa Actualizar para consultar de nuevo.
+Los pagos anteriores a proveedores permanecen en un panel secundario de Tesorería.
 Las confirmaciones pendientes se recuperan al reabrir para reintentar sin duplicar.
 Configura cuentas y medios locales y registra cobros o abonos de las ventas.
 Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.

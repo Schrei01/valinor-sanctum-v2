@@ -1,0 +1,78 @@
+{
+  "verifiedAtUtc": "2026-10-20T16:05:11.0720810Z",
+  "version": "0.10.0+14",
+  "schemaVersion": 8,
+  "tests": {
+    "fullSuitePassed": 449,
+    "skipped": 3,
+    "skipReason": "Host cannot create links required by three filesystem tests",
+    "newTests": 21,
+    "newAdapterTests": 9,
+    "newPageAndControllerTests": 11,
+    "newShellTests": 1,
+    "analyzeClean": true,
+    "formattedDartFiles": 109,
+    "formatClean": true,
+    "syntheticWidgetPreviewInspected": true,
+    "independentReviewOutstandingFindings": 0
+  },
+  "behavior": {
+    "replacesPaymentsNavigation": true,
+    "customerReceivablesAreDebts": true,
+    "availableTotal": "Caja + Nequi",
+    "reserveAndDebtsExcludedFromAvailable": true,
+    "onlyPostedDocumentsAndJournals": true,
+    "recentMovementsPerAccount": 50,
+    "accountFilters": true,
+    "existingPaymentRecoveryRetained": true,
+    "noNewMoneyOperations": true,
+    "schemaOrMigrationChanges": false
+  },
+  "backup": {
+    "verified": true,
+    "tablesCompared": 45,
+    "relativePath": "backups/treasury-20261020/sanctum2.sqlite3"
+  },
+  "finalData": {
+    "tablesCompared": 45,
+    "businessTablesUnchanged": true,
+    "unchangedTables": 43,
+    "onlyTwoConfigurationRowsAdded": true,
+    "reserveConfigured": true,
+    "reserveHasNoFinancialMovements": true,
+    "integrityOk": true,
+    "foreignKeyViolations": 0
+  },
+  "build": {
+    "seconds": 60.6834336,
+    "executableVersion": "0.10.0+14",
+    "appSha256": "429EACAAE19D7647F6ABDC12730A1143DDE84AC2EB627053E2AFA2761B22BE0A",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.10.0-windows-x64.zip",
+    "files": 17,
+    "bytes": 14663312,
+    "sha256": "0A00226CC1FFADD2F59A045CFC81A464A2320A4E635DE8B80C10675879836693",
+    "allFilesMatchStableAndVersioned": true,
+    "privateDataAbsent": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.10.0/ValinorSanctum2",
+    "zipHashUnchangedAfterLaunch": true
+  },
+  "native": {
+    "version0100Observed": true,
+    "treasuryNavigationObserved": true,
+    "paymentsNavigationAbsent": true,
+    "summaryInspectionCompleted": false,
+    "automationStoppedAfterUserInteraction": true,
+    "windowMinimizedBeforeFurtherInspection": true,
+    "method": "Accessibility",
+    "screenshotsCaptured": false,
+    "businessDataEnteredByAgent": false,
+    "windowLeftOpenForUser": true
+  },
+  "originalPosOpenedOrModified": false,
+  "productionEnvironmentEnabled": false,
+  "remoteWorkflowResultInspected": false
+}
