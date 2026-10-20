@@ -92,9 +92,34 @@ Future<ReferenceInventory> exportReferenceInventory({
   late final ReferenceInventory reference;
   try {
     await database.execute('PRAGMA query_only=ON');
+    final columns = {
+      for (final row in await database.rawQuery('PRAGMA table_info(products)'))
+        (row['name'] as String).toLowerCase(),
+    };
+    const requiredColumns = {
+      'id',
+      'name',
+      'quantity',
+      'price',
+      'purchaseprice',
+    };
+    if (!columns.containsAll(requiredColumns)) {
+      throw const ReferenceInventoryFormatException(
+        'La tabla products no contiene las columnas de inventario requeridas.',
+      );
+    }
+    // Every SQL identifier below is fixed here, never taken from source values.
+    final lot = columns.contains('lote') ? 'lote' : "'' AS lote";
+    final category = columns.contains('categoria')
+        ? 'categoria AS category_text'
+        : "'' AS category_text";
+    final supplier = columns.contains('proveedor')
+        ? 'proveedor AS supplier_text'
+        : "'' AS supplier_text";
     final rows = await database.rawQuery('''
       SELECT id, name, quantity, CAST(price AS TEXT) AS price_text,
-             CAST(purchasePrice AS TEXT) AS purchase_price_text, lote
+             CAST(purchasePrice AS TEXT) AS purchase_price_text,
+             $lot, $category, $supplier
       FROM products
       ORDER BY id
     ''');
@@ -113,6 +138,12 @@ Future<ReferenceInventory> exportReferenceInventory({
               row['purchase_price_text'],
             ),
             lot: row['lote'] == null ? '' : _sourceString(row['lote'], 'lote'),
+            category: row['category_text'] == null
+                ? ''
+                : _sourceString(row['category_text'], 'categoria'),
+            supplier: row['supplier_text'] == null
+                ? ''
+                : _sourceString(row['supplier_text'], 'proveedor'),
           ),
       ],
     );
@@ -131,7 +162,7 @@ Future<ReferenceInventory> exportReferenceInventory({
     final temporary = File(p.join(staging.path, 'inventory.json'));
     await temporary.writeAsString(
       const JsonEncoder.withIndent('  ').convert({
-        'formatVersion': 1,
+        'formatVersion': 2,
         'sourceName': reference.sourceName,
         'sourceSha256': reference.sourceSha256,
         'capturedAtUtc': reference.capturedAtUtc.toIso8601String(),
@@ -146,6 +177,8 @@ Future<ReferenceInventory> exportReferenceInventory({
               'priceMinor': product.priceMinor,
               'purchasePriceMinor': product.purchasePriceMinor,
               'lot': product.lot,
+              'category': product.category,
+              'supplier': product.supplier,
             },
         ],
       }),

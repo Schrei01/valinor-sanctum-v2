@@ -1,5 +1,7 @@
 # Consulta de inventario de una copia — 0.8.0
 
+Documento histórico. Con autorización posterior del propietario, la [entrega 0.9.0](27-inventario-inicial.md) habilita el inventario en Ventas mediante una apertura en un perfil limpio y oculta agotados en Catálogo. La consulta separada sigue disponible si un perfil tiene un snapshot local.
+
 El propietario pidió visualizar el inventario de `C:\proyectos\valinor - copia.db`, una copia independiente de su base de producción. Se inspeccionó con SQLite en modo estrictamente de lectura. Su tabla `products` contiene nombre, cantidad, PVP (`price`), precio de compra (`purchasePrice`) y lote; no contiene categoría, proveedor ni SKU.
 
 Se conserva la tabla completa, incluidos los registros agotados. No se agrupan nombres ni se interpretan lotes como SKU. Las cantidades y precios se conservan; el precio de compra se retiene en el snapshot, sin crear una valoración FIFO de la app nueva. Las cifras del corte real y su conciliación quedan en los archivos locales privados.

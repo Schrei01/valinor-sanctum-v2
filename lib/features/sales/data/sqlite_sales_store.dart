@@ -524,7 +524,9 @@ WHERE l.product_id = ?
           startInclusive: layer.used,
           endExclusive: layer.used + quantity,
         );
-        allocations.add(_Allocation(layer.id, quantity, amount));
+        allocations.add(
+          _Allocation(layer.id, layer.sourceKind, quantity, amount),
+        );
         cost += BigInt.from(amount);
         remaining -= quantity;
         if (remaining == 0) break;
@@ -639,14 +641,21 @@ WHERE l.product_id = ?
         allocationSequence++
       ) {
         final allocation = plan.allocations[allocationSequence];
-        await txn.insert('sale_cost_allocations', {
-          'id': InventoryIds.next(),
-          'sale_line_id': line,
-          'cost_layer_id': allocation.layerId,
-          'sequence': allocationSequence,
-          'quantity': allocation.quantity,
-          'cost_minor': allocation.cost,
-        });
+        final opening = allocation.sourceKind == 'opening';
+        await txn.insert(
+          opening ? 'inventory_opening_allocations' : 'sale_cost_allocations',
+          {
+            'id': InventoryIds.next(),
+            'sale_line_id': line,
+            if (opening)
+              'opening_item_id': allocation.layerId
+            else
+              'cost_layer_id': allocation.layerId,
+            'sequence': allocationSequence,
+            'quantity': allocation.quantity,
+            'cost_minor': allocation.cost,
+          },
+        );
       }
     }
     await txn.insert('customer_receivables', {
@@ -846,31 +855,39 @@ WHERE l.product_id = ?
 
   static Future<List<_Layer>> _availableLayers(DatabaseExecutor txn) async {
     final rows = await txn.rawQuery('''
-SELECT l.* FROM cost_layers l
+SELECT l.id, l.product_id, l.initial_quantity, l.total_cost_minor,
+       l.acquired_at_utc, l.fifo_sequence, 'purchase' AS source_kind
+FROM cost_layers l
 JOIN inventory_movements m ON m.id = l.inbound_movement_id
 JOIN business_documents d ON d.id = m.document_id AND d.status = 'posted'
 JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
-ORDER BY l.fifo_sequence
+UNION ALL
+SELECT id, product_id, initial_quantity, total_cost_minor,
+       acquired_at_utc, fifo_sequence, source_kind
+FROM inventory_opening_layers
+ORDER BY fifo_sequence, id
 ''');
     final allocations = await txn.rawQuery('''
-SELECT a.* FROM sale_cost_allocations a
+SELECT a.* FROM all_sale_cost_allocations a
 JOIN sale_lines sl ON sl.id = a.sale_line_id
 JOIN business_documents d ON d.id = sl.sale_id AND d.status = 'posted'
 JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
 ''');
-    final consumed = <String, _Totals>{};
+    final consumed = <(String, String), _Totals>{};
     for (final row in allocations) {
-      final total = consumed.putIfAbsent(
-        row['cost_layer_id'] as String,
-        _Totals.new,
-      );
+      final total = consumed.putIfAbsent((
+        row['source_kind'] as String,
+        row['source_id'] as String,
+      ), _Totals.new);
       total.quantity += BigInt.from(row['quantity'] as int);
       total.cost += BigInt.from(row['cost_minor'] as int);
     }
     return rows.map((row) {
-      final used = consumed[row['id']] ?? _Totals();
+      final sourceKind = row['source_kind'] as String;
+      final used = consumed[(sourceKind, row['id'] as String)] ?? _Totals();
       return _Layer(
         row['id'] as String,
+        sourceKind,
         row['product_id'] as String,
         row['initial_quantity'] as int,
         row['total_cost_minor'] as int,
@@ -1110,6 +1127,7 @@ class _Totals {
 class _Layer {
   const _Layer(
     this.id,
+    this.sourceKind,
     this.productId,
     this.quantity,
     this.cost,
@@ -1118,6 +1136,7 @@ class _Layer {
     this.acquiredAt,
   );
   final String id;
+  final String sourceKind;
   final String productId;
   final int quantity;
   final int cost;
@@ -1127,8 +1146,9 @@ class _Layer {
 }
 
 class _Allocation {
-  const _Allocation(this.layerId, this.quantity, this.cost);
+  const _Allocation(this.layerId, this.sourceKind, this.quantity, this.cost);
   final String layerId;
+  final String sourceKind;
   final int quantity;
   final int cost;
 }

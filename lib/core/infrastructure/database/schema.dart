@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 7;
+  static const int version = 8;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -36,6 +36,10 @@ abstract final class DatabaseSchema {
   static String get migration7Checksum =>
       checksum(migration7Statements.join('\n;\n'));
 
+  static const String migration8Name = 'initial_inventory_opening_v8';
+  static String get migration8Checksum =>
+      checksum(migration8Statements.join('\n;\n'));
+
   static String nameForVersion(int version) => switch (version) {
     1 => migrationName,
     2 => migration2Name,
@@ -44,6 +48,7 @@ abstract final class DatabaseSchema {
     5 => migration5Name,
     6 => migration6Name,
     7 => migration7Name,
+    8 => migration8Name,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -55,6 +60,7 @@ abstract final class DatabaseSchema {
     5 => migration5Checksum,
     6 => migration6Checksum,
     7 => migration7Checksum,
+    8 => migration8Checksum,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -2155,6 +2161,350 @@ END
 ''',
     ..._freezeCashOpeningFacts(),
   ]);
+
+  /// Initial balances are independent facts, never fabricated purchases/payments.
+  /// Released v1-v7 tables and migrations remain unchanged.
+  static final List<String> migration8Statements = List.unmodifiable([
+    '''
+CREATE TABLE inventory_openings (
+  document_id TEXT PRIMARY KEY NOT NULL REFERENCES business_documents(id) ON DELETE RESTRICT,
+  command_id TEXT NOT NULL UNIQUE REFERENCES command_log(id) ON DELETE RESTRICT,
+  profile_id TEXT NOT NULL UNIQUE REFERENCES app_profile(profile_id) ON DELETE RESTRICT,
+  source_name TEXT NOT NULL CHECK (length(trim(source_name)) > 0),
+  source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64 AND source_sha256 NOT GLOB '*[^0-9a-fA-F]*'),
+  snapshot_sha256 TEXT NOT NULL CHECK (length(snapshot_sha256) = 64 AND snapshot_sha256 NOT GLOB '*[^0-9a-fA-F]*'),
+  occurred_at_utc TEXT NOT NULL CHECK (${_collectionUtc('occurred_at_utc')}),
+  total_cost_minor INTEGER NOT NULL CHECK (typeof(total_cost_minor) = 'integer' AND total_cost_minor >= 0)
+)
+''',
+    '''
+CREATE TABLE inventory_opening_items (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  opening_id TEXT NOT NULL REFERENCES inventory_openings(document_id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  source_product_id TEXT NOT NULL CHECK (length(trim(source_product_id)) > 0),
+  product_id TEXT NOT NULL UNIQUE REFERENCES catalog_items(id) ON DELETE RESTRICT,
+  name_snapshot TEXT NOT NULL CHECK (length(trim(name_snapshot)) BETWEEN 1 AND 160),
+  category_id TEXT REFERENCES categories(id) ON DELETE RESTRICT,
+  supplier_id TEXT REFERENCES counterparties(id) ON DELETE RESTRICT,
+  unit_price_minor INTEGER NOT NULL CHECK (typeof(unit_price_minor) = 'integer' AND unit_price_minor >= 0),
+  unit_cost_minor INTEGER NOT NULL CHECK (typeof(unit_cost_minor) = 'integer' AND unit_cost_minor >= 0),
+  quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity >= 0),
+  total_cost_minor INTEGER NOT NULL CHECK (typeof(total_cost_minor) = 'integer' AND total_cost_minor >= 0),
+  zero_cost_confirmed INTEGER NOT NULL CHECK (typeof(zero_cost_confirmed) = 'integer' AND zero_cost_confirmed IN (0, 1)),
+  CHECK (unit_cost_minor > 0 OR zero_cost_confirmed = 1),
+  CHECK (typeof(quantity * unit_cost_minor) = 'integer' AND total_cost_minor = quantity * unit_cost_minor),
+  UNIQUE (opening_id, sequence),
+  UNIQUE (opening_id, source_product_id)
+)
+''',
+    '''
+CREATE TABLE inventory_opening_allocations (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  sale_line_id TEXT NOT NULL REFERENCES sale_lines(id) ON DELETE RESTRICT,
+  opening_item_id TEXT NOT NULL REFERENCES inventory_opening_items(id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence) = 'integer' AND sequence >= 0),
+  quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+  cost_minor INTEGER NOT NULL CHECK (typeof(cost_minor) = 'integer' AND cost_minor >= 0),
+  UNIQUE (sale_line_id, sequence),
+  UNIQUE (sale_line_id, opening_item_id)
+)
+''',
+    'CREATE INDEX idx_opening_allocations_item ON inventory_opening_allocations(opening_item_id)',
+    '''
+CREATE VIEW inventory_opening_layers AS
+SELECT item.id, item.product_id, item.quantity AS initial_quantity,
+  item.total_cost_minor, opening.occurred_at_utc AS acquired_at_utc,
+  opening.document_id, opening.document_id AS opening_id, 0 AS fifo_sequence,
+  'opening' AS source_kind, item.id AS source_id
+FROM inventory_opening_items item
+JOIN inventory_openings opening ON opening.document_id = item.opening_id
+JOIN business_documents document ON document.id = opening.document_id AND document.status = 'posted'
+JOIN journal_entries entry ON entry.document_id = document.id AND entry.status = 'posted'
+WHERE item.quantity > 0
+''',
+    '''
+CREATE VIEW all_sale_cost_allocations AS
+SELECT id, sale_line_id, sequence, quantity, cost_minor,
+  'purchase' AS source_kind, cost_layer_id AS source_id FROM sale_cost_allocations
+UNION ALL
+SELECT id, sale_line_id, sequence, quantity, cost_minor,
+  'opening' AS source_kind, opening_item_id AS source_id FROM inventory_opening_allocations
+''',
+    '''
+CREATE TRIGGER inventory_openings_documents_insert_as_draft
+BEFORE INSERT ON business_documents
+WHEN NEW.type = 'inventory_opening' AND NEW.status <> 'draft'
+BEGIN
+  SELECT RAISE(ABORT, 'Create an inventory opening as draft before posting');
+END
+''',
+    '''
+CREATE TRIGGER inventory_openings_validate_insert
+BEFORE INSERT ON inventory_openings
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM inventory_openings WHERE document_id = NEW.document_id
+    OR command_id = NEW.command_id OR profile_id = NEW.profile_id)
+    THEN RAISE(ABORT, 'A profile has only one immutable initial inventory opening') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM business_documents document
+    JOIN command_log command ON command.id = document.command_id
+    WHERE document.id = NEW.document_id AND document.type = 'inventory_opening'
+      AND document.status = 'draft' AND document.command_sequence = 0
+      AND document.command_id = NEW.command_id AND document.profile_id = NEW.profile_id
+      AND document.occurred_at_utc = NEW.occurred_at_utc
+      AND document.source_kind IN ('legacy', 'synthetic')
+      AND document.date_quality = 'reconstructed'
+      AND command.command_type = 'inventory_opening' AND command.actor_id = document.actor_id
+      AND command.authorization_policy_version = 'development-single-user-v1')
+    THEN RAISE(ABORT, 'An initial inventory requires its matching import command and draft document') END;
+END
+''',
+    '''
+CREATE TRIGGER inventory_openings_validate_document_posting
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status = 'draft' AND NEW.status = 'posted' AND
+  (NEW.type = 'inventory_opening' OR EXISTS (SELECT 1 FROM inventory_openings WHERE document_id = NEW.id))
+BEGIN
+  SELECT CASE WHEN NEW.type <> 'inventory_opening' OR NEW.command_sequence <> 0
+    OR NEW.source_kind NOT IN ('legacy', 'synthetic') OR NEW.date_quality <> 'reconstructed'
+    OR date(NEW.occurred_at_utc, '-5 hours') <> NEW.business_date
+    OR NOT EXISTS (SELECT 1 FROM inventory_openings opening JOIN command_log command ON command.id = opening.command_id
+      WHERE opening.document_id = NEW.id AND opening.command_id = NEW.command_id
+        AND opening.profile_id = NEW.profile_id AND opening.occurred_at_utc = NEW.occurred_at_utc
+        AND command.command_type = 'inventory_opening' AND command.actor_id = NEW.actor_id
+        AND command.authorization_policy_version = 'development-single-user-v1')
+    THEN RAISE(ABORT, 'Invalid initial inventory document or command') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM business_documents WHERE id <> NEW.id AND status <> 'draft')
+    OR EXISTS (SELECT 1 FROM inventory_movements) OR EXISTS (SELECT 1 FROM cost_layers)
+    OR EXISTS (SELECT 1 FROM sales) OR EXISTS (SELECT 1 FROM purchases)
+    OR NOT EXISTS (SELECT 1 FROM inventory_opening_items WHERE opening_id = NEW.id)
+    OR (SELECT count(*) FROM catalog_items) <> (SELECT count(*) FROM inventory_opening_items WHERE opening_id = NEW.id)
+    THEN RAISE(ABORT, 'Initial inventory must start in an unused profile and represent its entire catalog') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM inventory_opening_items item
+    JOIN catalog_items product ON product.id = item.product_id
+    LEFT JOIN categories category ON category.id = item.category_id
+    LEFT JOIN counterparties supplier ON supplier.id = item.supplier_id
+    WHERE item.opening_id = NEW.id AND (product.is_active <> 1 OR product.name <> item.name_snapshot
+      OR product.list_price_minor <> item.unit_price_minor OR product.category_id IS NOT item.category_id
+      OR (item.category_id IS NOT NULL AND category.is_active <> 1)
+      OR (item.supplier_id IS NOT NULL AND (supplier.is_active <> 1 OR supplier.is_supplier <> 1))))
+    OR (SELECT sum(total_cost_minor) FROM inventory_opening_items WHERE opening_id = NEW.id)
+      <> (SELECT total_cost_minor FROM inventory_openings WHERE document_id = NEW.id)
+    THEN RAISE(ABORT, 'Opening quantities, costs and catalog snapshots must agree exactly') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM journal_entries WHERE document_id = NEW.id
+    AND status = 'draft' AND cost_completeness = 'complete')
+    OR (SELECT count(*) FROM journal_lines line JOIN journal_entries entry ON entry.id = line.entry_id
+      WHERE entry.document_id = NEW.id) <> (SELECT CASE WHEN total_cost_minor > 0 THEN 2 ELSE 0 END
+        FROM inventory_openings WHERE document_id = NEW.id)
+    OR EXISTS (SELECT 1 FROM inventory_openings opening WHERE opening.document_id = NEW.id AND opening.total_cost_minor > 0
+      AND (NOT EXISTS (SELECT 1 FROM journal_entries entry JOIN journal_lines line ON line.entry_id = entry.id
+          JOIN ledger_accounts account ON account.id = line.account_id
+          WHERE entry.document_id = NEW.id AND account.role = 'inventory' AND account.class = 'asset'
+            AND account.is_active = 1 AND line.debit_minor = opening.total_cost_minor AND line.credit_minor = 0)
+        OR NOT EXISTS (SELECT 1 FROM journal_entries entry JOIN journal_lines line ON line.entry_id = entry.id
+          JOIN ledger_accounts account ON account.id = line.account_id
+          WHERE entry.document_id = NEW.id AND account.id = 'system:opening-equity' AND account.class = 'equity'
+            AND account.role = 'opening_balance' AND account.is_active = 1
+            AND line.credit_minor = opening.total_cost_minor AND line.debit_minor = 0)))
+    THEN RAISE(ABORT, 'An initial inventory debits stock and credits opening equity without money or debt') END;
+END
+''',
+    'DROP TRIGGER entries_validate_posting',
+    '''
+CREATE TRIGGER entries_validate_posting
+BEFORE UPDATE OF status ON journal_entries
+WHEN OLD.status = 'draft' AND NEW.status = 'posted'
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM business_documents WHERE id = NEW.document_id AND status = 'posted')
+    THEN RAISE(ABORT, 'Post the source document before its entry') END;
+  SELECT CASE WHEN (SELECT count(*) FROM journal_lines WHERE entry_id = NEW.id) < 2
+    AND NOT EXISTS (SELECT 1 FROM inventory_openings opening JOIN business_documents document ON document.id = opening.document_id
+      WHERE opening.document_id = NEW.document_id AND opening.total_cost_minor = 0
+        AND document.type = 'inventory_opening' AND document.status = 'posted'
+        AND NEW.cost_completeness = 'complete'
+        AND NOT EXISTS (SELECT 1 FROM journal_lines WHERE entry_id = NEW.id))
+    THEN RAISE(ABORT, 'A posted entry needs at least two lines except a confirmed zero value inventory opening') END;
+  SELECT CASE WHEN (SELECT sum(debit_minor) <> sum(credit_minor) FROM journal_lines WHERE entry_id = NEW.id)
+    THEN RAISE(ABORT, 'A posted entry must balance') END;
+END
+''',
+    '''
+CREATE TRIGGER purchases_respect_inventory_opening_chronology
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status = 'draft' AND NEW.status = 'posted' AND NEW.type = 'purchase_receipt'
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM purchase_lines line
+    JOIN inventory_opening_items item ON item.product_id = line.product_id
+    JOIN inventory_openings opening ON opening.document_id = item.opening_id
+    JOIN business_documents document ON document.id = opening.document_id AND document.status = 'posted'
+    JOIN journal_entries entry ON entry.document_id = document.id AND entry.status = 'posted'
+    WHERE line.purchase_id = NEW.id AND ${_utcSortKey('opening.occurred_at_utc')} > ${_utcSortKey('NEW.occurred_at_utc')})
+    THEN RAISE(ABORT, 'A purchase cannot precede its product initial inventory opening') END;
+END
+''',
+    'DROP TRIGGER sale_cost_allocations_validate_insert',
+    _openingAwarePurchaseAllocationTrigger(),
+    '''
+CREATE TRIGGER inventory_opening_allocations_validate_insert
+BEFORE INSERT ON inventory_opening_allocations
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM inventory_opening_allocations WHERE id = NEW.id
+    OR (sale_line_id = NEW.sale_line_id AND sequence = NEW.sequence)
+    OR (sale_line_id = NEW.sale_line_id AND opening_item_id = NEW.opening_item_id))
+    THEN RAISE(ABORT, 'Opening cost allocations cannot be replaced') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM sale_lines line JOIN sales sale ON sale.document_id = line.sale_id
+    JOIN business_documents document ON document.id = sale.document_id
+    JOIN inventory_opening_layers opening ON opening.id = NEW.opening_item_id
+    WHERE line.id = NEW.sale_line_id AND line.product_id = opening.product_id
+      AND document.type = 'credit_sale' AND document.status = 'draft'
+      AND ${_utcSortKey('opening.acquired_at_utc')} <= ${_utcSortKey('sale.sold_at_utc')})
+    THEN RAISE(ABORT, 'Allocate only an effective confirmed opening for the matching sale product') END;
+  SELECT CASE WHEN NEW.sequence <> (SELECT count(*) FROM all_sale_cost_allocations WHERE sale_line_id = NEW.sale_line_id)
+    OR NEW.quantity > (SELECT line.quantity - coalesce((SELECT sum(allocation.quantity) FROM all_sale_cost_allocations allocation
+      WHERE allocation.sale_line_id = line.id), 0) FROM sale_lines line WHERE line.id = NEW.sale_line_id)
+    OR NEW.quantity > (SELECT opening.quantity - coalesce((SELECT sum(allocation.quantity) FROM inventory_opening_allocations allocation
+      WHERE allocation.opening_item_id = opening.id), 0) FROM inventory_opening_items opening WHERE opening.id = NEW.opening_item_id)
+    THEN RAISE(ABORT, 'An opening allocation cannot exceed remaining sale or opening quantities') END;
+  SELECT CASE WHEN NEW.cost_minor <> (SELECT NEW.quantity * unit_cost_minor FROM inventory_opening_items WHERE id = NEW.opening_item_id)
+    THEN RAISE(ABORT, 'An opening allocation must retain its exact confirmed unit cost') END;
+END
+''',
+    for (final action in ['UPDATE', 'DELETE'])
+      '''
+CREATE TRIGGER inventory_opening_allocations_no_${action.toLowerCase()}
+BEFORE $action ON inventory_opening_allocations
+BEGIN
+  SELECT RAISE(ABORT, 'Opening cost allocations are immutable; roll back an unfinished operation');
+END
+''',
+    'DROP TRIGGER sales_validate_document_posting',
+    _openingAwareSalePostingTrigger(),
+    ..._freezeInventoryOpeningFacts(),
+  ]);
+
+  static String _openingAwarePurchaseAllocationTrigger() {
+    var sql = migration3Statements.singleWhere(
+      (statement) => statement.contains(
+        'CREATE TRIGGER sale_cost_allocations_validate_insert\n',
+      ),
+    );
+    sql = sql
+        .replaceAll(
+          'SELECT count(*) FROM sale_cost_allocations WHERE sale_line_id = NEW.sale_line_id',
+          'SELECT count(*) FROM all_sale_cost_allocations WHERE sale_line_id = NEW.sale_line_id',
+        )
+        .replaceAll(
+          'SELECT sum(a.quantity) FROM sale_cost_allocations a WHERE a.sale_line_id = l.id',
+          'SELECT sum(a.quantity) FROM all_sale_cost_allocations a WHERE a.sale_line_id = l.id',
+        );
+    return sql.replaceFirst(
+      "  SELECT CASE WHEN NEW.cost_minor <>",
+      '''  SELECT CASE WHEN EXISTS (SELECT 1 FROM inventory_opening_layers opening
+    JOIN cost_layers chosen ON chosen.id = NEW.cost_layer_id
+    JOIN sale_lines line ON line.id = NEW.sale_line_id JOIN sales sale ON sale.document_id = line.sale_id
+    WHERE opening.product_id = chosen.product_id
+      AND ${_utcSortKey('opening.acquired_at_utc')} <= ${_utcSortKey('sale.sold_at_utc')}
+      AND opening.initial_quantity > coalesce((SELECT sum(allocation.quantity) FROM inventory_opening_allocations allocation
+        WHERE allocation.opening_item_id = opening.id), 0))
+    THEN RAISE(ABORT, 'Consume initial inventory before later purchased layers') END;
+  SELECT CASE WHEN NEW.cost_minor <>''',
+    );
+  }
+
+  static String _openingAwareSalePostingTrigger() {
+    var sql = migration3Statements.singleWhere(
+      (statement) => statement.contains(
+        'CREATE TRIGGER sales_validate_document_posting\n',
+      ),
+    );
+    sql = sql
+        .replaceAll(
+          'SELECT coalesce(sum(a.quantity), 0) FROM sale_cost_allocations a',
+          'SELECT coalesce(sum(a.quantity), 0) FROM all_sale_cost_allocations a',
+        )
+        .replaceAll(
+          'SELECT coalesce(sum(a.cost_minor), 0) FROM sale_cost_allocations a',
+          'SELECT coalesce(sum(a.cost_minor), 0) FROM all_sale_cost_allocations a',
+        );
+    return sql.replaceFirst(
+      "  SELECT CASE WHEN (SELECT count(*) FROM customer_receivables",
+      '''  SELECT CASE WHEN EXISTS (SELECT 1 FROM inventory_opening_allocations allocation
+    JOIN sale_lines line ON line.id = allocation.sale_line_id JOIN sales sale ON sale.document_id = line.sale_id
+    JOIN inventory_opening_items item ON item.id = allocation.opening_item_id
+    LEFT JOIN inventory_opening_layers opening ON opening.id = item.id
+    WHERE line.sale_id = NEW.id AND (opening.id IS NULL OR item.product_id <> line.product_id
+      OR ${_utcSortKey('opening.acquired_at_utc')} > ${_utcSortKey('sale.sold_at_utc')}))
+    THEN RAISE(ABORT, 'Each opening allocation must match its effective confirmed source') END;
+  SELECT CASE WHEN (SELECT count(*) FROM customer_receivables''',
+    );
+  }
+
+  static List<String> _freezeInventoryOpeningFacts() {
+    String confirmed(String document) =>
+        '''EXISTS (SELECT 1 FROM business_documents document
+WHERE document.id = $document AND document.status <> 'draft')''';
+    return [
+      '''
+CREATE TRIGGER inventory_opening_journal_entries_no_replace
+BEFORE INSERT ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries existing JOIN inventory_openings opening ON opening.document_id = existing.document_id
+  JOIN business_documents document ON document.id = opening.document_id
+  WHERE (existing.id = NEW.id OR existing.document_id = NEW.document_id) AND document.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed initial inventory journal entries cannot be replaced');
+END
+''',
+      '''
+CREATE TRIGGER inventory_opening_journal_lines_no_replace
+BEFORE INSERT ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines existing JOIN journal_entries entry ON entry.id = existing.entry_id
+  JOIN inventory_openings opening ON opening.document_id = entry.document_id
+  JOIN business_documents document ON document.id = opening.document_id
+  WHERE (existing.id = NEW.id OR (existing.entry_id = NEW.entry_id AND existing.sequence = NEW.sequence))
+    AND document.status <> 'draft')
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed initial inventory journal lines cannot be replaced');
+END
+''',
+      for (final table in ['inventory_openings', 'inventory_opening_items'])
+        for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+          '''
+CREATE TRIGGER ${table}_confirmed_no_${action.toLowerCase()}
+BEFORE $action ON $table
+WHEN ${action == 'INSERT'
+              ? '(${confirmed('NEW.${table == 'inventory_openings' ? 'document_id' : 'opening_id'}')} OR EXISTS (SELECT 1 FROM $table existing WHERE ${table == 'inventory_openings' ? '(existing.document_id = NEW.document_id OR existing.profile_id = NEW.profile_id OR existing.command_id = NEW.command_id)' : '(existing.id = NEW.id OR existing.product_id = NEW.product_id OR (existing.opening_id = NEW.opening_id AND (existing.sequence = NEW.sequence OR existing.source_product_id = NEW.source_product_id)))'} AND ${confirmed('existing.${table == 'inventory_openings' ? 'document_id' : 'opening_id'}')}))'
+              : action == 'DELETE'
+              ? confirmed('OLD.${table == 'inventory_openings' ? 'document_id' : 'opening_id'}')
+              : '(${confirmed('OLD.${table == 'inventory_openings' ? 'document_id' : 'opening_id'}')} OR ${confirmed('NEW.${table == 'inventory_openings' ? 'document_id' : 'opening_id'}')})'}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed initial inventory history is immutable');
+END
+''',
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER inventory_opening_journal_lines_no_${action.toLowerCase()}
+BEFORE $action ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_entries entry JOIN inventory_openings opening ON opening.document_id = entry.document_id
+  JOIN business_documents document ON document.id = opening.document_id
+  WHERE entry.id = ${action == 'DELETE' ? 'OLD' : 'NEW'}.entry_id AND document.status <> 'draft')
+  ${action == 'UPDATE' ? "OR EXISTS (SELECT 1 FROM journal_entries entry JOIN inventory_openings opening ON opening.document_id = entry.document_id JOIN business_documents document ON document.id = opening.document_id WHERE entry.id = OLD.entry_id AND document.status <> 'draft')" : ''}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed initial inventory retains its exact journal lines');
+END
+''',
+      for (final action in ['UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER inventory_opening_journal_entries_no_${action.toLowerCase()}
+BEFORE $action ON journal_entries
+WHEN EXISTS (SELECT 1 FROM inventory_openings opening JOIN business_documents document ON document.id = opening.document_id
+  WHERE opening.document_id = OLD.document_id AND document.status <> 'draft')
+  ${action == 'UPDATE' ? "AND NOT (OLD.status = 'draft' AND NEW.status = 'posted' AND NEW.id = OLD.id AND NEW.document_id = OLD.document_id AND NEW.reversal_of_id IS OLD.reversal_of_id AND NEW.cost_completeness = OLD.cost_completeness)" : ''}
+BEGIN
+  SELECT RAISE(ABORT, 'Confirmed initial inventory retains its exact journal entry');
+END
+''',
+    ];
+  }
 
   static String _paidPurchaseEntryMatches(String fact) =>
       '''EXISTS (

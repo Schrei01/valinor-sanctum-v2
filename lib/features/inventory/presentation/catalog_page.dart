@@ -221,7 +221,29 @@ class _CatalogPageState extends State<CatalogPage> {
     },
   );
 
-  Widget _filters(InventorySnapshot data) => LayoutBuilder(
+  Widget _filters(InventorySnapshot data) => _filterControls(
+    categories: [
+      for (final category in data.categories)
+        (
+          category.id,
+          '${category.name}${category.isActive ? '' : ' (Archivada)'}',
+        ),
+    ],
+    suppliers: [
+      for (final supplier in data.suppliers)
+        (
+          supplier.id,
+          '${supplier.name}${supplier.isActive ? '' : ' (Archivado)'}',
+        ),
+    ],
+  );
+
+  Widget _filterControls({
+    required List<(String, String)> categories,
+    required List<(String, String)> suppliers,
+    bool showCategory = true,
+    bool showSupplier = true,
+  }) => LayoutBuilder(
     builder: (context, constraints) {
       final width = constraints.maxWidth < 260 ? constraints.maxWidth : 260.0;
       return Wrap(
@@ -229,82 +251,84 @@ class _CatalogPageState extends State<CatalogPage> {
         runSpacing: 12,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          SizedBox(
-            width: width,
-            child: InputDecorator(
-              decoration: const InputDecoration(labelText: 'Categoría'),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  key: const Key('catalog-category-filter'),
-                  value: _categoryId ?? '',
-                  isExpanded: true,
-                  isDense: true,
-                  items: [
-                    const DropdownMenuItem(
-                      value: '',
-                      child: Text('Todas las categorías'),
-                    ),
-                    for (final category in data.categories)
-                      DropdownMenuItem(
-                        value: category.id,
-                        child: Text(
-                          '${category.name}${category.isActive ? '' : ' (Archivada)'}',
-                          overflow: TextOverflow.ellipsis,
+          if (showCategory)
+            SizedBox(
+              width: width,
+              child: InputDecorator(
+                decoration: const InputDecoration(labelText: 'Categoría'),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    key: const Key('catalog-category-filter'),
+                    value: _categoryId ?? '',
+                    isExpanded: true,
+                    isDense: true,
+                    items: [
+                      const DropdownMenuItem(
+                        value: '',
+                        child: Text('Todas las categorías'),
+                      ),
+                      for (final category in categories)
+                        DropdownMenuItem(
+                          value: category.$1,
+                          child: Text(
+                            category.$2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    if (_categoryId != null &&
-                        !data.categories.any((item) => item.id == _categoryId))
-                      DropdownMenuItem(
-                        value: _categoryId,
-                        child: const Text('Categoría no disponible'),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() {
-                    _categoryId = value == '' ? null : value;
-                    _page = 0;
-                  }),
+                      if (_categoryId != null &&
+                          !categories.any((item) => item.$1 == _categoryId))
+                        DropdownMenuItem(
+                          value: _categoryId,
+                          child: const Text('Categoría no disponible'),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      _categoryId = value == '' ? null : value;
+                      _page = 0;
+                    }),
+                  ),
                 ),
               ),
             ),
-          ),
-          SizedBox(
-            width: width,
-            child: InputDecorator(
-              decoration: const InputDecoration(labelText: 'Proveedor'),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  key: const Key('catalog-supplier-filter'),
-                  value: _supplierId ?? '',
-                  isExpanded: true,
-                  isDense: true,
-                  items: [
-                    const DropdownMenuItem(
-                      value: '',
-                      child: Text('Todos los proveedores'),
-                    ),
-                    for (final supplier in data.suppliers)
-                      DropdownMenuItem(
-                        value: supplier.id,
-                        child: Text(
-                          '${supplier.name}${supplier.isActive ? '' : ' (Archivado)'}',
-                          overflow: TextOverflow.ellipsis,
+          if (showSupplier)
+            SizedBox(
+              width: width,
+              child: InputDecorator(
+                decoration: const InputDecoration(labelText: 'Proveedor'),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    key: const Key('catalog-supplier-filter'),
+                    value: _supplierId ?? '',
+                    isExpanded: true,
+                    isDense: true,
+                    items: [
+                      const DropdownMenuItem(
+                        value: '',
+                        child: Text('Todos los proveedores'),
+                      ),
+                      for (final supplier in suppliers)
+                        DropdownMenuItem(
+                          value: supplier.$1,
+                          child: Text(
+                            supplier.$2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    if (_supplierId != null &&
-                        !data.suppliers.any((item) => item.id == _supplierId))
-                      DropdownMenuItem(
-                        value: _supplierId,
-                        child: const Text('Proveedor no disponible'),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() {
-                    _supplierId = value == '' ? null : value;
-                    _page = 0;
-                  }),
+                      if (_supplierId != null &&
+                          !suppliers.any((item) => item.$1 == _supplierId))
+                        DropdownMenuItem(
+                          value: _supplierId,
+                          child: const Text('Proveedor no disponible'),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      _supplierId = value == '' ? null : value;
+                      _page = 0;
+                    }),
+                  ),
                 ),
               ),
             ),
-          ),
           TextButton.icon(
             key: const Key('catalog-all-products'),
             onPressed: () => setState(_clearFilters),
@@ -317,11 +341,17 @@ class _CatalogPageState extends State<CatalogPage> {
   );
 
   Widget _referenceProducts(ReferenceInventory reference) {
-    final rows = reference.products
+    final available = reference.products
+        .where((product) => product.quantity > 0)
+        .toList();
+    final hasLots = reference.products.any((product) => product.lot.isNotEmpty);
+    final rows = available
         .where(
           (product) =>
-              product.name.toLowerCase().contains(_query) ||
-              product.lot.toLowerCase().contains(_query),
+              (_categoryId == null || product.category == _categoryId) &&
+              (_supplierId == null || product.supplier == _supplierId) &&
+              (product.name.toLowerCase().contains(_query) ||
+                  product.lot.toLowerCase().contains(_query)),
         )
         .toList();
     final page = _clampedPage(rows.length);
@@ -339,12 +369,22 @@ class _CatalogPageState extends State<CatalogPage> {
           'Estos productos no están disponibles en Ventas de esta app.',
         ),
         const SizedBox(height: 8),
-        const Text('La copia no contiene categorías ni proveedores.'),
+        if (reference.categories.isEmpty && reference.suppliers.isEmpty)
+          const Text('La copia no contiene categorías ni proveedores.'),
         const SizedBox(height: 8),
         Text(
-          '${reference.products.length} registros · '
-          '${reference.totalUnits} unidades en el corte',
+          '${reference.products.length} ${reference.products.length == 1 ? 'registro' : 'registros'} en la copia · '
+          '${reference.totalUnits} ${reference.totalUnits == 1 ? 'unidad' : 'unidades'}. Solo se muestran productos con existencias.',
           key: const Key('reference-inventory-totals'),
+        ),
+        const SizedBox(height: 20),
+        _filterControls(
+          categories: [
+            for (final value in reference.categories) (value, value),
+          ],
+          suppliers: [for (final value in reference.suppliers) (value, value)],
+          showCategory: reference.categories.isNotEmpty,
+          showSupplier: reference.suppliers.isNotEmpty,
         ),
         const SizedBox(height: 20),
         SizedBox(
@@ -352,9 +392,11 @@ class _CatalogPageState extends State<CatalogPage> {
           child: TextField(
             key: const Key('catalog-search'),
             controller: _search,
-            decoration: const InputDecoration(
-              labelText: 'Buscar por nombre o lote',
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              labelText: hasLots
+                  ? 'Buscar por nombre o lote'
+                  : 'Buscar por nombre',
+              prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (value) => setState(() {
               _query = value.trim().toLowerCase();
@@ -365,12 +407,14 @@ class _CatalogPageState extends State<CatalogPage> {
         const SizedBox(height: 20),
         if (rows.isEmpty)
           _EmptyCatalog(
-            reference.products.isEmpty
-                ? 'El inventario de la copia no contiene productos.'
-                : 'No hay productos que coincidan con la búsqueda.',
+            available.isEmpty
+                ? 'No hay productos con existencias en la copia.'
+                : 'No hay productos con existencias que coincidan con la búsqueda y los filtros.',
           )
         else ...[
-          Text('${rows.length} ${rows.length == 1 ? 'registro' : 'registros'}'),
+          Text(
+            '${rows.length} ${rows.length == 1 ? 'producto' : 'productos'} con existencias',
+          ),
           const SizedBox(height: 8),
           Card(
             clipBehavior: Clip.antiAlias,
@@ -401,6 +445,17 @@ class _CatalogPageState extends State<CatalogPage> {
                                   product.name,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                                if (product.category.isNotEmpty ||
+                                    product.supplier.isNotEmpty)
+                                  Text(
+                                    [product.category, product.supplier]
+                                        .where((value) => value.isNotEmpty)
+                                        .join(' · '),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 if (product.lot.isNotEmpty)
                                   Text(
                                     'Lote: ${product.lot}',
@@ -423,13 +478,7 @@ class _CatalogPageState extends State<CatalogPage> {
                           ),
                         ),
                         DataCell(Text('${product.quantity}')),
-                        DataCell(
-                          Text(
-                            product.quantity > 0
-                                ? 'Con existencias'
-                                : 'Agotado',
-                          ),
-                        ),
+                        const DataCell(Text('Con existencias')),
                       ],
                     ),
                 ],
@@ -443,7 +492,11 @@ class _CatalogPageState extends State<CatalogPage> {
   }
 
   Widget _products(InventorySnapshot data) {
-    final rows = data.products
+    final positions = {for (final stock in data.stock) stock.productId: stock};
+    final available = data.products
+        .where((item) => (positions[item.id]?.quantity ?? 0) > 0)
+        .toList();
+    final rows = available
         .where(
           (item) =>
               (_categoryId == null || item.categoryId == _categoryId) &&
@@ -455,21 +508,22 @@ class _CatalogPageState extends State<CatalogPage> {
         )
         .toList();
     final page = _clampedPage(rows.length);
-    final positions = {for (final stock in data.stock) stock.productId: stock};
     final categories = {
       for (final category in data.categories) category.id: category.name,
     };
     if (rows.isEmpty) {
       return _EmptyCatalog(
-        data.products.isEmpty
-            ? 'No hay productos para mostrar. Puedes ingresar el primero con su cantidad desde Compras.'
-            : 'No hay productos que coincidan con la búsqueda y los filtros.',
+        available.isEmpty
+            ? 'No hay productos con existencias. Ingresa productos y cantidades desde Compras.'
+            : 'No hay productos con existencias que coincidan con la búsqueda y los filtros.',
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('${rows.length} ${rows.length == 1 ? 'producto' : 'productos'}'),
+        Text(
+          '${rows.length} ${rows.length == 1 ? 'producto' : 'productos'} con existencias',
+        ),
         const SizedBox(height: 8),
         Card(
           clipBehavior: Clip.antiAlias,

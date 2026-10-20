@@ -28,7 +28,7 @@ function Get-BundleFiles([string]$BundleRoot) {
         foreach ($item in Get-ChildItem -LiteralPath $queue.Dequeue() -Force) {
             $relative = $item.FullName.Substring($BundleRoot.Length + 1)
             if ($relative -match '^data[\\/](development|test)([\\/]|$)') { continue }
-            if ($item.Name -ieq 'reference-inventory.json') { throw 'Un snapshot privado de inventario está fuera de las rutas runtime excluidas.' }
+            if ($item.Name -in @('reference-inventory.json', 'active-workspace.json')) { throw 'Un snapshot o selector privado está fuera de las rutas runtime excluidas.' }
             # A prior `build bundle --debug` can leave these in shared assets.
             # The Release engine uses data/app.so instead of JIT snapshots.
             if ($relative -match '^data[\\/]flutter_assets[\\/](kernel_blob\.bin|isolate_snapshot_data|vm_snapshot_data|\.last_build_id)$') { continue }
@@ -96,6 +96,8 @@ Registra el saldo inicial real antes del primer movimiento de cada cuenta si cor
 Consulta el Historial de ingresos desde la misma sección Compras.
 Catálogo muestra productos: filtra por Categoría y Proveedor, y busca por nombre o SKU.
 Todos los productos limpia los filtros y la búsqueda. Catálogo es solo consulta.
+Catálogo muestra solo productos con unidades disponibles; los agotados se conservan
+para reponerlos desde Compras. Un inventario inicial confirmado está disponible en Ventas.
 Si hay una copia de inventario cargada localmente, Catálogo permite consultarla
 en Inventario de la copia y volver al Catálogo de esta app con el selector de origen.
 La copia muestra su corte, cantidades, PVP y lotes; no está disponible para vender.

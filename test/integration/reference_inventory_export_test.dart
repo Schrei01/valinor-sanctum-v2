@@ -100,6 +100,8 @@ void main() {
       expect(reference.products.first.priceMinor, 125001);
       expect(reference.products.first.purchasePriceMinor, 75025);
       expect(reference.products.first.lot, 'Lote A');
+      expect(reference.categories, isEmpty);
+      expect(reference.suppliers, isEmpty);
       expect(reference.products[1].lot, '');
       expect(reference.products.last.priceMinor, 0);
       expect(reference.totalUnits, 12);
@@ -113,6 +115,86 @@ void main() {
       expect(loaded.capturedAtUtc, DateTime.utc(2026, 10, 20, 14));
       expect(loaded.totalUnits, 12);
       expect(loaded.products.map((row) => row.id), ['1', '2', '3']);
+    },
+  );
+
+  test(
+    'current schema exports category and supplier without requiring lot',
+    () async {
+      final database = await databaseFactoryFfi.openDatabase(
+        source,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      try {
+        await database.execute(
+          'ALTER TABLE products RENAME TO legacy_products',
+        );
+        await database.execute('''
+        CREATE TABLE products (
+          id INTEGER PRIMARY KEY, name TEXT, quantity INTEGER,
+          price REAL, purchasePrice REAL,
+          proveedor TEXT DEFAULT '', categoria TEXT DEFAULT 'producto'
+        )
+      ''');
+        await database.execute('''
+        INSERT INTO products VALUES
+          (1, 'Agotado con categoría', 0, 1250.01, 750.25, 'Proveedor B', 'Evento'),
+          (2, 'Disponible uno', 5, 1000.0, 600.0, 'Proveedor A', 'Comestible'),
+          (3, 'Disponible dos', 7, 0.0, 0.0, 'Proveedor A', 'Comestible')
+      ''');
+        await database.execute('DROP TABLE legacy_products');
+      } finally {
+        await database.close();
+      }
+      final before = await File(source).readAsBytes();
+      final reference = await extract();
+      expect(await File(source).readAsBytes(), before);
+      expect(reference.products.map((row) => row.quantity), [0, 5, 7]);
+      expect(reference.products.map((row) => row.lot), ['', '', '']);
+      expect(reference.categories, ['Comestible', 'Evento']);
+      expect(reference.suppliers, ['Proveedor A', 'Proveedor B']);
+      expect(reference.totalUnits, 12);
+      final data = jsonDecode(await File(output).readAsString()) as Map;
+      expect(data['formatVersion'], 2);
+      final first = (data['products'] as List).first as Map;
+      expect(first['category'], 'Evento');
+      expect(first['supplier'], 'Proveedor B');
+      expect(first['quantity'], 0);
+      expect(first['lot'], '');
+      final loaded = (await JsonReferenceInventoryStore(output).load())!;
+      expect(loaded.products.first.category, 'Evento');
+      expect(loaded.products.first.supplier, 'Proveedor B');
+      expect(loaded.categories, reference.categories);
+      expect(loaded.suppliers, reference.suppliers);
+    },
+  );
+
+  test(
+    'missing required source columns are rejected before creating JSON',
+    () async {
+      final database = await databaseFactoryFfi.openDatabase(
+        source,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      try {
+        await database.execute(
+          'ALTER TABLE products RENAME TO legacy_products',
+        );
+        await database.execute('CREATE TABLE products (id INTEGER, name TEXT)');
+      } finally {
+        await database.close();
+      }
+      await expectLater(
+        extract(),
+        throwsA(
+          isA<ReferenceInventoryFormatException>().having(
+            (failure) => failure.message,
+            'required columns message',
+            contains('columnas'),
+          ),
+        ),
+      );
+      expect(await File(output).exists(), isFalse);
     },
   );
 
@@ -248,6 +330,7 @@ void main() {
         'moneyScale',
         'products',
       });
+      expect(data['formatVersion'], 2);
       final row = (data['products'] as List).first as Map;
       expect(row.keys.toSet(), {
         'id',
@@ -256,6 +339,8 @@ void main() {
         'priceMinor',
         'purchasePriceMinor',
         'lot',
+        'category',
+        'supplier',
       });
       expect(row['priceMinor'], isA<int>());
       expect(row['purchasePriceMinor'], isA<int>());

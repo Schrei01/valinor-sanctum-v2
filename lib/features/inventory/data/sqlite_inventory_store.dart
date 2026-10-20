@@ -42,7 +42,14 @@ FROM purchase_lines line
 JOIN purchases purchase ON purchase.document_id = line.purchase_id
 JOIN business_documents document ON document.id = purchase.document_id AND document.status = 'posted'
 JOIN journal_entries entry ON entry.document_id = document.id AND entry.status = 'posted'
-ORDER BY line.product_id, purchase.supplier_id
+UNION
+SELECT item.product_id, item.supplier_id
+FROM inventory_opening_items item
+JOIN inventory_openings opening ON opening.document_id = item.opening_id
+JOIN business_documents document ON document.id = opening.document_id AND document.status = 'posted'
+JOIN journal_entries entry ON entry.document_id = document.id AND entry.status = 'posted'
+WHERE item.supplier_id IS NOT NULL
+ORDER BY product_id, supplier_id
 ''');
         final productSupplierIds = <String, List<String>>{};
         for (final row in supplierLinks) {
@@ -415,6 +422,25 @@ LEFT JOIN categories g ON g.id = c.category_id WHERE c.id = ?
         );
       }
       productRows[line.productId] = rows.single;
+      final openings = await txn.rawQuery(
+        '''
+SELECT opening.occurred_at_utc FROM inventory_opening_items item
+JOIN inventory_openings opening ON opening.document_id = item.opening_id
+JOIN business_documents document ON document.id = opening.document_id AND document.status = 'posted'
+JOIN journal_entries entry ON entry.document_id = document.id AND entry.status = 'posted'
+WHERE item.product_id = ?
+''',
+        [line.productId],
+      );
+      if (openings.any(
+        (row) => DateTime.parse(
+          row['occurred_at_utc'] as String,
+        ).isAfter(command.occurredAtUtc),
+      )) {
+        throw const InventoryValidationException(
+          'La recepción no puede ser anterior a la apertura de inventario del mismo producto.',
+        );
+      }
       final laterSales = await txn.rawQuery(
         '''
 SELECT s.sold_at_utc FROM sales s
@@ -661,6 +687,15 @@ ORDER BY m.stock_sequence
         _StockTotals.new,
       );
       value.quantity += BigInt.from(row['quantity_delta'] as int);
+      value.cost += BigInt.from(row['total_cost_minor'] as int);
+    }
+    final openings = await txn.query('inventory_opening_layers');
+    for (final row in openings) {
+      final value = result.putIfAbsent(
+        row['product_id'] as String,
+        _StockTotals.new,
+      );
+      value.quantity += BigInt.from(row['initial_quantity'] as int);
       value.cost += BigInt.from(row['total_cost_minor'] as int);
     }
     final outflows = await txn.rawQuery('''

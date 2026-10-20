@@ -1,0 +1,82 @@
+{
+  "verifiedAtUtc": "2026-10-20T15:27:40.1750064Z",
+  "version": "0.9.0+12",
+  "schemaVersion": 8,
+  "tests": {
+    "fullSuitePassed": 428,
+    "skipped": 3,
+    "skipReason": "Host cannot create links required by three filesystem tests",
+    "analyzeClean": true,
+    "formattedDartFiles": 101,
+    "formatClean": true,
+    "releasedMigrationsCompared": 7,
+    "releasedMigrationChecksumsUnchanged": true,
+    "v7BackupMigrationTestPassed": true,
+    "independentFinalReviewOutstandingFindings": 0,
+    "snapshotSameBufferHashVerificationTestPassed": true,
+    "explicitDefinesIgnoreWorkspaceSelectorTestPassed": true
+  },
+  "opening": {
+    "allSourceFieldsReconciled": true,
+    "openingAndEquityJournalMatch": true,
+    "noPurchasesPaymentsSalesDebtOrCashOpeningsCreated": true,
+    "costZeroExplicitlyConfirmed": true,
+    "oneAtomicOpeningPerProfile": true,
+    "operationalInventoryEnabled": true,
+    "freshProfileSelected": true,
+    "oldWorkspacePreserved": true,
+    "oldWorkspaceTablesCompared": 42,
+    "oldWorkspaceSchemaStill7": true,
+    "sourceHashUnchanged": true,
+    "initialBackupVerified": true,
+    "initialBackupTables": 45,
+    "realNamesValuesCountsAndSourceHashesExcluded": true
+  },
+  "build": {
+    "seconds": 66.2195195,
+    "executableVersion": "0.9.0+12",
+    "appSha256": "CED3CC82FEDD66E800FFE1ED56C35C2C150F8F05D215A9D79AE70679A38FEF91",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.9.0-windows-x64.zip",
+    "files": 17,
+    "bytes": 14643828,
+    "sha256": "385B8093788D7C7D9A1D1C6A7ECE0CCAD34778AA9E9671A3CD4B688AD0389155",
+    "allFilesMatchStableAndVersioned": true,
+    "privateDataAbsent": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.9.0/ValinorSanctum2",
+    "zipHashUnchangedAfterNativeLaunch": true
+  },
+  "native": {
+    "version090Observed": true,
+    "catalogAvailableCountMatches": true,
+    "categorySupplierFiltersObserved": true,
+    "operationalCatalogSelected": true,
+    "exhaustedLabelAbsent": true,
+    "noLoadFailure": true,
+    "modificationControlsAbsent": true,
+    "method": "Accessibility and keyboard",
+    "screenshotsCaptured": false,
+    "realNamesPricesOrTotalsPublished": false,
+    "businessDataEnteredByAgent": false,
+    "windowLeftOpenForUser": true,
+    "salesScreenObserved": true,
+    "newAccountActionObserved": true,
+    "salesLoadFailureAbsent": true
+  },
+  "finalData": {
+    "integrityOk": true,
+    "foreignKeyViolations": 0,
+    "paymentAccountsReady": true,
+    "cashAccountsZeroAtVerification": true,
+    "agentCreatedSalesOrDrafts": false,
+    "openingCount": 1,
+    "noDataReset": true
+  },
+  "dataFilesIgnoredByGit": true,
+  "originalPosOpenedOrModified": false,
+  "productionEnvironmentEnabled": false,
+  "remoteWorkflowResultInspected": false
+}

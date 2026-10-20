@@ -170,24 +170,49 @@ void main() {
             categoryId: 'food',
             listPriceMinor: 200000,
           ),
+          CatalogProduct(
+            id: 'empty',
+            name: 'Producto agotado',
+            sku: 'SYN-AGOTADO',
+            categoryId: 'food',
+            listPriceMinor: 200000,
+          ),
+          CatalogProduct(
+            id: 'no-stock',
+            name: 'Producto sin registro de existencias',
+            categoryId: 'food',
+            listPriceMinor: 200000,
+          ),
         ])
-        ..stock.add(
-          const StockPosition(
+        ..stock.addAll(const [
+          StockPosition(
             productId: 'water',
             quantity: 10,
             totalCostMinor: 1200000,
           ),
-        )
+          StockPosition(productId: 'game', quantity: 3, totalCostMinor: 600000),
+          StockPosition(
+            productId: 'snack',
+            quantity: 2,
+            totalCostMinor: 200000,
+          ),
+          StockPosition(productId: 'empty', quantity: 0, totalCostMinor: 0),
+        ])
         ..productSupplierIds.addAll({
           'water': ['supplier'],
           'game': ['old-supplier'],
           'snack': ['old-supplier'],
+          'empty': ['old-supplier'],
+          'no-stock': ['old-supplier'],
         });
       await open(tester, store);
       await tester.tap(find.text('Catálogo'));
       await tester.pumpAndSettle();
       expect(find.text('Agua sintética'), findsOneWidget);
       expect(find.text('Juego sintético'), findsOneWidget);
+      expect(find.text('Producto agotado'), findsNothing);
+      expect(find.text('Producto sin registro de existencias'), findsNothing);
+      expect(find.text('3 productos con existencias'), findsOneWidget);
       expect(find.text('PVP'), findsOneWidget);
       expect(find.text('Unidades'), findsOneWidget);
       expect(find.text('10'), findsOneWidget);
@@ -218,6 +243,7 @@ void main() {
       expect(find.text('Agua sintética'), findsOneWidget);
       expect(find.text('Juego sintético'), findsOneWidget);
       expect(find.text('Snack sintético'), findsOneWidget);
+      expect(find.text('Producto agotado'), findsNothing);
       await tester.tap(find.byKey(const Key('catalog-category-filter')));
       await tester.pumpAndSettle();
       expect(find.text('Comestible'), findsWidgets);
@@ -229,6 +255,7 @@ void main() {
       expect(find.text('Agua sintética'), findsOneWidget);
       expect(find.text('Snack sintético'), findsOneWidget);
       expect(find.text('Juego sintético'), findsNothing);
+      expect(find.text('Producto agotado'), findsNothing);
       expect(find.byKey(const Key('catalog-create')), findsNothing);
       await tester.tap(find.byKey(const Key('catalog-supplier-filter')));
       await tester.pumpAndSettle();
@@ -251,7 +278,7 @@ void main() {
       expect(find.text('Snack sintético'), findsNothing);
       expect(find.text('Juego sintético'), findsNothing);
       expect(
-        find.textContaining('No hay productos que coincidan'),
+        find.textContaining('No hay productos con existencias que coincidan'),
         findsOneWidget,
       );
       await tester.tap(find.byKey(const Key('catalog-all-products')));
@@ -259,8 +286,33 @@ void main() {
       expect(find.text('Agua sintética'), findsOneWidget);
       expect(find.text('Juego sintético'), findsOneWidget);
       expect(find.text('Snack sintético'), findsOneWidget);
+      expect(find.text('Producto agotado'), findsNothing);
+      expect(find.text('Producto sin registro de existencias'), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('catalog-search')),
+        'SYN-AGOTADO',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(DataTable), findsNothing);
+      expect(find.text('Producto agotado'), findsNothing);
+      expect(
+        find.textContaining('No hay productos con existencias que coincidan'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('catalog-all-products')));
+      await tester.pumpAndSettle();
+      expect(find.text('3 productos con existencias'), findsOneWidget);
+      expect(find.text('Producto agotado'), findsNothing);
       expect(store.saves, 0);
-      expect(store.stock.single.quantity, 10);
+      expect(
+        store.stock.singleWhere((stock) => stock.productId == 'water').quantity,
+        10,
+      );
+      expect(
+        store.stock.singleWhere((stock) => stock.productId == 'empty').quantity,
+        0,
+      );
+      expect(store.products, hasLength(5));
       expect(
         store.products.singleWhere((p) => p.id == 'game').isActive,
         isFalse,
@@ -277,6 +329,13 @@ void main() {
           id: 'product',
           name: 'Juego sintético',
           listPriceMinor: 1000,
+        ),
+      )
+      ..stock.add(
+        const StockPosition(
+          productId: 'product',
+          quantity: 1,
+          totalCostMinor: 500,
         ),
       );
     await open(tester, store, size: const Size(400, 900));

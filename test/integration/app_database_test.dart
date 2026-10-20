@@ -943,7 +943,7 @@ void main() {
   });
 
   test(
-    'v6 prepared quick account and confirmed history survive v7 with a complete WAL backup',
+    'v6 prepared quick account and confirmed history survive the current schema with a complete WAL backup',
     () async {
       final path = p.join(fixtureDirectory.path, 'upgrade_v6.sqlite3');
       final old = await _createVersion6(path);
@@ -954,7 +954,7 @@ void main() {
       final app = await AppDatabase.open(path: path);
       await old.close();
       final health = await app.readHealth();
-      expect(health['schemaVersion'], 7);
+      expect(health['schemaVersion'], DatabaseSchema.version);
       expect(health['schemaChecksumVerified'], isTrue);
       expect(health['migrationChecksumVerified'], isTrue);
       for (final table in before.keys) {
@@ -1027,6 +1027,65 @@ void main() {
         throwsA(isA<FileSystemException>()),
       );
       expect(await File(path).readAsBytes(), before);
+    },
+  );
+
+  test(
+    'v7 history migrates to v8 with a verified unchanged v7 backup',
+    () async {
+      final path = p.join(fixtureDirectory.path, 'upgrade_v7.sqlite3');
+      final old = await _createVersion6(path);
+      await _insertVersion6History(old);
+      for (final statement in DatabaseSchema.migration7Statements) {
+        await old.execute(statement);
+      }
+      await old.execute('PRAGMA user_version = 7');
+      await old.insert('schema_migrations', {
+        'version': 7,
+        'name': DatabaseSchema.migration7Name,
+        'migration_checksum': DatabaseSchema.migration7Checksum,
+        'schema_checksum': await _testSchemaChecksum(old),
+        'applied_at_utc': _timestamp,
+      });
+      final before = await _allRows(old);
+      await old.close();
+      final app = await AppDatabase.open(path: path);
+      try {
+        expect((await app.readHealth())['schemaVersion'], 8);
+        for (final table in before.keys) {
+          final after = await app.database.query(table);
+          expect(
+            table == 'schema_migrations' ? after.take(7).toList() : after,
+            before[table],
+            reason: table,
+          );
+        }
+        for (final table in [
+          'inventory_openings',
+          'inventory_opening_items',
+          'inventory_opening_allocations',
+        ]) {
+          expect(await app.database.query(table), isEmpty);
+        }
+      } finally {
+        await app.close();
+      }
+      final backups = await Directory(
+        p.join(fixtureDirectory.path, 'backups'),
+      ).list().toList();
+      expect(backups, hasLength(1));
+      expect(p.basename(backups.single.path), contains('.v7.'));
+      final backup = await databaseFactoryFfi.openDatabase(
+        backups.single.path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      try {
+        expect(await backup.getVersion(), 7);
+        expect(await _allRows(backup), before);
+        expect(await backup.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      } finally {
+        await backup.close();
+      }
     },
   );
 

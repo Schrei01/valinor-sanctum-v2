@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
@@ -59,6 +61,27 @@ void main() {
     await file.writeAsString(jsonEncode(data));
     return JsonReferenceInventoryStore(file.path).load();
   }
+
+  test(
+    'verified read rejects changed snapshot bytes before importing',
+    () async {
+      final bytes = utf8.encode(jsonEncode(document()));
+      await file.writeAsBytes(bytes);
+      final hash = sha256.convert(bytes).toString();
+      final store = JsonReferenceInventoryStore(file.path);
+      expect(
+        (await store.loadVerified(hash.toUpperCase()))!.products,
+        hasLength(1),
+      );
+      await file.writeAsString(
+        jsonEncode({...document(), 'sourceName': 'changed.db'}),
+      );
+      await expectLater(
+        store.loadVerified(hash),
+        throwsA(isA<ReferenceInventoryFormatException>()),
+      );
+    },
+  );
 
   test(
     'reference is immutable and preserves zero stock and repeated names',
@@ -149,12 +172,93 @@ void main() {
     expect(reference.products.first.priceMinor, 125001);
     expect(reference.products.first.purchasePriceMinor, 75025);
     expect(reference.products.first.lot, 'Lote sintético');
+    expect(reference.products.first.category, '');
+    expect(reference.products.first.supplier, '');
+    expect(reference.categories, isEmpty);
+    expect(reference.suppliers, isEmpty);
     expect(reference.totalUnits, 7);
   });
 
+  test('category and supplier options are distinct, sorted and immutable', () {
+    final reference = snapshot([
+      const ReferenceInventoryProduct(
+        id: '1',
+        name: 'Agotado',
+        quantity: 0,
+        priceMinor: 100,
+        purchasePriceMinor: 50,
+        category: 'Evento',
+        supplier: 'Proveedor B',
+      ),
+      const ReferenceInventoryProduct(
+        id: '2',
+        name: 'Disponible',
+        quantity: 4,
+        priceMinor: 100,
+        purchasePriceMinor: 50,
+        category: 'Comestible',
+        supplier: 'Proveedor A',
+      ),
+      const ReferenceInventoryProduct(
+        id: '3',
+        name: 'Repetido',
+        quantity: 2,
+        priceMinor: 100,
+        purchasePriceMinor: 50,
+        category: 'Comestible',
+        supplier: 'Proveedor A',
+      ),
+      const ReferenceInventoryProduct(
+        id: '4',
+        name: 'Sin clasificación',
+        quantity: 0,
+        priceMinor: 100,
+        purchasePriceMinor: 50,
+        category: '  ',
+      ),
+    ]);
+    expect(reference.categories, ['Comestible', 'Evento']);
+    expect(reference.suppliers, ['Proveedor A', 'Proveedor B']);
+    expect(reference.products.first.category, 'Evento');
+    expect(reference.products.first.supplier, 'Proveedor B');
+    expect(() => reference.categories.clear(), throwsUnsupportedError);
+    expect(() => reference.suppliers.add('Nuevo'), throwsUnsupportedError);
+  });
+
+  test(
+    'reader accepts v2 classification and requires both fields as strings',
+    () async {
+      final row = product()
+        ..['category'] = 'Comestible'
+        ..['supplier'] = 'Proveedor sintético';
+      final data = document()
+        ..['formatVersion'] = 2
+        ..['products'] = [row];
+      final reference = (await load(data))!;
+      expect(reference.products.single.category, 'Comestible');
+      expect(reference.products.single.supplier, 'Proveedor sintético');
+      expect(reference.categories, ['Comestible']);
+      expect(reference.suppliers, ['Proveedor sintético']);
+      for (final field in ['category', 'supplier']) {
+        for (final invalid in [null, 123]) {
+          final badRow = Map<String, Object?>.of(row)..[field] = invalid;
+          await expectLater(
+            load(Map<String, Object?>.of(data)..['products'] = [badRow]),
+            throwsA(isA<ReferenceInventoryFormatException>()),
+          );
+        }
+        final missing = Map<String, Object?>.of(row)..remove(field);
+        await expectLater(
+          load(Map<String, Object?>.of(data)..['products'] = [missing]),
+          throwsA(isA<ReferenceInventoryFormatException>()),
+        );
+      }
+    },
+  );
+
   test('reader rejects incompatible or incomplete metadata', () async {
     for (final entry in <String, Object?>{
-      'formatVersion': 2,
+      'formatVersion': 3,
       'currencyCode': 'USD',
       'moneyScale': 0,
       'sourceName': '',

@@ -7,6 +7,8 @@ class ReferenceInventoryProduct {
     required this.priceMinor,
     required this.purchasePriceMinor,
     this.lot = '',
+    this.category = '',
+    this.supplier = '',
   });
 
   final String id;
@@ -15,6 +17,8 @@ class ReferenceInventoryProduct {
   final int priceMinor;
   final int purchasePriceMinor;
   final String lot;
+  final String category;
+  final String supplier;
 }
 
 class ReferenceInventory {
@@ -60,6 +64,8 @@ class ReferenceInventory {
       }
     }
     totalUnits = units.toInt();
+    categories = _options(this.products.map((product) => product.category));
+    suppliers = _options(this.products.map((product) => product.supplier));
   }
 
   static final BigInt maxInteger = (BigInt.one << 63) - BigInt.one;
@@ -69,8 +75,14 @@ class ReferenceInventory {
   final DateTime capturedAtUtc;
   final List<ReferenceInventoryProduct> products;
   late final int totalUnits;
+  late final List<String> categories;
+  late final List<String> suppliers;
   String get currencyCode => 'COP';
   int get moneyScale => 2;
+
+  static List<String> _options(Iterable<String> values) => List.unmodifiable(
+    values.where((value) => value.trim().isNotEmpty).toSet().toList()..sort(),
+  );
 }
 
 abstract interface class ReferenceInventoryStore {

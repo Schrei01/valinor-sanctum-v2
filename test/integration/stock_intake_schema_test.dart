@@ -83,7 +83,7 @@ void main() {
         expect(await app.database.query(table), isEmpty);
       }
       expect(await app.database.query('journal_lines'), isEmpty);
-      expect((await app.readHealth())['schemaVersion'], 7);
+      expect((await app.readHealth())['schemaVersion'], DatabaseSchema.version);
     },
   );
 
