@@ -6,8 +6,11 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/database/app_database.dart';
 import 'package:valinor_sanctum_2/features/collections/data/sqlite_collections_store.dart';
 import 'package:valinor_sanctum_2/features/collections/domain/collections_store.dart';
+import 'package:valinor_sanctum_2/features/inventory/data/sqlite_inventory_opening_store.dart';
 import 'package:valinor_sanctum_2/features/inventory/data/sqlite_inventory_store.dart';
+import 'package:valinor_sanctum_2/features/inventory/domain/inventory_opening.dart';
 import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart';
+import 'package:valinor_sanctum_2/features/inventory/domain/reference_inventory.dart';
 import 'package:valinor_sanctum_2/features/stock_intake/data/sqlite_stock_intake_store.dart';
 import 'package:valinor_sanctum_2/features/stock_intake/domain/stock_intake_store.dart';
 import 'package:valinor_sanctum_2/features/supplier_payments/data/sqlite_supplier_payments_store.dart';
@@ -70,6 +73,207 @@ void main() {
   );
   Future<int> count(String table) async =>
       (await app.database.query(table)).length;
+
+  Future<InventoryOpeningResult> initialInventory() =>
+      SqliteInventoryOpeningStore(app, synthetic: true).open(
+        InventoryOpeningCommand(
+          commandId: 'initial-inventory',
+          reference: ReferenceInventory(
+            sourceName: 'synthetic.db',
+            sourceSha256: List.filled(64, 'a').join(),
+            capturedAtUtc: DateTime.utc(2026, 10, 19, 7),
+            products: const [
+              ReferenceInventoryProduct(
+                id: 'opening-regular',
+                name: 'Producto inicial',
+                quantity: 2,
+                priceMinor: 1000,
+                purchasePriceMinor: 400,
+                category: 'Comestible',
+                supplier: 'Proveedor inicial',
+              ),
+              ReferenceInventoryProduct(
+                id: 'opening-zero',
+                name: 'Agotado de costo cero',
+                quantity: 0,
+                priceMinor: 1000,
+                purchasePriceMinor: 0,
+                category: 'Comestible',
+                supplier: 'Proveedor cero',
+              ),
+              ReferenceInventoryProduct(
+                id: 'opening-no-supplier',
+                name: 'Agotado sin proveedor',
+                quantity: 0,
+                priceMinor: 1000,
+                purchasePriceMinor: 700,
+                category: 'Comestible',
+              ),
+            ],
+          ),
+          snapshotSha256: List.filled(64, 'b').join(),
+          occurredAtUtc: DateTime.utc(2026, 10, 19, 8),
+          zeroCostsConfirmed: true,
+        ),
+      );
+
+  test(
+    'intake defaults include opening zero cost and exhausted products',
+    () async {
+      final imported = await initialInventory();
+      final snapshot = await store.load();
+      final regular = snapshot
+          .productDefaults[imported.productIdsBySourceId['opening-regular']!]!;
+      expect(regular.unitPurchasePriceMinor, 400);
+      expect(regular.supplierName, 'Proveedor inicial');
+      expect(regular.supplierId, isNotNull);
+      final zero = snapshot
+          .productDefaults[imported.productIdsBySourceId['opening-zero']!]!;
+      expect(zero.unitPurchasePriceMinor, 0);
+      expect(zero.supplierName, 'Proveedor cero');
+      final noSupplier =
+          snapshot.productDefaults[imported
+              .productIdsBySourceId['opening-no-supplier']!]!;
+      expect(noSupplier.unitPurchasePriceMinor, 700);
+      expect(noSupplier.supplierId, isNull);
+      expect(noSupplier.supplierName, isNull);
+      expect(snapshot.productDefaults, hasLength(3));
+      expect(snapshot.entries, isEmpty);
+      expect(() => snapshot.productDefaults.clear(), throwsUnsupportedError);
+    },
+  );
+
+  test(
+    'latest posted legacy receipt replaces opening defaults as a pair',
+    () async {
+      final imported = await initialInventory();
+      final productId = imported.productIdsBySourceId['opening-regular']!;
+      final inventory = SqliteInventoryStore(app, synthetic: true);
+      await inventory.saveSupplier(
+        const InventorySupplier(id: 'latest-supplier', name: 'Proveedor nuevo'),
+      );
+      await inventory.receivePurchase(
+        ReceiptCommand(
+          commandId: 'later-receipt',
+          supplierId: 'latest-supplier',
+          dueDate: '2026-10-19',
+          occurredAtUtc: DateTime.utc(2026, 10, 19, 10),
+          lines: [
+            ReceiptLineInput(
+              productId: productId,
+              quantity: 2,
+              totalCostMinor: 900,
+            ),
+          ],
+        ),
+      );
+      await inventory.saveSupplier(
+        const InventorySupplier(
+          id: 'latest-supplier',
+          name: 'Proveedor renombrado',
+        ),
+      );
+      final snapshot = await store.load();
+      final defaults = snapshot.productDefaults[productId]!;
+      expect(defaults.supplierId, 'latest-supplier');
+      expect(defaults.supplierName, 'Proveedor renombrado');
+      expect(defaults.unitPurchasePriceMinor, 450);
+      expect(snapshot.entries, isEmpty);
+    },
+  );
+
+  test(
+    'nonintegral latest unit cost stays unknown with its own supplier',
+    () async {
+      final inventory = SqliteInventoryStore(app, synthetic: true);
+      await inventory.saveProduct(
+        CatalogProduct(
+          id: 'legacy-product',
+          name: 'Producto',
+          categoryId: category,
+          listPriceMinor: 2000,
+        ),
+      );
+      for (final supplier in ['old-supplier', 'new-supplier']) {
+        await inventory.saveSupplier(
+          InventorySupplier(id: supplier, name: supplier),
+        );
+      }
+      await inventory.receivePurchase(
+        ReceiptCommand(
+          commandId: 'exact-cost',
+          supplierId: 'old-supplier',
+          dueDate: '2026-10-19',
+          occurredAtUtc: DateTime.utc(2026, 10, 19, 10),
+          lines: const [
+            ReceiptLineInput(
+              productId: 'legacy-product',
+              quantity: 2,
+              totalCostMinor: 1000,
+            ),
+          ],
+        ),
+      );
+      expect(
+        (await store.load())
+            .productDefaults['legacy-product']!
+            .unitPurchasePriceMinor,
+        500,
+      );
+      await inventory.receivePurchase(
+        ReceiptCommand(
+          commandId: 'nonintegral-cost',
+          supplierId: 'new-supplier',
+          dueDate: '2026-10-19',
+          occurredAtUtc: DateTime.utc(2026, 10, 19, 11),
+          lines: const [
+            ReceiptLineInput(
+              productId: 'legacy-product',
+              quantity: 3,
+              totalCostMinor: 1000,
+            ),
+          ],
+        ),
+      );
+      final defaults = (await store.load()).productDefaults['legacy-product']!;
+      expect(defaults.supplierId, 'new-supplier');
+      expect(defaults.supplierName, 'new-supplier');
+      expect(defaults.unitPurchasePriceMinor, isNull);
+    },
+  );
+
+  test(
+    'inactive latest supplier is not selected or replaced by an older one',
+    () async {
+      await opening();
+      await store.prepare(
+        input('old-intake', supplier: 'Proveedor anterior', cost: 900),
+      );
+      await store.confirmPrepared('old-intake');
+      final old = (await store.load()).products.single;
+      await store.prepare(
+        input(
+          'new-intake',
+          expected: old,
+          supplier: 'Proveedor reciente',
+          cost: 1200,
+          occurredAt: DateTime.utc(2026, 10, 19, 11),
+        ),
+      );
+      await store.confirmPrepared('new-intake');
+      final snapshot = await store.load();
+      final recent = snapshot.suppliers.singleWhere(
+        (s) => s.name == 'Proveedor reciente',
+      );
+      await SqliteInventoryStore(app).saveSupplier(
+        InventorySupplier(id: recent.id, name: recent.name, isActive: false),
+      );
+      final defaults = (await store.load()).productDefaults['product']!;
+      expect(defaults.supplierId, isNull);
+      expect(defaults.supplierName, isNull);
+      expect(defaults.unitPurchasePriceMinor, 1200);
+    },
+  );
 
   test(
     'defaults are idempotent and reuse active category without inventing money',

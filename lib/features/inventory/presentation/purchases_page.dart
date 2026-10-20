@@ -201,7 +201,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Escribe un producto nuevo o elige uno existente para reponerlo.',
+                          'Escribe un producto nuevo o elige uno existente para completar sus datos y reponerlo.',
                         ),
                         const SizedBox(height: 20),
                         _productField(data, locked),
@@ -440,79 +440,74 @@ class _PurchasesPageState extends State<PurchasesPage> {
     },
   );
 
-  Widget _productField(
-    StockIntakeSnapshot data,
-    bool locked,
-  ) => RawAutocomplete<CatalogProduct>(
-    textEditingController: _name,
-    focusNode: _productFocus,
-    displayStringForOption: (item) => item.name,
-    optionsBuilder: (text) {
-      final query = text.text.trim().toLowerCase();
-      return query.isEmpty
-          ? const Iterable<CatalogProduct>.empty()
-          : data.products
-                .where(
-                  (item) =>
-                      item.isActive &&
-                      (item.name.toLowerCase().contains(query) ||
-                          (item.sku?.toLowerCase().contains(query) ?? false)),
-                )
-                .take(8);
-    },
-    onSelected: (product) => setState(() {
-      _existing = product;
-      _sku.text = product.sku ?? '';
-      _categoryId = product.categoryId;
-      _pvp.text = _amount(product.listPriceMinor);
-      final last = data.entries
-          .where((item) => item.productId == product.id)
-          .firstOrNull;
-      _cost.text = last == null ? '' : _amount(last.unitPurchasePriceMinor);
-      if (last != null) {
-        _supplier.text = last.supplierName;
-        _supplierId = data.suppliers
-            .where((item) => item.name == last.supplierName && item.isActive)
-            .firstOrNull
-            ?.id;
-      }
-      _formVersion++;
-    }),
-    fieldViewBuilder: (context, controller, focus, submit) => TextFormField(
-      key: const Key('intake-name'),
-      controller: controller,
-      focusNode: focus,
-      enabled: !locked,
-      maxLength: 120,
-      decoration: const InputDecoration(
-        labelText: 'Nombre del producto',
-        hintText: 'Nuevo producto o buscar por nombre / SKU',
-      ),
-      validator: inventoryNameError,
-      onFieldSubmitted: (_) => submit(),
-      onChanged: (value) {
-        if (_existing != null && value != _existing!.name) {
-          setState(() {
-            _existing = null;
-            _sku.clear();
-            _pvp.clear();
-            _cost.clear();
-            _categoryId = null;
-            _formVersion++;
-          });
-        }
-      },
-    ),
-    optionsViewBuilder: (context, selected, options) => _suggestions([
-      for (final product in options)
-        ListTile(
-          dense: true,
-          title: Text(product.name),
-          subtitle: product.sku == null ? null : Text(product.sku!),
-          onTap: () => selected(product),
+  Widget _productField(StockIntakeSnapshot data, bool locked) =>
+      RawAutocomplete<CatalogProduct>(
+        textEditingController: _name,
+        focusNode: _productFocus,
+        displayStringForOption: (item) => item.name,
+        optionsBuilder: (text) {
+          final query = text.text.trim().toLowerCase();
+          return query.isEmpty
+              ? const Iterable<CatalogProduct>.empty()
+              : data.products
+                    .where(
+                      (item) =>
+                          item.isActive &&
+                          (item.name.toLowerCase().contains(query) ||
+                              (item.sku?.toLowerCase().contains(query) ??
+                                  false)),
+                    )
+                    .take(8);
+        },
+        onSelected: (product) => setState(() {
+          _existing = product;
+          _sku.text = product.sku ?? '';
+          _categoryId = product.categoryId;
+          _pvp.text = _amount(product.listPriceMinor);
+          final defaults = data.productDefaults[product.id];
+          final cost = defaults?.unitPurchasePriceMinor;
+          _cost.text = cost == null ? '' : _amount(cost);
+          _supplier.text = defaults?.supplierName ?? '';
+          _supplierId = defaults?.supplierId;
+          _formVersion++;
+        }),
+        fieldViewBuilder: (context, controller, focus, submit) => TextFormField(
+          key: const Key('intake-name'),
+          controller: controller,
+          focusNode: focus,
+          enabled: !locked,
+          maxLength: 120,
+          decoration: const InputDecoration(
+            labelText: 'Nombre del producto',
+            hintText: 'Nuevo producto o buscar por nombre / SKU',
+          ),
+          validator: inventoryNameError,
+          onFieldSubmitted: (_) => submit(),
+          onChanged: (value) {
+            if (_existing != null && value != _existing!.name) {
+              setState(() {
+                _existing = null;
+                _sku.clear();
+                _pvp.clear();
+                _cost.clear();
+                _supplier.clear();
+                _supplierId = null;
+                _categoryId = null;
+                _formVersion++;
+              });
+            }
+          },
         ),
-    ]),
-  );
+        optionsViewBuilder: (context, selected, options) => _suggestions([
+          for (final product in options)
+            ListTile(
+              dense: true,
+              title: Text(product.name),
+              subtitle: product.sku == null ? null : Text(product.sku!),
+              onTap: () => selected(product),
+            ),
+        ]),
+      );
 
   Widget _supplierField(StockIntakeSnapshot data, bool locked) =>
       RawAutocomplete<InventorySupplier>(

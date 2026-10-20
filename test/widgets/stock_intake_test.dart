@@ -209,22 +209,109 @@ void main() {
       store.suppliers.add(
         const InventorySupplier(id: 'supplier', name: 'Proveedor sintético'),
       );
+      store.productDefaults['water'] = const ProductIntakeDefaults(
+        supplierId: 'supplier',
+        supplierName: 'Proveedor sintético',
+        unitPurchasePriceMinor: 100000,
+      );
       await open(tester);
       await enter(tester, 'intake-name', 'WATER');
       await tap(tester, find.text('Agua sintética').last);
       expect(value(tester, 'intake-sku'), 'WATER');
       expect(value(tester, 'intake-pvp'), '2.500,00');
+      expect(value(tester, 'intake-cost'), '1.000,00');
+      expect(value(tester, 'intake-supplier'), 'Proveedor sintético');
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(keyed('intake-category-'))
+            .initialValue,
+        'food',
+      );
       expect(find.text('Reponer producto · existencias: 2'), findsOneWidget);
-      await enter(tester, 'intake-supplier', 'Proveedor');
-      await tap(tester, find.text('Proveedor sintético').last);
-      await enter(tester, 'intake-cost', '1.000');
+      await enter(tester, 'intake-cost', '1.100');
+      await enter(tester, 'intake-pvp', '2.600');
       await enter(tester, 'intake-quantity', '2');
+      await controller.load();
+      await tester.pumpAndSettle();
+      expect(value(tester, 'intake-cost'), '1.100');
+      expect(value(tester, 'intake-pvp'), '2.600');
       await tap(tester, find.byKey(const Key('intake-submit')));
       expect(store.preparedCommands.single.productId, 'water');
       expect(store.preparedCommands.single.expectedProduct!.sku, 'WATER');
       expect(store.preparedCommands.single.supplierId, 'supplier');
+      expect(store.preparedCommands.single.unitPurchasePriceMinor, 110000);
+      expect(store.preparedCommands.single.listPriceMinor, 260000);
       expect(store.stock.single.quantity, 4);
       expect(store.products, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'switching products clears stale supplier and cost but preserves quantity and payment',
+    (tester) async {
+      store.products.addAll([
+        const CatalogProduct(
+          id: 'known',
+          name: 'Artículo conocido',
+          sku: 'KNOWN',
+          categoryId: 'item',
+          listPriceMinor: 250000,
+        ),
+        const CatalogProduct(
+          id: 'unknown',
+          name: 'Artículo sin ingreso previo',
+          listPriceMinor: 150000,
+        ),
+      ]);
+      store.suppliers.add(
+        const InventorySupplier(id: 'supplier', name: 'Proveedor sintético'),
+      );
+      store.productDefaults['known'] = const ProductIntakeDefaults(
+        supplierId: 'supplier',
+        supplierName: 'Proveedor sintético',
+        unitPurchasePriceMinor: 0,
+      );
+      await open(tester);
+      await enter(tester, 'intake-quantity', '7');
+      await tap(tester, keyed('intake-payment-'));
+      await tap(tester, find.text('Nequi').last);
+      await enter(tester, 'intake-name', 'KNOWN');
+      await tap(tester, find.text('Artículo conocido').last);
+      expect(value(tester, 'intake-cost'), '0,00');
+      expect(value(tester, 'intake-supplier'), 'Proveedor sintético');
+      expect(value(tester, 'intake-quantity'), '7');
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(keyed('intake-payment-'))
+            .initialValue,
+        'nequi',
+      );
+      await enter(tester, 'intake-name', 'sin ingreso');
+      await tap(tester, find.text('Artículo sin ingreso previo').last);
+      expect(value(tester, 'intake-cost'), isEmpty);
+      expect(value(tester, 'intake-supplier'), isEmpty);
+      expect(value(tester, 'intake-sku'), isEmpty);
+      expect(value(tester, 'intake-pvp'), '1.500,00');
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(keyed('intake-category-'))
+            .initialValue,
+        isNull,
+      );
+      await enter(tester, 'intake-name', 'KNOWN');
+      await tap(tester, find.text('Artículo conocido').last);
+      await enter(tester, 'intake-name', 'Nuevo producto');
+      for (final key in [
+        'intake-cost',
+        'intake-supplier',
+        'intake-sku',
+        'intake-pvp',
+      ]) {
+        expect(value(tester, key), isEmpty);
+      }
+      expect(value(tester, 'intake-quantity'), '7');
+      expect(store.preparedCommands, isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
@@ -285,6 +372,11 @@ void main() {
   testWidgets(
     'reopened durable pending restores locked values and explicit rejection correction',
     (tester) async {
+      store.productDefaults['new-product'] = const ProductIntakeDefaults(
+        supplierId: 'other-supplier',
+        supplierName: 'Otro proveedor sintético',
+        unitPurchasePriceMinor: 900000,
+      );
       store.pending.add(
         PreparedStockIntake(
           status: 'rejected',
@@ -308,6 +400,8 @@ void main() {
       await open(tester);
       expect(value(tester, 'intake-name'), 'Agua sintética');
       expect(value(tester, 'intake-quantity'), '2');
+      expect(value(tester, 'intake-cost'), '1.000,00');
+      expect(value(tester, 'intake-supplier'), 'Proveedor sintético');
       expect(
         tester
             .widget<TextFormField>(find.byKey(const Key('intake-name')))

@@ -111,6 +111,20 @@ class StockIntakeEntry {
   final DateTime occurredAtUtc;
 }
 
+/// Suggested values from the latest posted receipt or initial inventory.
+/// A missing unit cost is distinct from a documented zero cost. Supplier fields
+/// are present only while that supplier can still be selected for a new intake.
+class ProductIntakeDefaults {
+  const ProductIntakeDefaults({
+    this.supplierId,
+    this.supplierName,
+    this.unitPurchasePriceMinor,
+  });
+  final String? supplierId;
+  final String? supplierName;
+  final int? unitPurchasePriceMinor;
+}
+
 class StockIntakeSnapshot {
   StockIntakeSnapshot({
     required List<InventoryCategory> categories,
@@ -120,13 +134,15 @@ class StockIntakeSnapshot {
     required List<IntakePaymentOption> paymentOptions,
     required List<PreparedStockIntake> pendingIntakes,
     required List<StockIntakeEntry> entries,
+    Map<String, ProductIntakeDefaults> productDefaults = const {},
   }) : categories = List.unmodifiable(categories),
        suppliers = List.unmodifiable(suppliers),
        products = List.unmodifiable(products),
        stock = List.unmodifiable(stock),
        paymentOptions = List.unmodifiable(paymentOptions),
        pendingIntakes = List.unmodifiable(pendingIntakes),
-       entries = List.unmodifiable(entries);
+       entries = List.unmodifiable(entries),
+       productDefaults = Map.unmodifiable(productDefaults);
   final List<InventoryCategory> categories;
   final List<InventorySupplier> suppliers;
   final List<CatalogProduct> products;
@@ -134,6 +150,7 @@ class StockIntakeSnapshot {
   final List<IntakePaymentOption> paymentOptions;
   final List<PreparedStockIntake> pendingIntakes;
   final List<StockIntakeEntry> entries;
+  final Map<String, ProductIntakeDefaults> productDefaults;
 }
 
 class CashOpeningCommand {

@@ -134,6 +134,7 @@ ORDER BY r.occurred_at_utc DESC,e.request_id
         suppliers: inventory.suppliers,
         products: inventory.products,
         stock: inventory.stock,
+        productDefaults: await _productDefaults(txn),
         paymentOptions: paymentOptions,
         pendingIntakes: pending.map(_prepared).toList(),
         entries: entries
@@ -158,6 +159,63 @@ ORDER BY r.occurred_at_utc DESC,e.request_id
             .toList(),
       );
     });
+  }
+
+  Future<Map<String, ProductIntakeDefaults>> _productDefaults(
+    Transaction txn,
+  ) async {
+    final history = await txn.rawQuery('''
+SELECT history.*, supplier.id active_supplier_id, supplier.name supplier_name
+FROM (
+  SELECT line.product_id, purchase.supplier_id,
+    CASE WHEN line.acquisition_total_minor % line.quantity = 0
+      THEN line.acquisition_total_minor / line.quantity END unit_cost_minor,
+    purchase.received_at_utc occurred_at_utc, 1 source_priority,
+    purchase.document_id source_id, line.id item_id
+  FROM purchase_lines line
+  JOIN purchases purchase ON purchase.document_id = line.purchase_id
+  JOIN business_documents document ON document.id = purchase.document_id AND document.status = 'posted'
+  JOIN journal_entries entry ON entry.document_id = document.id AND entry.status = 'posted'
+  UNION ALL
+  SELECT item.product_id, item.supplier_id, item.unit_cost_minor,
+    opening.occurred_at_utc, 0 source_priority, opening.document_id, item.id
+  FROM inventory_opening_items item
+  JOIN inventory_openings opening ON opening.document_id = item.opening_id
+  JOIN business_documents document ON document.id = opening.document_id AND document.status = 'posted'
+  JOIN journal_entries entry ON entry.document_id = document.id AND entry.status = 'posted'
+) history
+LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
+  AND supplier.is_supplier = 1 AND supplier.is_active = 1
+''');
+    // Parse instants instead of sorting UTC strings with optional fractions.
+    final ordered = history.toList()
+      ..sort((a, b) {
+        final time = DateTime.parse(
+          b['occurred_at_utc'] as String,
+        ).compareTo(DateTime.parse(a['occurred_at_utc'] as String));
+        if (time != 0) return time;
+        final source = (b['source_priority'] as int).compareTo(
+          a['source_priority'] as int,
+        );
+        if (source != 0) return source;
+        final document = (b['source_id'] as String).compareTo(
+          a['source_id'] as String,
+        );
+        if (document != 0) return document;
+        return (b['item_id'] as String).compareTo(a['item_id'] as String);
+      });
+    final defaults = <String, ProductIntakeDefaults>{};
+    for (final row in ordered) {
+      defaults.putIfAbsent(
+        row['product_id'] as String,
+        () => ProductIntakeDefaults(
+          supplierId: row['active_supplier_id'] as String?,
+          supplierName: row['supplier_name'] as String?,
+          unitPurchasePriceMinor: row['unit_cost_minor'] as int?,
+        ),
+      );
+    }
+    return defaults;
   }
 
   @override

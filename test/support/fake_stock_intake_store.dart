@@ -12,6 +12,7 @@ class FakeStockIntakeStore implements StockIntakeStore {
   final suppliers = <InventorySupplier>[];
   final products = <CatalogProduct>[];
   final stock = <StockPosition>[];
+  final productDefaults = <String, ProductIntakeDefaults>{};
   final paymentOptions = <IntakePaymentOption>[
     const IntakePaymentOption(
       id: 'cash',
@@ -63,6 +64,7 @@ class FakeStockIntakeStore implements StockIntakeStore {
       suppliers: suppliers,
       products: products,
       stock: stock,
+      productDefaults: productDefaults,
       paymentOptions: paymentOptions,
       pendingIntakes: pending,
       entries: entries,
@@ -158,6 +160,13 @@ class FakeStockIntakeStore implements StockIntakeStore {
         ),
       );
     }
+    productDefaults[command.productId] = ProductIntakeDefaults(
+      supplierId: suppliers
+          .firstWhere((item) => item.name == command.supplierName)
+          .id,
+      supplierName: command.supplierName,
+      unitPurchasePriceMinor: command.unitPurchasePriceMinor,
+    );
     paymentOptions[optionIndex] = _option(
       option,
       balance: option.balanceMinor - total,
