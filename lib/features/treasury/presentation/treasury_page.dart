@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../inventory/presentation/inventory_widgets.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../application/treasury_controller.dart';
+import '../domain/legacy_treasury_snapshot.dart';
 import '../domain/treasury_store.dart';
+import 'legacy_treasury_history.dart';
 
 class TreasuryPage extends StatefulWidget {
   const TreasuryPage({
@@ -11,11 +13,13 @@ class TreasuryPage extends StatefulWidget {
     required this.controller,
     required this.profile,
     this.supplierPaymentsPanel,
+    this.legacyStore,
   });
 
   final TreasuryController controller;
   final BusinessProfile profile;
   final Widget? supplierPaymentsPanel;
+  final LegacyTreasuryStore? legacyStore;
 
   @override
   State<TreasuryPage> createState() => _TreasuryPageState();
@@ -64,6 +68,10 @@ class _TreasuryPageState extends State<TreasuryPage> {
             _balances(data),
             const SizedBox(height: 28),
             _history(data),
+          ],
+          if (widget.legacyStore != null) ...[
+            const SizedBox(height: 28),
+            LegacyTreasuryHistory(store: widget.legacyStore!),
           ],
           if (widget.supplierPaymentsPanel != null) ...[
             const SizedBox(height: 28),
@@ -136,6 +144,9 @@ class _TreasuryPageState extends State<TreasuryPage> {
                 amount: data.receivablesMinor,
                 icon: Icons.receipt_long_outlined,
                 width: width,
+                note: data.legacyReceivablesMinor > 0
+                    ? 'Incluye ${_money(data.legacyReceivablesMinor)} de cartera anterior sin detalle por cliente.'
+                    : null,
               ),
               _balanceCard(
                 keyName: 'total',
@@ -184,6 +195,7 @@ class _TreasuryPageState extends State<TreasuryPage> {
     required IconData icon,
     required double width,
     bool highlighted = false,
+    String? note,
   }) {
     const forest = Color(0xFF183D35);
     final foreground = highlighted ? Colors.white : forest;
@@ -227,6 +239,14 @@ class _TreasuryPageState extends State<TreasuryPage> {
                   height: 1.4,
                 ),
               ),
+              if (note != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  note,
+                  key: const Key('treasury-legacy-receivables-note'),
+                  style: const TextStyle(color: Color(0xFF65716A), height: 1.4),
+                ),
+              ],
             ],
           ),
         ),

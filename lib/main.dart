@@ -17,6 +17,7 @@ import 'features/supplier_payments/data/sqlite_supplier_payments_store.dart';
 import 'features/quick_sales/data/sqlite_quick_sales_store.dart';
 import 'features/stock_intake/data/sqlite_stock_intake_store.dart';
 import 'features/treasury/data/sqlite_treasury_store.dart';
+import 'features/treasury/data/json_legacy_treasury_store.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +33,11 @@ void main() {
       );
       final paths = await StoragePaths.resolve(config);
       final database = await AppDatabase.open(path: paths.databasePath);
+      final treasuryOrigins = await database.database.rawQuery('''
+SELECT opening.snapshot_sha256 FROM treasury_openings opening
+JOIN business_documents document ON document.id=opening.document_id AND document.status='posted'
+JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='posted'
+''');
       return WorkspaceSession(
         store: SqliteWorkspaceStore(database),
         databasePath: paths.databasePath,
@@ -64,6 +70,13 @@ void main() {
           synthetic: config.environment == AppEnvironment.test,
         ),
         treasuryStore: SqliteTreasuryStore(database),
+        legacyTreasuryStore: treasuryOrigins.isEmpty
+            ? null
+            : JsonLegacyTreasuryStore(
+                p.join(paths.profileDirectory.path, 'legacy-treasury.json'),
+                expectedSha256:
+                    treasuryOrigins.single['snapshot_sha256'] as String,
+              ),
       );
     },
   );

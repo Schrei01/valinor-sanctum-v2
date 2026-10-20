@@ -71,6 +71,19 @@ ORDER BY CASE o.label WHEN 'Efectivo' THEN 0 WHEN 'Nequi' THEN 1 ELSE 2 END,o.la
           where: 'cash_account_id=?',
           whereArgs: [row['cash_account_id']],
         );
+        final importedOpening = await txn.rawQuery(
+          '''
+SELECT document_id FROM treasury_openings
+WHERE cash_account_id=? OR nequi_account_id=? OR reserve_account_id=? LIMIT 1
+''',
+          [
+            row['cash_account_id'],
+            row['cash_account_id'],
+            row['cash_account_id'],
+          ],
+        );
+        final openingRecorded =
+            opening.isNotEmpty || importedOpening.isNotEmpty;
         final movements = await txn.rawQuery(
           '''
 SELECT l.id FROM journal_lines l
@@ -98,8 +111,8 @@ WHERE l.account_id=? LIMIT 1
               balances[row['ledger_account_id']] ?? BigInt.zero,
               'Saldo',
             ),
-            openingRecorded: opening.isNotEmpty,
-            canRecordOpening: active && opening.isEmpty && movements.isEmpty,
+            openingRecorded: openingRecorded,
+            canRecordOpening: active && !openingRecorded && movements.isEmpty,
             isActive: active,
           ),
         );

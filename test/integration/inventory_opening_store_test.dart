@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/database/app_database.dart';
+import 'package:valinor_sanctum_2/core/infrastructure/database/schema.dart';
 import 'package:valinor_sanctum_2/features/inventory/data/sqlite_inventory_opening_store.dart';
 import 'package:valinor_sanctum_2/features/inventory/data/sqlite_inventory_store.dart';
 import 'package:valinor_sanctum_2/features/inventory/domain/inventory_opening.dart';
@@ -436,7 +437,10 @@ void main() {
         expect(replay.documentId, first.documentId);
         expect(replay.productIdsBySourceId, first.productIdsBySourceId);
         expect(await disk.database.query('inventory_openings'), hasLength(1));
-        expect((await disk.readHealth())['schemaVersion'], 8);
+        expect(
+          (await disk.readHealth())['schemaVersion'],
+          DatabaseSchema.version,
+        );
       } finally {
         await disk?.close();
         final canonical = p.normalize(await sandbox.resolveSymbolicLinks());

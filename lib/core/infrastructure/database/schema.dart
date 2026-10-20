@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 8;
+  static const int version = 9;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -40,6 +40,10 @@ abstract final class DatabaseSchema {
   static String get migration8Checksum =>
       checksum(migration8Statements.join('\n;\n'));
 
+  static const String migration9Name = 'initial_treasury_opening_v9';
+  static String get migration9Checksum =>
+      checksum(migration9Statements.join('\n;\n'));
+
   static String nameForVersion(int version) => switch (version) {
     1 => migrationName,
     2 => migration2Name,
@@ -49,6 +53,7 @@ abstract final class DatabaseSchema {
     6 => migration6Name,
     7 => migration7Name,
     8 => migration8Name,
+    9 => migration9Name,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -61,6 +66,7 @@ abstract final class DatabaseSchema {
     6 => migration6Checksum,
     7 => migration7Checksum,
     8 => migration8Checksum,
+    9 => migration9Checksum,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -2381,6 +2387,265 @@ END
     _openingAwareSalePostingTrigger(),
     ..._freezeInventoryOpeningFacts(),
   ]);
+
+  static String _treasuryPositive(String prefix) =>
+      '(max(0,${prefix}cash_minor)+max(0,${prefix}nequi_minor)'
+      '+max(0,${prefix}reserve_minor)+${prefix}receivables_minor)';
+
+  static String _treasuryNegative(String prefix) =>
+      '(max(0,-${prefix}cash_minor)+max(0,-${prefix}nequi_minor)'
+      '+max(0,-${prefix}reserve_minor))';
+
+  /// Legacy balances are a separate opening, preserving released v1-v8 inputs.
+  static final List<String> migration9Statements = List.unmodifiable([
+    '''
+CREATE TABLE treasury_openings (
+  document_id TEXT PRIMARY KEY NOT NULL REFERENCES business_documents(id) ON DELETE RESTRICT,
+  command_id TEXT NOT NULL UNIQUE REFERENCES command_log(id) ON DELETE RESTRICT,
+  profile_id TEXT NOT NULL UNIQUE REFERENCES app_profile(profile_id) ON DELETE RESTRICT,
+  cash_account_id TEXT NOT NULL REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  nequi_account_id TEXT NOT NULL REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  reserve_account_id TEXT NOT NULL REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  cash_minor INTEGER NOT NULL CHECK (typeof(cash_minor)='integer' AND cash_minor >= -9223372036854775807),
+  nequi_minor INTEGER NOT NULL CHECK (typeof(nequi_minor)='integer' AND nequi_minor >= -9223372036854775807),
+  reserve_minor INTEGER NOT NULL CHECK (typeof(reserve_minor)='integer' AND reserve_minor >= -9223372036854775807),
+  receivables_minor INTEGER NOT NULL CHECK (typeof(receivables_minor)='integer' AND receivables_minor >= 0),
+  source_sha256 TEXT NOT NULL CHECK (length(source_sha256)=64 AND source_sha256 NOT GLOB '*[^0-9a-f]*'),
+  snapshot_sha256 TEXT NOT NULL CHECK (length(snapshot_sha256)=64 AND snapshot_sha256 NOT GLOB '*[^0-9a-f]*'),
+  source_metadata_json TEXT NOT NULL CHECK (json_valid(source_metadata_json) AND json_type(source_metadata_json)='object'),
+  occurred_at_utc TEXT NOT NULL CHECK (${_collectionUtc('occurred_at_utc')}),
+  CHECK (cash_account_id <> nequi_account_id AND cash_account_id <> reserve_account_id AND nequi_account_id <> reserve_account_id),
+  CHECK (typeof(${_treasuryPositive('')})='integer' AND typeof(${_treasuryNegative('')})='integer')
+)
+''',
+    '''
+CREATE VIEW treasury_opening_expected_lines AS
+SELECT opening.document_id, cash.ledger_account_id account_id,
+ max(0,opening.cash_minor) debit_minor,max(0,-opening.cash_minor) credit_minor
+FROM treasury_openings opening JOIN cash_accounts cash ON cash.id=opening.cash_account_id WHERE opening.cash_minor <> 0
+UNION ALL
+SELECT opening.document_id,cash.ledger_account_id,max(0,opening.nequi_minor),max(0,-opening.nequi_minor)
+FROM treasury_openings opening JOIN cash_accounts cash ON cash.id=opening.nequi_account_id WHERE opening.nequi_minor <> 0
+UNION ALL
+SELECT opening.document_id,cash.ledger_account_id,max(0,opening.reserve_minor),max(0,-opening.reserve_minor)
+FROM treasury_openings opening JOIN cash_accounts cash ON cash.id=opening.reserve_account_id WHERE opening.reserve_minor <> 0
+UNION ALL
+SELECT document_id,'system:legacy-customer-receivables',receivables_minor,0
+FROM treasury_openings WHERE receivables_minor > 0
+UNION ALL
+SELECT document_id,'system:opening-equity',
+ max(0,${_treasuryNegative('')}-${_treasuryPositive('')}),
+ max(0,${_treasuryPositive('')}-${_treasuryNegative('')})
+FROM treasury_openings WHERE ${_treasuryPositive('')} <> ${_treasuryNegative('')}
+''',
+    '''
+CREATE TRIGGER treasury_opening_documents_insert_as_draft
+BEFORE INSERT ON business_documents WHEN NEW.type='treasury_opening' AND NEW.status <> 'draft'
+BEGIN SELECT RAISE(ABORT, 'Create a treasury opening as draft before posting'); END
+''',
+    '''
+CREATE TRIGGER treasury_openings_validate_insert
+BEFORE INSERT ON treasury_openings
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM treasury_openings WHERE document_id=NEW.document_id OR command_id=NEW.command_id OR profile_id=NEW.profile_id)
+    THEN RAISE(ABORT, 'A profile has one immutable treasury opening') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM business_documents document JOIN command_log command ON command.id=document.command_id
+    WHERE document.id=NEW.document_id AND document.status='draft' AND document.type='treasury_opening'
+      AND document.command_sequence=0 AND document.command_id=NEW.command_id AND document.profile_id=NEW.profile_id
+      AND document.occurred_at_utc=NEW.occurred_at_utc AND document.source_kind IN ('legacy','synthetic')
+      AND document.date_quality='reconstructed' AND command.command_type='treasury_opening'
+      AND command.actor_id=document.actor_id AND command.authorization_policy_version='development-single-user-v1')
+    THEN RAISE(ABORT, 'A treasury opening requires its matching draft document and command') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM command_log command JOIN app_profile profile ON profile.profile_id=NEW.profile_id
+    WHERE command.id=NEW.command_id AND command.response_version=1 AND json_valid(command.response_json)
+      AND json_extract(command.response_json,'\$.documentId') IS NEW.document_id
+      AND json_valid(json_extract(command.response_json,'\$.canonicalPayload'))
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.version') IS 1
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.profileId') IS NEW.profile_id
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.currency') IS profile.currency_code
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.scale') IS profile.money_scale
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.sourceSha256') IS NEW.source_sha256
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.snapshotSha256') IS NEW.snapshot_sha256
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.occurredAtUtc') IS NEW.occurred_at_utc
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.cashAccountId') IS NEW.cash_account_id
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.nequiAccountId') IS NEW.nequi_account_id
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.reserveAccountId') IS NEW.reserve_account_id
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.cashMinor') IS NEW.cash_minor
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.nequiMinor') IS NEW.nequi_minor
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.reserveMinor') IS NEW.reserve_minor
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.receivablesMinor') IS NEW.receivables_minor
+      AND json_extract(json_extract(command.response_json,'\$.canonicalPayload'),'\$.sourceMetadata') IS NEW.source_metadata_json)
+    THEN RAISE(ABORT, 'Treasury opening balances and provenance must match their committed canonical command') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM cash_openings) OR EXISTS (SELECT 1 FROM customer_receivables)
+    OR EXISTS (SELECT 1 FROM journal_lines line JOIN journal_entries entry ON entry.id=line.entry_id AND entry.status='posted'
+      JOIN business_documents document ON document.id=entry.document_id AND document.status='posted'
+      JOIN ledger_accounts account ON account.id=line.account_id WHERE account.role IN ('cash','receivable'))
+    THEN RAISE(ABORT, 'Import treasury balances before any own money movements or receivables') END;
+END
+''',
+    '''
+CREATE TRIGGER treasury_openings_validate_document_posting
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status='draft' AND NEW.status='posted' AND
+ (NEW.type='treasury_opening' OR EXISTS (SELECT 1 FROM treasury_openings WHERE document_id=NEW.id))
+BEGIN
+  SELECT CASE WHEN NEW.type <> 'treasury_opening' OR NEW.command_sequence <> 0 OR NEW.source_kind NOT IN ('legacy','synthetic')
+    OR NEW.date_quality <> 'reconstructed' OR date(NEW.occurred_at_utc,'-5 hours') IS NOT NEW.business_date
+    OR NOT EXISTS (SELECT 1 FROM treasury_openings opening JOIN command_log command ON command.id=opening.command_id
+      WHERE opening.document_id=NEW.id AND opening.command_id=NEW.command_id AND opening.profile_id=NEW.profile_id
+        AND opening.occurred_at_utc=NEW.occurred_at_utc AND command.command_type='treasury_opening'
+        AND command.actor_id=NEW.actor_id AND command.authorization_policy_version='development-single-user-v1')
+    THEN RAISE(ABORT, 'Invalid treasury opening document or command') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM treasury_openings opening
+    JOIN quick_payment_options cash_option ON cash_option.id='quick-default:EFECTIVO' AND cash_option.cash_account_id=opening.cash_account_id AND cash_option.is_active=1
+    JOIN quick_payment_options nequi_option ON nequi_option.id='quick-default:NEQUI' AND nequi_option.cash_account_id=opening.nequi_account_id AND nequi_option.is_active=1
+    WHERE opening.document_id=NEW.id AND opening.reserve_account_id='treasury:main-cash')
+    OR EXISTS (SELECT 1 FROM treasury_openings opening JOIN cash_accounts cash
+      ON cash.id IN (opening.cash_account_id,opening.nequi_account_id,opening.reserve_account_id)
+      JOIN ledger_accounts ledger ON ledger.id=cash.ledger_account_id
+      WHERE opening.document_id=NEW.id AND (cash.is_active <> 1 OR cash.is_available <> 1 OR ledger.is_active <> 1 OR ledger.class <> 'asset' OR ledger.role <> 'cash'))
+    OR NOT EXISTS (SELECT 1 FROM ledger_accounts WHERE id='system:opening-equity' AND class='equity' AND role='opening_balance' AND is_active=1)
+    OR NOT EXISTS (SELECT 1 FROM ledger_accounts WHERE id='system:legacy-customer-receivables' AND class='asset' AND role='receivable' AND is_active=1)
+    THEN RAISE(ABORT, 'Treasury opening must use the configured distinct monetary accounts and opening ledgers') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM cash_openings) OR EXISTS (SELECT 1 FROM customer_receivables)
+    OR EXISTS (SELECT 1 FROM journal_lines line JOIN journal_entries entry ON entry.id=line.entry_id AND entry.status='posted'
+      JOIN business_documents document ON document.id=entry.document_id AND document.status='posted'
+      JOIN ledger_accounts account ON account.id=line.account_id
+      WHERE document.id <> NEW.id AND account.role IN ('cash','receivable'))
+    THEN RAISE(ABORT, 'Treasury opening must precede all own money movements and receivables') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM journal_entries WHERE document_id=NEW.id AND status='draft' AND cost_completeness='not_applicable')
+    OR (SELECT count(*) FROM journal_lines line JOIN journal_entries entry ON entry.id=line.entry_id WHERE entry.document_id=NEW.id)
+      <> (SELECT count(*) FROM treasury_opening_expected_lines WHERE document_id=NEW.id)
+    OR EXISTS (SELECT 1 FROM treasury_opening_expected_lines expected WHERE expected.document_id=NEW.id AND
+      (SELECT count(*) FROM journal_lines line JOIN journal_entries entry ON entry.id=line.entry_id
+       WHERE entry.document_id=NEW.id AND line.account_id=expected.account_id
+         AND line.debit_minor=expected.debit_minor AND line.credit_minor=expected.credit_minor) <> 1)
+    THEN RAISE(ABORT, 'Treasury opening journal must match every exact imported balance and opening equity') END;
+END
+''',
+    'DROP TRIGGER entries_validate_posting',
+    _treasuryAwareEntryPostingTrigger(),
+    '''
+CREATE TRIGGER cash_openings_respect_treasury_opening
+BEFORE INSERT ON cash_openings
+WHEN EXISTS (SELECT 1 FROM treasury_openings opening WHERE NEW.cash_account_id IN
+  (opening.cash_account_id,opening.nequi_account_id,opening.reserve_account_id))
+BEGIN SELECT RAISE(ABORT, 'A treasury import already declared this account opening, including zero'); END
+''',
+    '''
+CREATE TRIGGER documents_respect_treasury_opening_chronology
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status='draft' AND NEW.status='posted' AND NEW.type <> 'treasury_opening'
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM treasury_openings opening
+    JOIN business_documents opening_document ON opening_document.id=opening.document_id AND opening_document.status='posted'
+    JOIN journal_entries opening_entry ON opening_entry.document_id=opening.document_id AND opening_entry.status='posted'
+    JOIN journal_entries incoming_entry ON incoming_entry.document_id=NEW.id
+    JOIN journal_lines incoming_line ON incoming_line.entry_id=incoming_entry.id
+    JOIN ledger_accounts incoming_account ON incoming_account.id=incoming_line.account_id
+    WHERE opening.profile_id=NEW.profile_id AND incoming_account.role IN ('cash','customer_receivable')
+      AND ${_utcSortKey('NEW.occurred_at_utc')} < ${_utcSortKey('opening.occurred_at_utc')})
+    THEN RAISE(ABORT, 'Own money movements and receivables cannot precede the treasury opening') END;
+END
+''',
+    '''
+CREATE TRIGGER entries_respect_treasury_opening_chronology
+BEFORE UPDATE OF status ON journal_entries
+WHEN OLD.status='draft' AND NEW.status='posted'
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM business_documents incoming_document
+    JOIN journal_lines incoming_line ON incoming_line.entry_id=NEW.id
+    JOIN ledger_accounts incoming_account ON incoming_account.id=incoming_line.account_id
+    JOIN treasury_openings opening ON opening.profile_id=incoming_document.profile_id
+    JOIN business_documents opening_document ON opening_document.id=opening.document_id AND opening_document.status='posted'
+    JOIN journal_entries opening_entry ON opening_entry.document_id=opening.document_id AND opening_entry.status='posted'
+    WHERE incoming_document.id=NEW.document_id AND incoming_document.type <> 'treasury_opening'
+      AND incoming_account.role IN ('cash','customer_receivable')
+      AND ${_utcSortKey('incoming_document.occurred_at_utc')} < ${_utcSortKey('opening.occurred_at_utc')})
+    THEN RAISE(ABORT, 'Own money entries and receivables cannot precede the treasury opening') END;
+END
+''',
+    ..._freezeTreasuryOpeningFacts(),
+  ]);
+
+  static String _treasuryAwareEntryPostingTrigger() {
+    final previous = migration8Statements.singleWhere(
+      (statement) =>
+          statement.contains('CREATE TRIGGER entries_validate_posting\n'),
+    );
+    return previous.replaceFirst(
+      "    THEN RAISE(ABORT, 'A posted entry needs at least two lines except a confirmed zero value inventory opening') END;",
+      '''    AND NOT EXISTS (SELECT 1 FROM treasury_openings opening JOIN business_documents document ON document.id=opening.document_id
+      WHERE opening.document_id=NEW.document_id AND opening.cash_minor=0 AND opening.nequi_minor=0
+        AND opening.reserve_minor=0 AND opening.receivables_minor=0 AND document.type='treasury_opening'
+        AND document.status='posted' AND NEW.cost_completeness='not_applicable'
+        AND NOT EXISTS (SELECT 1 FROM journal_lines WHERE entry_id=NEW.id))
+    THEN RAISE(ABORT, 'A posted entry needs at least two lines except a confirmed zero value opening') END;''',
+    );
+  }
+
+  static List<String> _freezeTreasuryOpeningFacts() {
+    String confirmed(String id) =>
+        '''EXISTS (SELECT 1 FROM business_documents document
+WHERE document.id=$id AND document.status <> 'draft')''';
+    return [
+      for (final action in ['UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER treasury_openings_no_${action.toLowerCase()}
+BEFORE $action ON treasury_openings
+BEGIN SELECT RAISE(ABORT, 'Imported treasury balances and provenance are immutable'); END
+''',
+      '''
+CREATE TRIGGER treasury_opening_entries_no_replace
+BEFORE INSERT ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries existing JOIN treasury_openings opening ON opening.document_id=existing.document_id
+ WHERE (existing.id=NEW.id OR existing.document_id=NEW.document_id) AND ${confirmed('existing.document_id')})
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury opening entry cannot be replaced'); END
+''',
+      '''
+CREATE TRIGGER treasury_opening_entries_no_conflicting_update
+BEFORE UPDATE ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries existing JOIN treasury_openings opening ON opening.document_id=existing.document_id
+ WHERE existing.id <> OLD.id AND (existing.id=NEW.id OR existing.document_id=NEW.document_id)
+ AND ${confirmed('existing.document_id')})
+BEGIN SELECT RAISE(ABORT, 'Treasury opening entry cannot be replaced through another entry'); END
+''',
+      '''
+CREATE TRIGGER treasury_opening_lines_no_replace
+BEFORE INSERT ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines existing JOIN journal_entries entry ON entry.id=existing.entry_id
+ JOIN treasury_openings opening ON opening.document_id=entry.document_id
+ WHERE (existing.id=NEW.id OR (existing.entry_id=NEW.entry_id AND existing.sequence=NEW.sequence)) AND ${confirmed('entry.document_id')})
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury opening lines cannot be replaced'); END
+''',
+      for (final action in ['UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER treasury_opening_entries_no_${action.toLowerCase()}
+BEFORE $action ON journal_entries
+WHEN EXISTS (SELECT 1 FROM treasury_openings opening WHERE opening.document_id=OLD.document_id AND ${confirmed('OLD.document_id')})
+ ${action == 'UPDATE' ? "AND NOT (OLD.status='draft' AND NEW.status='posted' AND NEW.id=OLD.id AND NEW.document_id=OLD.document_id AND NEW.reversal_of_id IS OLD.reversal_of_id AND NEW.cost_completeness=OLD.cost_completeness)" : ''}
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury opening retains its exact entry'); END
+''',
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER treasury_opening_lines_no_${action.toLowerCase()}
+BEFORE $action ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_entries entry JOIN treasury_openings opening ON opening.document_id=entry.document_id
+ WHERE entry.id=${action == 'DELETE' ? 'OLD' : 'NEW'}.entry_id AND ${confirmed('entry.document_id')})
+ ${action == 'UPDATE' ? "OR EXISTS (SELECT 1 FROM journal_entries entry JOIN treasury_openings opening ON opening.document_id=entry.document_id WHERE entry.id=OLD.entry_id AND ${confirmed('entry.document_id')})" : ''}
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury opening lines are immutable'); END
+''',
+      '''
+CREATE TRIGGER treasury_opening_lines_no_conflicting_update
+BEFORE UPDATE ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines existing JOIN journal_entries entry ON entry.id=existing.entry_id
+ JOIN treasury_openings opening ON opening.document_id=entry.document_id
+ WHERE existing.id <> OLD.id AND (existing.id=NEW.id OR (existing.entry_id=NEW.entry_id AND existing.sequence=NEW.sequence))
+ AND ${confirmed('entry.document_id')})
+BEGIN SELECT RAISE(ABORT, 'Treasury opening lines cannot be replaced through another line'); END
+''',
+    ];
+  }
 
   static String _openingAwarePurchaseAllocationTrigger() {
     var sql = migration3Statements.singleWhere(

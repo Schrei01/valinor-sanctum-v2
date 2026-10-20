@@ -28,7 +28,7 @@ function Get-BundleFiles([string]$BundleRoot) {
         foreach ($item in Get-ChildItem -LiteralPath $queue.Dequeue() -Force) {
             $relative = $item.FullName.Substring($BundleRoot.Length + 1)
             if ($relative -match '^data[\\/](development|test)([\\/]|$)') { continue }
-            if ($item.Name -in @('reference-inventory.json', 'active-workspace.json')) { throw 'Un snapshot o selector privado está fuera de las rutas runtime excluidas.' }
+            if ($item.Name -in @('reference-inventory.json', 'active-workspace.json', 'legacy-treasury.json')) { throw 'Un snapshot o selector privado está fuera de las rutas runtime excluidas.' }
             # A prior `build bundle --debug` can leave these in shared assets.
             # The Release engine uses data/app.so instead of JIT snapshots.
             if ($relative -match '^data[\\/]flutter_assets[\\/](kernel_blob\.bin|isolate_snapshot_data|vm_snapshot_data|\.last_build_id)$') { continue }
@@ -110,6 +110,9 @@ Tesorería reemplaza Pagos: consulta Caja, Nequi, Caja mayor y Deudas de cliente
 Total disponible suma Caja y Nequi; la reserva y las deudas se muestran aparte.
 Filtra los últimos movimientos por cuenta y pulsa Actualizar para consultar de nuevo.
 Los pagos anteriores a proveedores permanecen en un panel secundario de Tesorería.
+Los saldos de una copia verificada se cargan como apertura única, no como ventas.
+Deudas identifica la cartera anterior sin detalle cuando la fuente no trae clientes.
+Historial de la copia es consulta separada y no vuelve a mover dinero.
 Las confirmaciones pendientes se recuperan al reabrir para reintentar sin duplicar.
 Configura cuentas y medios locales y registra cobros o abonos de las ventas.
 Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.

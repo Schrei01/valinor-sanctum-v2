@@ -171,6 +171,10 @@ void main() {
       expect(amount('total'), 'COP 168,00');
       expect(find.text('Caja + Nequi'), findsOneWidget);
       expect(find.text('Lo que deben los clientes'), findsOneWidget);
+      expect(
+        find.byKey(const Key('treasury-legacy-receivables-note')),
+        findsNothing,
+      );
       expect(fake.defaultsCalls, 1);
       expect(tester.takeException(), isNull);
 
@@ -266,6 +270,43 @@ void main() {
     );
     expect(find.text('Aún no hay movimientos registrados.'), findsOneWidget);
     expect(find.byType(DataTable), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('legacy debt is disclosed without increasing cash or total', (
+    tester,
+  ) async {
+    final data = TreasurySnapshot(
+      accounts: snapshot().accounts,
+      receivablesMinor: 91200,
+      legacyReceivablesMinor: 12300,
+      movements: const [],
+    );
+    await open(
+      tester,
+      FakeTreasuryStore(snapshot: data),
+      size: const Size(360, 780),
+    );
+    final debt = find.byKey(const Key('treasury-balance-receivables'));
+    expect(
+      find.descendant(
+        of: debt,
+        matching: find.text(
+          'Incluye COP 123,00 de cartera anterior sin detalle por cliente.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('treasury-amount-receivables')))
+          .data,
+      'COP 912,00',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const Key('treasury-amount-total'))).data,
+      'COP 168,00',
+    );
     expect(tester.takeException(), isNull);
   });
 

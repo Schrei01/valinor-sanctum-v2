@@ -47,7 +47,7 @@ try {
             (($entry.ExternalAttributes -shr 16) -band 0xF000) -eq 0xA000) { throw ('Entrada ZIP no admitida: ' + $name) }
         $destination = [IO.Path]::GetFullPath((Join-Path $stagingRoot $name))
         if (-not $destination.StartsWith($stagingRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Una entrada ZIP sale del staging.' }
-        if ($name -match '\.(db|sqlite|sqlite3)(-journal|-wal|-shm)?$' -or $name -match '/data/(development|test)/' -or $name -match '(^|/)(reference-inventory|active-workspace)\.json$') { throw 'No se publican bases, perfiles runtime ni snapshots privados.' }
+        if ($name -match '\.(db|sqlite|sqlite3)(-journal|-wal|-shm)?$' -or $name -match '/data/(development|test)/' -or $name -match '(^|/)(reference-inventory|active-workspace|legacy-treasury)\.json$') { throw 'No se publican bases, perfiles runtime ni snapshots privados.' }
     }
 }
 finally { $zip.Dispose() }

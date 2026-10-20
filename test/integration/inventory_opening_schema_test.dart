@@ -154,7 +154,7 @@ void main() {
       expect(DatabaseSchema.migration3Checksum, 'fnv1a64:c719534b847edc09');
       expect(DatabaseSchema.migration5Checksum, 'fnv1a64:aaf6156fd67b9099');
       expect(DatabaseSchema.migration6Checksum, 'fnv1a64:4ccd48022ac15ecc');
-      expect((await app.readHealth())['schemaVersion'], 8);
+      expect((await app.readHealth())['schemaVersion'], DatabaseSchema.version);
       for (final table in [
         'inventory_openings',
         'inventory_opening_items',

@@ -40,6 +40,7 @@ class TreasurySnapshot {
   TreasurySnapshot({
     required List<TreasuryAccount> accounts,
     required this.receivablesMinor,
+    this.legacyReceivablesMinor = 0,
     required List<TreasuryMovement> movements,
   }) : accounts = List.unmodifiable(accounts),
        movements = List.unmodifiable(movements);
@@ -48,6 +49,10 @@ class TreasurySnapshot {
 
   /// Remaining customer receivables, excluded from available money.
   final int receivablesMinor;
+
+  /// Included in receivablesMinor, imported as an aggregate without inventing
+  /// individual customers or sales. It cannot be collected as a named debt.
+  final int legacyReceivablesMinor;
 
   /// At most 50 movements per account, newest first with stable ID tie breaks.
   final List<TreasuryMovement> movements;

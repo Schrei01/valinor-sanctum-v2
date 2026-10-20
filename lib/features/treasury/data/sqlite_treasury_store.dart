@@ -175,9 +175,27 @@ ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
       counts[movement.cashAccountId] = count;
       return count <= 50;
     }).toList();
+    final legacyRows = await txn.rawQuery('''
+SELECT o.receivables_minor FROM treasury_openings o
+JOIN business_documents d ON d.id=o.document_id AND d.status='posted'
+JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
+''');
+    final legacyReceivables = legacyRows.fold(
+      BigInt.zero,
+      (sum, row) => sum + BigInt.from(row['receivables_minor'] as int),
+    );
+    final totalReceivables =
+        BigInt.from(await _receivables(txn)) + legacyReceivables;
     final snapshot = TreasurySnapshot(
       accounts: accounts,
-      receivablesMinor: await _receivables(txn),
+      receivablesMinor: treasuryCheckedMinor(
+        totalReceivables,
+        'Deudas de clientes',
+      ),
+      legacyReceivablesMinor: treasuryCheckedMinor(
+        legacyReceivables,
+        'Cartera anterior',
+      ),
       movements: recent,
     );
     // Reject an overflowing combined dashboard total before returning it.
@@ -238,6 +256,7 @@ class _MovementAccumulator {
     final document = row['document_id'] as String;
     final concept = switch (row['type']) {
       'cash_opening' => 'Saldo inicial',
+      'treasury_opening' => 'Saldo inicial de la copia',
       'customer_collection' when row['is_quick_sale'] == 1 =>
         'Venta: ${row['sale_label_snapshot']}',
       'customer_collection' =>

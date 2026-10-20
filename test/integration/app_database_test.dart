@@ -1031,7 +1031,7 @@ void main() {
   );
 
   test(
-    'v7 history migrates to v8 with a verified unchanged v7 backup',
+    'v7 history migrates to current schema with a verified unchanged v7 backup',
     () async {
       final path = p.join(fixtureDirectory.path, 'upgrade_v7.sqlite3');
       final old = await _createVersion6(path);
@@ -1051,7 +1051,10 @@ void main() {
       await old.close();
       final app = await AppDatabase.open(path: path);
       try {
-        expect((await app.readHealth())['schemaVersion'], 8);
+        expect(
+          (await app.readHealth())['schemaVersion'],
+          DatabaseSchema.version,
+        );
         for (final table in before.keys) {
           final after = await app.database.query(table);
           expect(

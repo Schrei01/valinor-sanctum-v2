@@ -1,0 +1,125 @@
+{
+  "verifiedAtUtc": "2026-10-20T20:37:31.3194765Z",
+  "version": "0.11.0+15",
+  "schemaVersion": 9,
+  "tests": {
+    "fullSuitePassed": 500,
+    "skipped": 3,
+    "skipReason": "Host cannot create links needed by three filesystem tests",
+    "newTests": 51,
+    "analyzeClean": true,
+    "formattedDartFiles": 121,
+    "formatClean": true,
+    "releasedMigrationsCompared": 8,
+    "releasedMigrationNamesAndChecksumsUnchanged": true,
+    "independentReviewOutstandingFindings": 0,
+    "postingChronologyRegressionPassed": true
+  },
+  "opening": {
+    "fourBalancesFromLatestSourceRows": true,
+    "sourceReadOnly": true,
+    "sourceHashUnchanged": true,
+    "sourceMatchesInventoryOpening": true,
+    "negativeReserveExplicitlyConfirmed": true,
+    "aggregateLegacyReceivablesDisclosed": true,
+    "noFictitiousCustomersSalesOrCollections": true,
+    "availableTotalExcludesReserveAndReceivables": true,
+    "historicalJsonPinnedToPostedOpeningHash": true,
+    "historicalMovementsNotReposted": true,
+    "realAmountsNamesDatesSourceHashesAndCountsExcluded": true
+  },
+  "backup": {
+    "verified": true,
+    "tablesCompared": 45,
+    "relativePath": "backups/treasury-opening-20261020/sanctum2.sqlite3"
+  },
+  "migrationBackup": {
+    "migrationBackupVersion": 8,
+    "migrationBackupMatchesManualBefore": true
+  },
+  "rehearsal": {
+    "balancesMatchSource": true,
+    "negativeReservePreserved": true,
+    "debtIsAggregateOnly": true,
+    "noFakeSalesOrCollections": true,
+    "replayWithoutDuplicate": true,
+    "openingCount": 1,
+    "journalBalanced": true,
+    "schemaVersion": 9,
+    "integrityOk": true,
+    "foreignKeyViolations": 0
+  },
+  "rehearsalPreservation": {
+    "allOldRowsPreserved": true,
+    "oldTablesCompared": 45,
+    "inventoryAndCommercialTablesUnchanged": true,
+    "changedTables": [
+      "business_documents",
+      "command_log",
+      "journal_entries",
+      "journal_lines",
+      "ledger_accounts",
+      "schema_migrations"
+    ],
+    "newOpeningCount": 1
+  },
+  "finalData": {
+    "oldTablesCompared": 45,
+    "allOldRowsPreserved": true,
+    "changedTables": [
+      "business_documents",
+      "command_log",
+      "journal_entries",
+      "journal_lines",
+      "ledger_accounts",
+      "schema_migrations"
+    ],
+    "inventoryAndCommercialTablesUnchanged": true,
+    "fourBalancesMatchSource": true,
+    "negativeReservePreserved": true,
+    "totalAvailableMatchesCashPlusNequi": true,
+    "sourceHashUnchanged": true,
+    "runtimeSnapshotMatchesOpening": true,
+    "openingCount": 1,
+    "historyNotReposted": true,
+    "journalBalanced": true,
+    "schemaVersion": 9,
+    "integrityOk": true,
+    "foreignKeyViolations": 0,
+    "replayWithoutDuplicate": true
+  },
+  "build": {
+    "seconds": 67.7149852,
+    "executableVersion": "0.11.0+15",
+    "appSha256": "914B04D7F8897CD484CB107F16A7953A757CB007E423BB41EA9438D1C4F4BA82",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.11.0-windows-x64.zip",
+    "files": 17,
+    "bytes": 14694580,
+    "sha256": "169BBD88B3D93DC10074555511E9EC1936EF3BAAE9571323B4FD3FA31C477B58",
+    "allFilesMatchStableAndVersioned": true,
+    "privateDataAbsent": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.11.0/ValinorSanctum2",
+    "zipHashUnchangedAfterNativeLaunch": true
+  },
+  "native": {
+    "version0110Observed": true,
+    "treasuryObserved": true,
+    "allFourSourceAmountsVisible": true,
+    "negativeReserveVisible": true,
+    "availableTotalVisible": true,
+    "legacyDebtNoticeVisible": true,
+    "historicalConsultationControlVisible": true,
+    "noLoadFailure": true,
+    "method": "Accessibility and keyboard",
+    "screenshotsCaptured": false,
+    "financialFormsSubmitted": false,
+    "windowLeftOpenForUser": true
+  },
+  "originalPosOpenedOrModified": false,
+  "productionEnvironmentEnabled": false,
+  "remoteWorkflowResultInspected": false
+}

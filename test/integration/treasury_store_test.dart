@@ -2,6 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:valinor_sanctum_2/core/domain/money.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/database/app_database.dart';
+import 'package:valinor_sanctum_2/core/infrastructure/database/schema.dart';
+import 'package:valinor_sanctum_2/features/treasury/data/sqlite_treasury_opening_store.dart';
+import 'package:valinor_sanctum_2/features/treasury/domain/treasury_opening.dart';
 import 'package:valinor_sanctum_2/features/collections/data/sqlite_collections_store.dart';
 import 'package:valinor_sanctum_2/features/collections/domain/collections_store.dart';
 import 'package:valinor_sanctum_2/features/inventory/data/sqlite_inventory_store.dart';
@@ -45,6 +48,70 @@ void main() {
         where: 'id=?',
         whereArgs: ['quick-default:$code'],
       )).single;
+
+  test(
+    'imported balances reconcile with the dashboard and subsequent money movements',
+    () async {
+      await treasury.ensureDefaults();
+      final result = await SqliteTreasuryOpeningStore(app, synthetic: true)
+          .importOpening(
+            TreasuryOpeningCommand(
+              commandId: 'synthetic-treasury-opening',
+              sourceSha256: 'a' * 64,
+              snapshotSha256: 'b' * 64,
+              occurredAtUtc: DateTime.utc(2026, 10, 20, 8),
+              cashMinor: 100,
+              nequiMinor: 200,
+              reserveMinor: -50,
+              receivablesMinor: 80,
+              sourceMetadata: const {'source': 'synthetic'},
+            ),
+          );
+      var snapshot = await treasury.load();
+      expect(snapshot.cashMinor, 100);
+      expect(snapshot.nequiMinor, 200);
+      expect(snapshot.reserveMinor, -50);
+      expect(snapshot.receivablesMinor, 80);
+      expect(snapshot.legacyReceivablesMinor, 80);
+      expect(snapshot.totalAvailableMinor, 300);
+      expect(snapshot.movements, hasLength(3));
+      expect(
+        snapshot.movements.every(
+          (movement) => movement.documentId == result.documentId,
+        ),
+        isTrue,
+      );
+      expect(
+        snapshot.movements.every(
+          (movement) => movement.concept == 'Saldo inicial de la copia',
+        ),
+        isTrue,
+      );
+      expect(await app.database.query('sales'), isEmpty);
+      expect(await app.database.query('customer_receivables'), isEmpty);
+      expect(await app.database.query('cash_openings'), isEmpty);
+      final cash = (await option('EFECTIVO'))['cash_account_id'] as String;
+      await _journal(
+        app,
+        'later-money',
+        cash,
+        25,
+        at: DateTime.utc(2026, 10, 20, 12),
+      );
+      snapshot = await treasury.load();
+      expect(snapshot.cashMinor, 125);
+      expect(snapshot.totalAvailableMinor, 325);
+      expect(snapshot.receivablesMinor, 80);
+      final stockIntake = SqliteStockIntakeStore(app, synthetic: true);
+      final options = (await stockIntake.load()).paymentOptions;
+      expect(
+        options.every(
+          (option) => option.openingRecorded && !option.canRecordOpening,
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test(
     'defaults create identities only and replay never invents funds',
@@ -104,7 +171,7 @@ void main() {
       expect(snapshot.movements, isEmpty);
       expect(() => snapshot.accounts.clear(), throwsUnsupportedError);
       expect(() => snapshot.movements.clear(), throwsUnsupportedError);
-      expect((await app.readHealth())['schemaVersion'], 8);
+      expect((await app.readHealth())['schemaVersion'], DatabaseSchema.version);
     },
   );
 

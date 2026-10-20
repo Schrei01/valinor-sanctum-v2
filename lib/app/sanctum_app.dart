@@ -351,6 +351,8 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                         key: ObjectKey(_treasury),
                                         controller: _treasury!,
                                         profile: controller.profile!,
+                                        legacyStore:
+                                            controller.legacyTreasuryStore,
                                         supplierPaymentsPanel:
                                             _supplierPayments == null
                                             ? null
@@ -573,7 +575,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.10.0',
+                    'Versión 0.11.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

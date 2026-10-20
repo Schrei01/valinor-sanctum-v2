@@ -109,6 +109,17 @@ WHERE q.id=?
         );
       }
       final account = options.single;
+      if ((await txn.rawQuery(
+        '''
+SELECT document_id FROM treasury_openings
+WHERE cash_account_id=? OR nequi_account_id=? OR reserve_account_id=? LIMIT 1
+''',
+        [account['id'], account['id'], account['id']],
+      )).isNotEmpty) {
+        throw const StockIntakeValidationException(
+          'Esta cuenta ya tiene un saldo inicial importado de la copia.',
+        );
+      }
       if ((await txn.query(
         'cash_openings',
         where: 'cash_account_id=?',
