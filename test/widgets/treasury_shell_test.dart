@@ -7,6 +7,7 @@ import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dar
 import 'package:valinor_sanctum_2/features/workspace/domain/workspace_store.dart';
 
 import '../support/fake_treasury_store.dart';
+import '../support/fake_treasury_operation_store.dart';
 import '../support/fake_workspace_store.dart';
 
 void main() {
@@ -49,12 +50,14 @@ void main() {
       movements: const [],
     );
     final treasury = FakeTreasuryStore(snapshot: snapshot(10000));
+    final operations = FakeTreasuryOperationStore();
     final controller = WorkspaceController(
       openSession: () async => WorkspaceSession(
         store: workspace,
         databasePath: 'perfil-sintetico/sanctum2.sqlite3',
         profileId: 'test',
         treasuryStore: treasury,
+        treasuryOperationStore: operations,
       ),
     );
     await controller.initialize();
@@ -64,6 +67,8 @@ void main() {
     await tester.tap(find.text('Tesorería'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('treasury-balance-cash')), findsOneWidget);
+    expect(find.byKey(const Key('treasury-register-expense')), findsOneWidget);
+    expect(find.byKey(const Key('treasury-transfer')), findsOneWidget);
     expect(
       tester.widget<Text>(find.byKey(const Key('treasury-amount-total'))).data,
       'COP 150,00',
@@ -72,9 +77,11 @@ void main() {
     await tester.pumpAndSettle();
     treasury.snapshot = snapshot(20000);
     final previousLoads = treasury.loadCalls;
+    final previousOperationLoads = operations.loadCalls;
     await tester.tap(find.text('Tesorería'));
     await tester.pumpAndSettle();
     expect(treasury.loadCalls, greaterThan(previousLoads));
+    expect(operations.loadCalls, greaterThan(previousOperationLoads));
     expect(
       tester.widget<Text>(find.byKey(const Key('treasury-amount-total'))).data,
       'COP 250,00',

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 9;
+  static const int version = 10;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -44,6 +44,10 @@ abstract final class DatabaseSchema {
   static String get migration9Checksum =>
       checksum(migration9Statements.join('\n;\n'));
 
+  static const String migration10Name = 'treasury_operations_v10';
+  static String get migration10Checksum =>
+      checksum(migration10Statements.join('\n;\n'));
+
   static String nameForVersion(int version) => switch (version) {
     1 => migrationName,
     2 => migration2Name,
@@ -54,6 +58,7 @@ abstract final class DatabaseSchema {
     7 => migration7Name,
     8 => migration8Name,
     9 => migration9Name,
+    10 => migration10Name,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -67,6 +72,7 @@ abstract final class DatabaseSchema {
     7 => migration7Checksum,
     8 => migration8Checksum,
     9 => migration9Checksum,
+    10 => migration10Checksum,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -2567,6 +2573,425 @@ END
 ''',
     ..._freezeTreasuryOpeningFacts(),
   ]);
+
+  /// Operating expenses and internal transfers have durable input and a single
+  /// immutable document. Neither operation creates inventory or a payable.
+  static final List<String> migration10Statements = List<String>.unmodifiable([
+    '''
+CREATE TABLE treasury_operation_requests (
+  command_id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(command_id)) > 0),
+  canonical_payload TEXT NOT NULL CHECK (json_valid(canonical_payload)),
+  occurred_at_utc TEXT NOT NULL CHECK (${_collectionUtc('occurred_at_utc')}),
+  prepared_at_utc TEXT NOT NULL CHECK (${_collectionUtc('prepared_at_utc')}),
+  status TEXT NOT NULL CHECK (status IN ('prepared','executing','confirmed','rejected','discarded')),
+  rejection_reason TEXT,
+  CHECK ((status IN ('prepared','executing','confirmed') AND rejection_reason IS NULL)
+    OR (status IN ('rejected','discarded') AND rejection_reason IS NOT NULL AND length(trim(rejection_reason)) > 0))
+)
+''',
+    '''
+CREATE TABLE treasury_operations (
+  document_id TEXT PRIMARY KEY NOT NULL REFERENCES business_documents(id) ON DELETE RESTRICT,
+  request_id TEXT NOT NULL UNIQUE REFERENCES treasury_operation_requests(command_id) ON DELETE RESTRICT,
+  kind TEXT NOT NULL CHECK (kind IN ('expense','transfer')),
+  source_account_id TEXT NOT NULL REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  destination_account_id TEXT REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  source_account_name_snapshot TEXT NOT NULL CHECK (length(trim(source_account_name_snapshot)) BETWEEN 1 AND 160),
+  destination_account_name_snapshot TEXT CHECK (destination_account_name_snapshot IS NULL OR length(trim(destination_account_name_snapshot)) BETWEEN 1 AND 160),
+  amount_minor INTEGER NOT NULL CHECK (typeof(amount_minor)='integer' AND amount_minor > 0),
+  reason TEXT NOT NULL CHECK (length(trim(reason)) BETWEEN 1 AND 160),
+  note TEXT CHECK (note IS NULL OR length(trim(note)) BETWEEN 1 AND 500),
+  expense_account_id TEXT REFERENCES ledger_accounts(id) ON DELETE RESTRICT,
+  CHECK ((kind='expense' AND destination_account_id IS NULL AND destination_account_name_snapshot IS NULL
+      AND expense_account_id='treasury:operating-expenses')
+    OR (kind='transfer' AND destination_account_id IS NOT NULL AND destination_account_name_snapshot IS NOT NULL
+      AND source_account_id <> destination_account_id AND expense_account_id IS NULL))
+)
+''',
+    'CREATE INDEX idx_treasury_operations_source ON treasury_operations(source_account_id)',
+    'CREATE INDEX idx_treasury_operations_destination ON treasury_operations(destination_account_id)',
+    '''
+CREATE VIEW treasury_operation_expected_lines AS
+SELECT operation.document_id, cash.ledger_account_id AS account_id,
+  0 AS debit_minor, operation.amount_minor AS credit_minor
+FROM treasury_operations operation JOIN cash_accounts cash ON cash.id=operation.source_account_id
+UNION ALL
+SELECT operation.document_id, operation.expense_account_id, operation.amount_minor, 0
+FROM treasury_operations operation WHERE operation.kind='expense'
+UNION ALL
+SELECT operation.document_id, cash.ledger_account_id, operation.amount_minor, 0
+FROM treasury_operations operation JOIN cash_accounts cash ON cash.id=operation.destination_account_id
+WHERE operation.kind='transfer'
+''',
+    '''
+CREATE TRIGGER treasury_operation_requests_validate_insert
+BEFORE INSERT ON treasury_operation_requests
+BEGIN
+  SELECT CASE WHEN NEW.status <> 'prepared'
+    OR EXISTS (SELECT 1 FROM treasury_operation_requests WHERE command_id=NEW.command_id)
+    OR EXISTS (SELECT 1 FROM command_log WHERE id=NEW.command_id)
+    OR EXISTS (SELECT 1 FROM sale_confirmations WHERE command_id=NEW.command_id)
+    OR EXISTS (SELECT 1 FROM collection_requests WHERE command_id=NEW.command_id)
+    OR EXISTS (SELECT 1 FROM supplier_payment_requests WHERE command_id=NEW.command_id)
+    OR EXISTS (SELECT 1 FROM quick_sale_requests WHERE NEW.command_id IN (command_id,sale_command_id,collection_command_id))
+    OR EXISTS (SELECT 1 FROM paid_purchase_requests WHERE NEW.command_id IN (command_id,purchase_command_id,payment_command_id))
+    THEN RAISE(ABORT, 'Create a unique prepared treasury operation') END;
+  SELECT CASE WHEN json_type(NEW.canonical_payload) IS NOT 'object'
+    OR json_extract(NEW.canonical_payload,'\$.version') IS NOT 1
+    OR json_extract(NEW.canonical_payload,'\$.commandId') IS NOT NEW.command_id
+    OR json_extract(NEW.canonical_payload,'\$.occurredAtUtc') IS NOT NEW.occurred_at_utc
+    OR json_extract(NEW.canonical_payload,'\$.kind') NOT IN ('expense','transfer')
+    OR json_type(NEW.canonical_payload,'\$.kind') IS NOT 'text'
+    OR json_type(NEW.canonical_payload,'\$.amountMinor') IS NOT 'integer'
+    OR json_extract(NEW.canonical_payload,'\$.amountMinor') <= 0
+    OR json_type(NEW.canonical_payload,'\$.reason') IS NOT 'text'
+    OR length(trim(json_extract(NEW.canonical_payload,'\$.reason'))) NOT BETWEEN 1 AND 160
+    OR json_type(NEW.canonical_payload,'\$.note') NOT IN ('null','text')
+    OR (json_type(NEW.canonical_payload,'\$.note')='text'
+      AND length(trim(json_extract(NEW.canonical_payload,'\$.note'))) NOT BETWEEN 1 AND 500)
+    OR NOT EXISTS (SELECT 1 FROM app_profile profile
+      WHERE json_extract(NEW.canonical_payload,'\$.profileId') IS profile.profile_id
+        AND json_extract(NEW.canonical_payload,'\$.currency') IS profile.currency_code
+        AND json_extract(NEW.canonical_payload,'\$.scale') IS profile.money_scale)
+    OR NOT EXISTS (SELECT 1 FROM cash_accounts cash JOIN ledger_accounts ledger ON ledger.id=cash.ledger_account_id
+      WHERE cash.id=json_extract(NEW.canonical_payload,'\$.sourceAccountId')
+        AND cash.ledger_account_id=json_extract(NEW.canonical_payload,'\$.sourceLedgerAccountId')
+        AND cash.name=json_extract(NEW.canonical_payload,'\$.sourceAccountName')
+        AND cash.is_active=1 AND cash.is_available=1 AND ledger.is_active=1 AND ledger.class='asset' AND ledger.role='cash')
+    THEN RAISE(ABORT, 'Treasury input must capture its exact monetary profile and active source account') END;
+  SELECT CASE WHEN (json_extract(NEW.canonical_payload,'\$.kind')='expense'
+      AND (json_type(NEW.canonical_payload,'\$.destinationAccountId') IS NOT 'null'
+        OR json_type(NEW.canonical_payload,'\$.destinationLedgerAccountId') IS NOT 'null'
+        OR json_type(NEW.canonical_payload,'\$.destinationAccountName') IS NOT 'null'
+        OR json_extract(NEW.canonical_payload,'\$.reason') NOT IN ('Arriendo','Aseo','Servicios','Otro')
+        OR NOT EXISTS (SELECT 1 FROM quick_payment_options option
+          WHERE option.id IN ('quick-default:EFECTIVO','quick-default:NEQUI')
+            AND option.cash_account_id=json_extract(NEW.canonical_payload,'\$.sourceAccountId'))))
+    OR (json_extract(NEW.canonical_payload,'\$.kind')='transfer'
+      AND (json_extract(NEW.canonical_payload,'\$.reason') IS NOT 'Transferencia'
+        OR json_extract(NEW.canonical_payload,'\$.destinationAccountId') IS json_extract(NEW.canonical_payload,'\$.sourceAccountId')
+        OR NOT EXISTS (SELECT 1 FROM cash_accounts cash JOIN ledger_accounts ledger ON ledger.id=cash.ledger_account_id
+          WHERE cash.id=json_extract(NEW.canonical_payload,'\$.destinationAccountId')
+            AND cash.ledger_account_id=json_extract(NEW.canonical_payload,'\$.destinationLedgerAccountId')
+            AND cash.name=json_extract(NEW.canonical_payload,'\$.destinationAccountName')
+            AND cash.is_active=1 AND cash.is_available=1 AND ledger.is_active=1 AND ledger.class='asset' AND ledger.role='cash')))
+    THEN RAISE(ABORT, 'A transfer requires a distinct active destination; an expense has no destination') END;
+END
+''',
+    '''
+CREATE TRIGGER treasury_operation_requests_validate_update
+BEFORE UPDATE ON treasury_operation_requests
+BEGIN
+  SELECT CASE WHEN NEW.command_id <> OLD.command_id OR NEW.canonical_payload <> OLD.canonical_payload
+    OR NEW.occurred_at_utc <> OLD.occurred_at_utc OR NEW.prepared_at_utc <> OLD.prepared_at_utc
+    THEN RAISE(ABORT, 'Prepared treasury input is immutable') END;
+  SELECT CASE WHEN NOT ((OLD.status='prepared' AND NEW.status IN ('executing','rejected'))
+    OR (OLD.status='executing' AND NEW.status='confirmed') OR (OLD.status='rejected' AND NEW.status='discarded'))
+    THEN RAISE(ABORT, 'Invalid treasury operation request transition') END;
+  SELECT CASE WHEN NEW.status IN ('rejected','discarded') AND
+    (EXISTS (SELECT 1 FROM command_log WHERE id=OLD.command_id)
+      OR EXISTS (SELECT 1 FROM treasury_operations WHERE request_id=OLD.command_id))
+    THEN RAISE(ABORT, 'A committed treasury operation cannot be rejected') END;
+  SELECT CASE WHEN NEW.status='discarded' AND NEW.rejection_reason IS NOT OLD.rejection_reason
+    THEN RAISE(ABORT, 'Treasury rejection reasons are historical') END;
+  SELECT CASE WHEN NEW.status='confirmed' AND NOT EXISTS (
+    SELECT 1 FROM treasury_operations operation
+    JOIN business_documents document ON document.id=operation.document_id AND document.status='posted'
+    JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='posted'
+    JOIN command_log command ON command.id=operation.request_id
+    WHERE operation.request_id=OLD.command_id AND document.command_id=OLD.command_id
+      AND command.command_type='treasury_operation' AND command.response_version=1
+      AND json_extract(command.response_json,'\$.canonicalPayload') IS OLD.canonical_payload
+      AND json_extract(command.response_json,'\$.result.documentId') IS operation.document_id)
+    THEN RAISE(ABORT, 'A treasury operation requires its exact posted document and journal') END;
+END
+''',
+    '''
+CREATE TRIGGER treasury_operation_requests_no_delete
+BEFORE DELETE ON treasury_operation_requests
+BEGIN SELECT RAISE(ABORT, 'Durable treasury requests cannot be deleted'); END
+''',
+    '''
+CREATE TRIGGER treasury_operation_commands_validate_insert
+BEFORE INSERT ON command_log
+WHEN NEW.command_type='treasury_operation' OR EXISTS (SELECT 1 FROM treasury_operation_requests WHERE command_id=NEW.id)
+BEGIN
+  SELECT CASE WHEN NEW.command_type <> 'treasury_operation' OR NEW.response_version <> 1
+    OR NEW.authorization_policy_version <> 'development-single-user-v1'
+    OR NOT EXISTS (SELECT 1 FROM treasury_operation_requests request WHERE request.command_id=NEW.id
+      AND request.status='executing' AND json_valid(NEW.response_json)
+      AND json_extract(NEW.response_json,'\$.canonicalPayload') IS request.canonical_payload
+      AND json_extract(NEW.response_json,'\$.result.commandId') IS request.command_id
+      AND json_extract(NEW.response_json,'\$.result.kind') IS json_extract(request.canonical_payload,'\$.kind')
+      AND json_extract(NEW.response_json,'\$.result.amountMinor') IS json_extract(request.canonical_payload,'\$.amountMinor')
+      AND json_type(NEW.response_json,'\$.result.documentId')='text'
+      AND length(trim(json_extract(NEW.response_json,'\$.result.documentId'))) > 0)
+    THEN RAISE(ABORT, 'A treasury command identifier is reserved for its exact executing request') END;
+END
+''',
+    for (final table in [
+      'sale_confirmations',
+      'collection_requests',
+      'supplier_payment_requests',
+      'quick_sale_requests',
+      'paid_purchase_requests',
+    ])
+      '''
+CREATE TRIGGER ${table}_respect_treasury_operation_ids
+BEFORE INSERT ON $table
+WHEN EXISTS (SELECT 1 FROM treasury_operation_requests request WHERE request.command_id IN
+  (NEW.command_id${table == 'quick_sale_requests'
+          ? ',NEW.sale_command_id,NEW.collection_command_id'
+          : table == 'paid_purchase_requests'
+          ? ',NEW.purchase_command_id,NEW.payment_command_id'
+          : ''}))
+BEGIN SELECT RAISE(ABORT, 'Treasury operation identifiers cannot be reused by another operation'); END
+''',
+    '''
+CREATE TRIGGER treasury_operation_documents_validate_insert
+BEFORE INSERT ON business_documents
+WHEN NEW.type IN ('cash_expense','cash_transfer')
+  OR EXISTS (SELECT 1 FROM treasury_operation_requests WHERE command_id=NEW.command_id)
+BEGIN
+  SELECT CASE WHEN NEW.status <> 'draft' OR NEW.command_sequence <> 0
+    OR NEW.source_kind NOT IN ('native','synthetic') OR NEW.date_quality <> 'documented'
+    OR NEW.original_document_id IS NOT NULL
+    OR NOT EXISTS (SELECT 1 FROM treasury_operation_requests request
+      JOIN command_log command ON command.id=request.command_id
+      WHERE request.command_id=NEW.command_id AND request.status='executing'
+        AND NEW.type=CASE json_extract(request.canonical_payload,'\$.kind') WHEN 'expense' THEN 'cash_expense' ELSE 'cash_transfer' END
+        AND NEW.occurred_at_utc=request.occurred_at_utc
+        AND NEW.profile_id=json_extract(request.canonical_payload,'\$.profileId')
+        AND command.command_type='treasury_operation' AND command.actor_id=NEW.actor_id
+        AND json_extract(command.response_json,'\$.result.documentId') IS NEW.id)
+    THEN RAISE(ABORT, 'Create the exact treasury operation document as draft') END;
+END
+''',
+    '''
+CREATE TRIGGER treasury_operations_validate_insert
+BEFORE INSERT ON treasury_operations
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM treasury_operations WHERE document_id=NEW.document_id OR request_id=NEW.request_id)
+    THEN RAISE(ABORT, 'Treasury operation history cannot be replaced') END;
+  SELECT CASE WHEN NOT (${_treasuryOperationMatches('NEW', requireDraft: true)})
+    THEN RAISE(ABORT, 'Treasury operation must match its immutable input and draft document') END;
+END
+''',
+    for (final action in ['UPDATE', 'DELETE'])
+      '''
+CREATE TRIGGER treasury_operations_no_${action.toLowerCase()}
+BEFORE $action ON treasury_operations
+BEGIN SELECT RAISE(ABORT, 'Treasury operation history is immutable'); END
+''',
+    '''
+CREATE TRIGGER treasury_operations_validate_document_posting
+BEFORE UPDATE OF status ON business_documents
+WHEN OLD.status='draft' AND NEW.status='posted' AND (NEW.type IN ('cash_expense','cash_transfer')
+  OR EXISTS (SELECT 1 FROM treasury_operations WHERE document_id=NEW.id)
+  OR EXISTS (SELECT 1 FROM treasury_operation_requests WHERE command_id=NEW.command_id))
+BEGIN
+  SELECT CASE WHEN NEW.id <> OLD.id OR NEW.command_id <> OLD.command_id OR NEW.type <> OLD.type
+    OR NEW.command_sequence <> OLD.command_sequence OR NEW.profile_id <> OLD.profile_id OR NEW.actor_id <> OLD.actor_id
+    OR NEW.occurred_at_utc IS NOT OLD.occurred_at_utc OR NEW.business_date IS NOT OLD.business_date
+    OR NEW.source_kind <> OLD.source_kind OR NEW.date_quality <> OLD.date_quality
+    OR NEW.reason IS NOT OLD.reason OR NEW.recorded_at_utc <> OLD.recorded_at_utc
+    OR NEW.original_document_id IS NOT OLD.original_document_id
+    THEN RAISE(ABORT, 'Posting cannot rewrite a treasury operation document') END;
+  ${_validateTreasuryOperationPosting('NEW.id')}
+END
+''',
+    '''
+CREATE TRIGGER treasury_operations_validate_entry_posting
+BEFORE UPDATE OF status ON journal_entries
+WHEN OLD.status='draft' AND NEW.status='posted' AND
+  (EXISTS (SELECT 1 FROM treasury_operations WHERE document_id IN (OLD.document_id,NEW.document_id))
+    OR EXISTS (SELECT 1 FROM business_documents WHERE id IN (OLD.document_id,NEW.document_id) AND type IN ('cash_expense','cash_transfer')))
+BEGIN
+  SELECT CASE WHEN NEW.id <> OLD.id OR NEW.document_id <> OLD.document_id
+    OR NEW.cost_completeness <> 'not_applicable' OR NEW.reversal_of_id IS NOT NULL
+    THEN RAISE(ABORT, 'Posting cannot rewrite a treasury operation journal') END;
+  ${_validateTreasuryOperationPosting('NEW.document_id')}
+END
+''',
+    ..._freezeTreasuryOperationJournal(),
+  ]);
+
+  static String _treasuryOperationMatches(
+    String fact, {
+    bool requireDraft = false,
+  }) =>
+      '''EXISTS (
+    SELECT 1 FROM treasury_operation_requests request
+    JOIN business_documents document ON document.id=$fact.document_id
+    JOIN command_log command ON command.id=request.command_id
+    JOIN app_profile profile ON profile.profile_id=document.profile_id
+    JOIN cash_accounts source ON source.id=$fact.source_account_id
+    JOIN ledger_accounts source_ledger ON source_ledger.id=source.ledger_account_id
+    WHERE request.command_id=$fact.request_id AND request.status='executing'
+      ${requireDraft ? "AND document.status='draft'" : ''}
+      AND document.command_id=request.command_id AND document.command_sequence=0
+      AND document.recorded_at_utc IS command.committed_at_utc
+      AND document.type=CASE $fact.kind WHEN 'expense' THEN 'cash_expense' ELSE 'cash_transfer' END
+      AND document.source_kind IN ('native','synthetic') AND document.date_quality='documented'
+      AND document.original_document_id IS NULL
+      AND document.occurred_at_utc=request.occurred_at_utc
+      AND document.reason IS $fact.reason
+      AND date(document.occurred_at_utc,'-5 hours') IS document.business_date
+      AND command.command_type='treasury_operation' AND command.actor_id=document.actor_id
+      AND command.authorization_policy_version='development-single-user-v1'
+      AND command.response_version=1 AND json_valid(command.response_json)
+      AND json_extract(command.response_json,'\$.canonicalPayload') IS request.canonical_payload
+      AND json_extract(command.response_json,'\$.result.documentId') IS document.id
+      AND json_extract(request.canonical_payload,'\$.profileId') IS profile.profile_id
+      AND json_extract(request.canonical_payload,'\$.currency') IS profile.currency_code
+      AND json_extract(request.canonical_payload,'\$.scale') IS profile.money_scale
+      AND json_extract(request.canonical_payload,'\$.kind') IS $fact.kind
+      AND json_extract(request.canonical_payload,'\$.sourceAccountId') IS $fact.source_account_id
+      AND json_extract(request.canonical_payload,'\$.sourceLedgerAccountId') IS source.ledger_account_id
+      AND json_extract(request.canonical_payload,'\$.sourceAccountName') IS $fact.source_account_name_snapshot
+      AND json_extract(request.canonical_payload,'\$.destinationAccountId') IS $fact.destination_account_id
+      AND json_extract(request.canonical_payload,'\$.destinationAccountName') IS $fact.destination_account_name_snapshot
+      AND json_extract(request.canonical_payload,'\$.amountMinor') IS $fact.amount_minor
+      AND json_extract(request.canonical_payload,'\$.reason') IS $fact.reason
+      AND json_extract(request.canonical_payload,'\$.note') IS $fact.note
+      AND source.is_active=1 AND source.is_available=1 AND source_ledger.is_active=1
+      AND source_ledger.class='asset' AND source_ledger.role='cash'
+      AND (($fact.kind='expense' AND $fact.destination_account_id IS NULL
+          AND $fact.expense_account_id='treasury:operating-expenses'
+          AND $fact.reason IN ('Arriendo','Aseo','Servicios','Otro')
+          AND EXISTS (SELECT 1 FROM quick_payment_options option
+            WHERE option.id IN ('quick-default:EFECTIVO','quick-default:NEQUI')
+              AND option.cash_account_id=$fact.source_account_id)
+          AND EXISTS (SELECT 1 FROM ledger_accounts expense WHERE expense.id=$fact.expense_account_id
+            AND expense.code='TREASURY:EXPENSE' AND expense.class='expense' AND expense.role='operating_expense' AND expense.is_active=1))
+        OR ($fact.kind='transfer' AND $fact.expense_account_id IS NULL AND $fact.reason='Transferencia'
+          AND $fact.destination_account_id <> $fact.source_account_id
+          AND EXISTS (SELECT 1 FROM cash_accounts destination JOIN ledger_accounts ledger ON ledger.id=destination.ledger_account_id
+            WHERE destination.id=$fact.destination_account_id AND destination.is_active=1 AND destination.is_available=1
+              AND ledger.id=json_extract(request.canonical_payload,'\$.destinationLedgerAccountId')
+              AND ledger.is_active=1 AND ledger.class='asset' AND ledger.role='cash'))))''';
+
+  static String _validateTreasuryOperationPosting(String documentId) =>
+      '''
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM treasury_operations operation WHERE operation.document_id=$documentId
+    AND ${_treasuryOperationMatches('operation')})
+    THEN RAISE(ABORT, 'Treasury posting requires its exact immutable operation and active accounts') END;
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM journal_entries entry WHERE entry.document_id=$documentId
+      AND entry.cost_completeness='not_applicable' AND entry.reversal_of_id IS NULL)
+    OR (SELECT count(*) FROM journal_lines line JOIN journal_entries entry ON entry.id=line.entry_id
+      WHERE entry.document_id=$documentId) <> 2
+    OR EXISTS (SELECT 1 FROM treasury_operation_expected_lines expected WHERE expected.document_id=$documentId AND
+      (SELECT count(*) FROM journal_lines line JOIN journal_entries entry ON entry.id=line.entry_id
+        WHERE entry.document_id=$documentId AND line.account_id=expected.account_id
+          AND line.debit_minor=expected.debit_minor AND line.credit_minor=expected.credit_minor) <> 1)
+    THEN RAISE(ABORT, 'Treasury journal must contain its two exact expense or transfer lines') END;
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM treasury_operations operation
+    JOIN business_documents incoming ON incoming.id=operation.document_id
+    JOIN cash_accounts cash ON cash.id IN (operation.source_account_id,operation.destination_account_id)
+    JOIN journal_lines line ON line.account_id=cash.ledger_account_id
+    JOIN journal_entries entry ON entry.id=line.entry_id
+    JOIN business_documents previous ON previous.id=entry.document_id
+    WHERE operation.document_id=$documentId AND previous.id <> incoming.id AND previous.status='posted'
+      AND (entry.status='posted' OR previous.type IN ('cash_expense','cash_transfer'))
+      AND ${_utcSortKey('previous.occurred_at_utc')} > ${_utcSortKey('incoming.occurred_at_utc')})
+    THEN RAISE(ABORT, 'Treasury operations cannot precede money movements of either account') END;
+  SELECT CASE WHEN ${_treasuryOperationMoneyInvalid(documentId)}
+    THEN RAISE(ABORT, 'Treasury operation requires sufficient source funds and representable balances') END;
+''';
+
+  // Exact chronological addition avoids overflow of gross historical SUMs.
+  // Posted documents of this migration reserve funds before journal posting.
+  static String _treasuryOperationMoneyInvalid(String documentId) =>
+      '''EXISTS (
+    WITH RECURSIVE accounts AS (
+      SELECT cash.id,cash.ledger_account_id,operation.source_account_id,operation.amount_minor
+      FROM treasury_operations operation JOIN cash_accounts cash
+        ON cash.id IN (operation.source_account_id,operation.destination_account_id)
+      WHERE operation.document_id=$documentId
+    ), ordered AS (
+      SELECT account.id,line.debit_minor,line.credit_minor,
+        row_number() OVER (PARTITION BY account.id ORDER BY
+          ${_utcSortKey('document.occurred_at_utc')},document.recorded_at_utc,document.id,line.sequence) AS n
+      FROM accounts account JOIN journal_lines line ON line.account_id=account.ledger_account_id
+      JOIN journal_entries entry ON entry.id=line.entry_id
+      JOIN business_documents document ON document.id=entry.document_id
+      WHERE document.id <> $documentId AND document.status='posted'
+        AND (entry.status='posted' OR document.type IN ('cash_expense','cash_transfer'))
+    ), balances(id,n,balance,valid) AS (
+      SELECT id,0,0,1 FROM accounts
+      UNION ALL
+      SELECT prior.id,line.n,
+        CASE WHEN prior.valid=0 THEN 0 WHEN line.debit_minor > 0 THEN
+          CASE WHEN prior.balance <= 9223372036854775807-line.debit_minor THEN prior.balance+line.debit_minor ELSE 0 END
+          ELSE CASE WHEN prior.balance >= -9223372036854775808+line.credit_minor THEN prior.balance-line.credit_minor ELSE 0 END END,
+        CASE WHEN prior.valid=1 AND ((line.debit_minor > 0 AND prior.balance <= 9223372036854775807-line.debit_minor)
+          OR (line.credit_minor > 0 AND prior.balance >= -9223372036854775808+line.credit_minor)) THEN 1 ELSE 0 END
+      FROM balances prior JOIN ordered line ON line.id=prior.id AND line.n=prior.n+1
+    ) SELECT 1 FROM accounts account WHERE NOT EXISTS (
+      SELECT 1 FROM balances final WHERE final.id=account.id AND final.valid=1
+        AND final.n=(SELECT count(*) FROM ordered WHERE id=account.id)
+        AND ((account.id=account.source_account_id AND final.balance >= account.amount_minor)
+          OR (account.id <> account.source_account_id AND final.balance <= 9223372036854775807-account.amount_minor)))
+  )''';
+
+  static List<String> _freezeTreasuryOperationJournal() {
+    String frozen(String documentId) =>
+        '''EXISTS (SELECT 1 FROM business_documents document
+      JOIN treasury_operations operation ON operation.document_id=document.id
+      WHERE document.id=$documentId AND document.status <> 'draft')''';
+    String lineFrozen(String entryId) =>
+        '''EXISTS (SELECT 1 FROM journal_entries entry
+      WHERE entry.id=$entryId AND ${frozen('entry.document_id')})''';
+    return [
+      '''
+CREATE TRIGGER treasury_operation_entries_no_replace
+BEFORE INSERT ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries existing WHERE (existing.id=NEW.id OR existing.document_id=NEW.document_id)
+  AND ${frozen('existing.document_id')})
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury journals cannot be replaced'); END
+''',
+      '''
+CREATE TRIGGER treasury_operation_entries_no_conflicting_update
+BEFORE UPDATE ON journal_entries
+WHEN EXISTS (SELECT 1 FROM journal_entries existing WHERE existing.id <> OLD.id
+  AND (existing.id=NEW.id OR existing.document_id=NEW.document_id) AND ${frozen('existing.document_id')})
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury journals cannot be replaced through an update'); END
+''',
+      for (final action in ['UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER treasury_operation_entries_no_${action.toLowerCase()}
+BEFORE $action ON journal_entries
+WHEN ${frozen('OLD.document_id')}
+  ${action == 'UPDATE' ? "AND NOT (OLD.status='draft' AND NEW.status='posted' AND NEW.id=OLD.id AND NEW.document_id=OLD.document_id AND NEW.cost_completeness=OLD.cost_completeness AND NEW.reversal_of_id IS OLD.reversal_of_id)" : ''}
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury documents retain their exact journal'); END
+''',
+      '''
+CREATE TRIGGER treasury_operation_lines_no_replace
+BEFORE INSERT ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines existing WHERE
+  (existing.id=NEW.id OR (existing.entry_id=NEW.entry_id AND existing.sequence=NEW.sequence)) AND ${lineFrozen('existing.entry_id')})
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury lines cannot be replaced'); END
+''',
+      '''
+CREATE TRIGGER treasury_operation_lines_no_conflicting_update
+BEFORE UPDATE ON journal_lines
+WHEN EXISTS (SELECT 1 FROM journal_lines existing WHERE existing.id <> OLD.id
+  AND (existing.id=NEW.id OR (existing.entry_id=NEW.entry_id AND existing.sequence=NEW.sequence)) AND ${lineFrozen('existing.entry_id')})
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury lines cannot be replaced through an update'); END
+''',
+      for (final action in ['INSERT', 'UPDATE', 'DELETE'])
+        '''
+CREATE TRIGGER treasury_operation_lines_no_${action.toLowerCase()}
+BEFORE $action ON journal_lines
+WHEN ${action == 'DELETE'
+            ? lineFrozen('OLD.entry_id')
+            : action == 'INSERT'
+            ? lineFrozen('NEW.entry_id')
+            : '(${lineFrozen('OLD.entry_id')} OR ${lineFrozen('NEW.entry_id')})'}
+BEGIN SELECT RAISE(ABORT, 'Confirmed treasury journal lines are immutable'); END
+''',
+    ];
+  }
 
   static String _treasuryAwareEntryPostingTrigger() {
     final previous = migration8Statements.singleWhere(

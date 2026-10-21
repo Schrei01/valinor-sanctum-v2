@@ -114,6 +114,10 @@ SELECT l.debit_minor,l.credit_minor,c.id cash_account_id,c.name account_name,
  d.id document_id,d.occurred_at_utc,d.type,
  col.sale_label_snapshot,col.customer_name_snapshot,
  pay.supplier_name_snapshot,
+ op.kind treasury_kind,op.source_account_id treasury_source_account_id,
+ op.source_account_name_snapshot treasury_source_name,
+ op.destination_account_name_snapshot treasury_destination_name,
+ op.reason treasury_reason,op.note treasury_note,
  EXISTS(SELECT 1 FROM quick_sale_line_payments q
    WHERE q.collection_document_id=d.id) is_quick_sale,
  EXISTS(SELECT 1 FROM paid_purchase_entries p
@@ -125,6 +129,7 @@ JOIN cash_accounts c ON c.ledger_account_id=l.account_id
 JOIN ledger_accounts a ON a.id=l.account_id AND a.class='asset' AND a.role='cash'
 LEFT JOIN collections col ON col.document_id=d.id
 LEFT JOIN supplier_payments pay ON pay.document_id=d.id
+LEFT JOIN treasury_operations op ON op.document_id=d.id
 ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
 ''');
     final balances = <String, BigInt>{};
@@ -257,6 +262,11 @@ class _MovementAccumulator {
     final concept = switch (row['type']) {
       'cash_opening' => 'Saldo inicial',
       'treasury_opening' => 'Saldo inicial de la copia',
+      'cash_expense' => 'Gasto: ${row['treasury_reason']}${_note()}',
+      'cash_transfer' =>
+        row['treasury_source_account_id'] == account
+            ? 'Transferencia a: ${row['treasury_destination_name']}${_note()}'
+            : 'Transferencia desde: ${row['treasury_source_name']}${_note()}',
       'customer_collection' when row['is_quick_sale'] == 1 =>
         'Venta: ${row['sale_label_snapshot']}',
       'customer_collection' =>
@@ -276,5 +286,10 @@ class _MovementAccumulator {
       concept: concept,
       amountMinor: treasuryCheckedMinor(amount, 'Movimiento de la cuenta'),
     );
+  }
+
+  String _note() {
+    final note = row['treasury_note'] as String?;
+    return note == null || note.isEmpty ? '' : ' · $note';
   }
 }

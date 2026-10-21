@@ -13,6 +13,7 @@ import '../features/quick_sales/application/quick_sales_controller.dart';
 import '../features/quick_sales/presentation/quick_sales_page.dart';
 import '../features/stock_intake/application/stock_intake_controller.dart';
 import '../features/treasury/application/treasury_controller.dart';
+import '../features/treasury/application/treasury_operation_controller.dart';
 import '../features/treasury/presentation/treasury_page.dart';
 
 const _forest = Color(0xFF183D35);
@@ -70,6 +71,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   QuickSalesController? _quickSales;
   StockIntakeController? _stockIntake;
   TreasuryController? _treasury;
+  TreasuryOperationController? _treasuryOperations;
   bool _supplierWasConfirming = false;
   late final AppLifecycleListener _exitListener;
 
@@ -103,6 +105,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     if (index == 4) unawaited(_collections?.load());
     if (index == 5) {
       unawaited(_treasury?.load());
+      unawaited(_treasuryOperations?.load());
       unawaited(_supplierPayments?.load());
     }
   }
@@ -124,6 +127,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     _quickSales?.dispose();
     _stockIntake?.dispose();
     _treasury?.dispose();
+    _treasuryOperations?.dispose();
     super.dispose();
   }
 
@@ -204,6 +208,20 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
         unawaited(_supplierPayments!.load());
       }
       final treasuryStore = controller.treasuryStore;
+      final treasuryOperationStore = controller.treasuryOperationStore;
+      if (!identical(_treasuryOperations?.store, treasuryOperationStore)) {
+        _treasuryOperations?.dispose();
+        _treasuryOperations = treasuryOperationStore == null
+            ? null
+            : TreasuryOperationController(store: treasuryOperationStore);
+      }
+      if (_treasuryOperations != null &&
+          controller.profile != null &&
+          _treasuryOperations!.snapshot == null &&
+          !_treasuryOperations!.loading &&
+          _treasuryOperations!.loadError == null) {
+        unawaited(_treasuryOperations!.load());
+      }
       if (!identical(_treasury?.store, treasuryStore)) {
         _treasury?.dispose();
         _treasury = treasuryStore == null
@@ -350,6 +368,8 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                     : TreasuryPage(
                                         key: ObjectKey(_treasury),
                                         controller: _treasury!,
+                                        operationController:
+                                            _treasuryOperations,
                                         profile: controller.profile!,
                                         legacyStore:
                                             controller.legacyTreasuryStore,

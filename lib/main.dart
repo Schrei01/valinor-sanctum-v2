@@ -17,6 +17,7 @@ import 'features/supplier_payments/data/sqlite_supplier_payments_store.dart';
 import 'features/quick_sales/data/sqlite_quick_sales_store.dart';
 import 'features/stock_intake/data/sqlite_stock_intake_store.dart';
 import 'features/treasury/data/sqlite_treasury_store.dart';
+import 'features/treasury/data/sqlite_treasury_operation_store.dart';
 import 'features/treasury/data/json_legacy_treasury_store.dart';
 
 void main() {
@@ -70,6 +71,10 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
           synthetic: config.environment == AppEnvironment.test,
         ),
         treasuryStore: SqliteTreasuryStore(database),
+        treasuryOperationStore: SqliteTreasuryOperationStore(
+          database,
+          synthetic: config.environment == AppEnvironment.test,
+        ),
         legacyTreasuryStore: treasuryOrigins.isEmpty
             ? null
             : JsonLegacyTreasuryStore(

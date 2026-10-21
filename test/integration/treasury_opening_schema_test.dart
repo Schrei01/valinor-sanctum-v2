@@ -185,7 +185,7 @@ void main() {
   test(
     'v9 appends to the immutable released migrations without seeding financial facts',
     () async {
-      expect(DatabaseSchema.version, 9);
+      expect(DatabaseSchema.version, greaterThanOrEqualTo(9));
       expect(DatabaseSchema.migrationChecksum, 'fnv1a64:2b8aa24f7fdff6d1');
       expect(DatabaseSchema.migration2Checksum, 'fnv1a64:7c3f94396eb01ba3');
       expect(DatabaseSchema.migration3Checksum, 'fnv1a64:c719534b847edc09');

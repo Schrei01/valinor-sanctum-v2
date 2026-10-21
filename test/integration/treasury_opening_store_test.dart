@@ -609,7 +609,10 @@ BEGIN UPDATE journal_lines SET credit_minor=credit_minor+1 WHERE id=NEW.id; END
             reason: table,
           );
         }
-        expect((await migrated.readHealth())['schemaVersion'], 9);
+        expect(
+          (await migrated.readHealth())['schemaVersion'],
+          DatabaseSchema.version,
+        );
         await configure(migrated);
         final first = await SqliteTreasuryOpeningStore(
           migrated,

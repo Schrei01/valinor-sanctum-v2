@@ -7,6 +7,7 @@ import '../../supplier_payments/domain/supplier_payments_store.dart';
 import '../../quick_sales/domain/quick_sales_store.dart';
 import '../../stock_intake/domain/stock_intake_store.dart';
 import '../../treasury/domain/treasury_store.dart';
+import '../../treasury/domain/treasury_operation_store.dart';
 import '../../treasury/domain/legacy_treasury_snapshot.dart';
 
 abstract interface class WorkspaceStore {
@@ -29,6 +30,7 @@ class WorkspaceSession {
     this.quickSalesStore,
     this.stockIntakeStore,
     this.treasuryStore,
+    this.treasuryOperationStore,
     this.legacyTreasuryStore,
   });
   final WorkspaceStore store;
@@ -42,5 +44,6 @@ class WorkspaceSession {
   final QuickSalesStore? quickSalesStore;
   final StockIntakeStore? stockIntakeStore;
   final TreasuryStore? treasuryStore;
+  final TreasuryOperationStore? treasuryOperationStore;
   final LegacyTreasuryStore? legacyTreasuryStore;
 }

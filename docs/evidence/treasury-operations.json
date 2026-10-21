@@ -1,0 +1,123 @@
+{
+  "verifiedAtUtc": "2026-10-21T03:06:07.8592213Z",
+  "version": "0.12.0+17",
+  "schemaVersion": 10,
+  "tests": {
+    "totalDistinctPassedAcrossRuns": 563,
+    "fullSuite": {
+      "passed": 562,
+      "skipped": 3,
+      "failed": 1,
+      "remainingFailure": "Historical migration test expected v9 rather than the current version; its finally cleanup masked the assertion with an open-file error."
+    },
+    "correctedMigrationCase": {
+      "passed": 1,
+      "failed": 0,
+      "test": "disk replay survives reopening and v8 migrates with an exact v8 backup",
+      "expectationUsesCurrentSchemaVersion": true
+    },
+    "newCases": {
+      "storage": 20,
+      "sqlSchema": 13,
+      "controller": 14,
+      "widgets": 10,
+      "v9BackupMigration": 1,
+      "total": 58
+    },
+    "unresolvedFailingCases": 0,
+    "analyzeClean": true,
+    "formattedModifiedDartFiles": 21,
+    "formatClean": true,
+    "independentReviewOutstandingFindings": 0
+  },
+  "behavior": {
+    "expenseSources": [
+      "Caja",
+      "Nequi"
+    ],
+    "expenseReasons": [
+      "Arriendo",
+      "Aseo",
+      "Servicios",
+      "Otro"
+    ],
+    "observationAlwaysOptional": true,
+    "transfersIncludeReserve": true,
+    "positiveExactAmounts": true,
+    "sufficientSourceFundsRequired": true,
+    "distinctTransferAccountsRequired": true,
+    "durablePreparationAndRecovery": true,
+    "atomicPosting": true,
+    "globalIdempotency": true,
+    "immutableConfirmedFacts": true,
+    "bothAccountChronologyValidated": true,
+    "availableTotalRemainsCashPlusNequi": true
+  },
+  "data": {
+    "manualV9BackupVerified": true,
+    "automaticV9BackupMatchesManual": true,
+    "finalIsolatedRehearsalVerified": true,
+    "priorTablesCompared": 46,
+    "allPriorRecordsPreserved": true,
+    "balancesUnchanged": true,
+    "inventoryAndCommercialFactsUnchanged": true,
+    "changedTables": [
+      "ledger_accounts",
+      "schema_migrations"
+    ],
+    "newTables": [
+      "treasury_operation_requests",
+      "treasury_operations"
+    ],
+    "newOperationsEmpty": true,
+    "integrityOk": true,
+    "foreignKeyViolations": 0,
+    "priorMigrationNamesAndChecksumsUnchanged": 9
+  },
+  "build": {
+    "seconds": 67.0830332,
+    "executableVersion": "0.12.0+17",
+    "appSha256": "43324DB17E6934795616C68F2548A95B16B7AC8034AFBDCBB87C026165F4F864",
+    "sanctumOverrides": false,
+    "formattedModifiedDartFiles": 21
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.12.0-windows-x64.zip",
+    "files": 17,
+    "bytes": 14735137,
+    "sha256": "1CF4D1F57BEEF29B9D5F6BCB012A657A0250E4717F55CE0149ED357E782E1CE4",
+    "allFilesMatchStableAndVersioned": true,
+    "privateDataAbsent": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.12.0/ValinorSanctum2",
+    "zipHashUnchangedAfterNativeLaunch": true
+  },
+  "native": {
+    "expenseButtonObserved": true,
+    "transferButtonObserved": true,
+    "expenseDialog": {
+      "title": true,
+      "source": true,
+      "amount": true,
+      "reason": true,
+      "optionalNote": true,
+      "cancel": true
+    },
+    "transferDialog": {
+      "title": true,
+      "source": true,
+      "destination": true,
+      "amount": true,
+      "optionalNote": true,
+      "cancel": true
+    },
+    "dialogsClosed": true,
+    "method": "Accessibility and keyboard",
+    "screenshotsCaptured": false,
+    "operationsSubmitted": false,
+    "windowLeftOpenForUser": true
+  },
+  "originalPosOpenedOrModified": false,
+  "businessOperationsPostedByAgent": false,
+  "remoteWorkflowResultInspected": false
+}

@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../inventory/presentation/inventory_widgets.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../application/treasury_controller.dart';
+import '../application/treasury_operation_controller.dart';
 import '../domain/legacy_treasury_snapshot.dart';
 import '../domain/treasury_store.dart';
 import 'legacy_treasury_history.dart';
+import 'treasury_operations_panel.dart';
 
 class TreasuryPage extends StatefulWidget {
   const TreasuryPage({
@@ -14,12 +16,14 @@ class TreasuryPage extends StatefulWidget {
     required this.profile,
     this.supplierPaymentsPanel,
     this.legacyStore,
+    this.operationController,
   });
 
   final TreasuryController controller;
   final BusinessProfile profile;
   final Widget? supplierPaymentsPanel;
   final LegacyTreasuryStore? legacyStore;
+  final TreasuryOperationController? operationController;
 
   @override
   State<TreasuryPage> createState() => _TreasuryPageState();
@@ -27,6 +31,49 @@ class TreasuryPage extends StatefulWidget {
 
 class _TreasuryPageState extends State<TreasuryPage> {
   String? _accountId;
+  bool _refreshQueued = false;
+
+  Future<void> _refresh() async {
+    await Future.wait([
+      widget.controller.load(),
+      if (widget.operationController != null)
+        widget.operationController!.load(),
+    ]);
+  }
+
+  void _operationConfirmed() {
+    if (widget.controller.loading) {
+      if (!_refreshQueued) {
+        _refreshQueued = true;
+        widget.controller.addListener(_afterCurrentLoad);
+      }
+    } else {
+      widget.controller.load();
+    }
+  }
+
+  void _afterCurrentLoad() {
+    if (widget.controller.loading) return;
+    widget.controller.removeListener(_afterCurrentLoad);
+    _refreshQueued = false;
+    if (mounted) widget.controller.load();
+  }
+
+  @override
+  void didUpdateWidget(covariant TreasuryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller && _refreshQueued) {
+      oldWidget.controller.removeListener(_afterCurrentLoad);
+      _refreshQueued = false;
+      _operationConfirmed();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_refreshQueued) widget.controller.removeListener(_afterCurrentLoad);
+    super.dispose();
+  }
 
   String _money(int value) => inventoryMoney(value, widget.profile);
 
@@ -42,9 +89,9 @@ class _TreasuryPageState extends State<TreasuryPage> {
           InventoryPageHeading(
             title: 'Tesorería',
             subtitle:
-                'Consulta el dinero de tus cuentas y los movimientos registrados por ventas, cobros y compras.',
+                'Consulta tus saldos, registra gastos y transfiere dinero entre cuentas.',
             busy: controller.loading,
-            onRefresh: controller.load,
+            onRefresh: _refresh,
           ),
           if (controller.loadError != null)
             InventoryNotice(
@@ -52,6 +99,14 @@ class _TreasuryPageState extends State<TreasuryPage> {
               text: controller.loadError!,
               onRetry: controller.loading ? null : controller.load,
             ),
+          if (widget.operationController != null) ...[
+            TreasuryOperationsPanel(
+              controller: widget.operationController!,
+              profile: widget.profile,
+              onConfirmed: _operationConfirmed,
+            ),
+            const SizedBox(height: 24),
+          ],
           if (data == null) ...[
             if (controller.loading)
               const Padding(
