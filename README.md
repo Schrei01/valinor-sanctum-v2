@@ -61,6 +61,7 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 34. [Transferencia en Compras 0.13.1 — alcance sustituido por 0.13.2](docs/34-transferencia-compras.md).
 35. [Nombres de pago: Nequi en Compras y Transferencia en Ventas 0.13.2](docs/35-nombres-pago-ventas.md).
 36. [Eventos vacío y categorías de Compras 0.14.0](docs/36-eventos.md).
+37. [Requerimientos de la sección Eventos: acuerdos y pendientes](docs/37-requerimientos-eventos.md).
 
 ## Decisiones aprobadas
 
