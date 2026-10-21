@@ -90,7 +90,7 @@ Valinor Sanctum 2.0 - Versión de desarrollo
 Extrae la carpeta completa y abre valinor_sanctum_2.exe.
 Conserva las DLL y la carpeta data junto al ejecutable.
 Configura tu perfil. En Compras ingresa nombre, costo unitario, PVP, proveedor,
-categoría, SKU opcional y cantidad. Puedes crear el producto o reponer uno existente.
+categoría Comestible o Artículo, SKU opcional y cantidad. Puedes crear el producto o reponer uno existente.
 Al elegir un producto se completan SKU, categoría, PVP, proveedor y último costo
 conocido. Puedes modificarlos antes de ingresar la compra; completa la cantidad.
 Elige Efectivo o Nequi para pagar: el ingreso y la salida de dinero se guardan juntos.
@@ -113,6 +113,7 @@ Puedes combinar líneas pagadas y fiadas: solo lo pagado entra a Caja o Nequi.
 Lo fiado aumenta Deudas en Tesorería y se cobra después desde Cobros.
 Las cuentas de mostrador se guardan automáticamente mientras las preparas.
 Ventas es la única pantalla de ventas; no hay acceso al formulario anterior.
+Eventos tiene su propia sección en el menú y permanece vacía por ahora.
 Tesorería reemplaza Pagos: consulta Caja, Nequi, Caja mayor y Deudas de clientes.
 Total disponible suma Caja y Nequi; la reserva y las deudas se muestran aparte.
 En Tesorería usa Registrar gasto para pagar Arriendo, Aseo, Servicios u Otro

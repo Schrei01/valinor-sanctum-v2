@@ -249,7 +249,7 @@ void main() {
   );
 
   testWidgets(
-    'switching products clears stale supplier and cost but preserves quantity and payment',
+    'switching products clears unavailable category and stale defaults but preserves quantity and payment',
     (tester) async {
       store.products.addAll([
         const CatalogProduct(
@@ -262,6 +262,7 @@ void main() {
         const CatalogProduct(
           id: 'unknown',
           name: 'Artículo sin ingreso previo',
+          categoryId: 'event',
           listPriceMinor: 150000,
         ),
       ]);
@@ -300,6 +301,12 @@ void main() {
             .initialValue,
         isNull,
       );
+      await enter(tester, 'intake-cost', '10');
+      await enter(tester, 'intake-supplier', 'Proveedor de prueba');
+      await tap(tester, find.byKey(const Key('intake-submit')));
+      expect(find.text('Elige una categoría activa.'), findsOneWidget);
+      expect(store.preparedCommands, isEmpty);
+      expect(store.products.last.categoryId, 'event');
       await enter(tester, 'intake-name', 'KNOWN');
       await tap(tester, find.text('Artículo conocido').last);
       await enter(tester, 'intake-name', 'Nuevo producto');
@@ -482,13 +489,13 @@ void main() {
   );
 
   testWidgets(
-    'form fits narrow window and categories include requested three options',
+    'form fits narrow window and purchases excludes Evento from categories',
     (tester) async {
       await open(tester, size: const Size(400, 900));
       await tap(tester, keyed('intake-category-'));
       expect(find.text('Comestible'), findsOneWidget);
       expect(find.text('Artículo'), findsOneWidget);
-      expect(find.text('Evento'), findsOneWidget);
+      expect(find.text('Evento'), findsNothing);
       await tap(tester, find.text('Artículo'));
       await tester.ensureVisible(find.byKey(const Key('intake-submit')));
       expect(tester.takeException(), isNull);

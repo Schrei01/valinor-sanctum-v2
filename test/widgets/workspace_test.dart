@@ -57,6 +57,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Tu espacio está preparado'), findsOneWidget);
       expect(store.saves, 1);
+      await tester.tap(find.text('Eventos'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('events-empty')), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       controller.dispose();
@@ -76,6 +80,9 @@ void main() {
     await tester.pumpWidget(SanctumApp(controller: controller));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Eventos'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('events-empty')), findsOneWidget);
     await tester.tap(find.text('Sistema'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('database-path')), findsOneWidget);

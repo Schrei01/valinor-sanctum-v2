@@ -26,6 +26,7 @@ const _destinations = [
   (Icons.point_of_sale_outlined, 'Ventas'),
   (Icons.payments_outlined, 'Cobros'),
   (Icons.account_balance_outlined, 'Tesorería'),
+  (Icons.event_outlined, 'Eventos'),
   (Icons.settings_outlined, 'Sistema'),
 ];
 
@@ -386,6 +387,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                       ),
                                 wide,
                               ),
+                              const SizedBox.expand(key: Key('events-empty')),
                               _scrollPage(
                                 _System(controller: controller),
                                 wide,
@@ -595,7 +597,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.11.0',
+                    'Versión 0.14.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

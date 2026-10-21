@@ -113,6 +113,9 @@ class _PurchasesPageState extends State<PurchasesPage> {
     scale: widget.profile.moneyScale,
   ).formatEsCo();
 
+  bool _isPurchaseCategory(InventoryCategory category) =>
+      category.name.trim().toLowerCase() != 'evento';
+
   IntakePaymentOption? _payment(StockIntakeSnapshot data) =>
       data.paymentOptions
           .where((item) => item.id == _paymentOptionId && item.isActive)
@@ -232,7 +235,9 @@ class _PurchasesPageState extends State<PurchasesPage> {
                             key: ValueKey('intake-category-$_formVersion'),
                             initialValue:
                                 data.categories.any(
-                                  (item) => item.id == _categoryId,
+                                  (item) =>
+                                      item.id == _categoryId &&
+                                      _isPurchaseCategory(item),
                                 )
                                 ? _categoryId
                                 : null,
@@ -243,7 +248,8 @@ class _PurchasesPageState extends State<PurchasesPage> {
                             items: [
                               for (final category in data.categories.where(
                                 (item) =>
-                                    item.isActive || item.id == _categoryId,
+                                    _isPurchaseCategory(item) &&
+                                    (item.isActive || item.id == _categoryId),
                               ))
                                 DropdownMenuItem(
                                   value: category.id,
@@ -260,7 +266,10 @@ class _PurchasesPageState extends State<PurchasesPage> {
                                       setState(() => _categoryId = value),
                             validator: (value) =>
                                 data.categories.any(
-                                  (item) => item.id == value && item.isActive,
+                                  (item) =>
+                                      item.id == value &&
+                                      item.isActive &&
+                                      _isPurchaseCategory(item),
                                 )
                                 ? null
                                 : 'Elige una categoría activa.',
@@ -462,7 +471,13 @@ class _PurchasesPageState extends State<PurchasesPage> {
         onSelected: (product) => setState(() {
           _existing = product;
           _sku.text = product.sku ?? '';
-          _categoryId = product.categoryId;
+          _categoryId =
+              data.categories.any(
+                (item) =>
+                    item.id == product.categoryId && _isPurchaseCategory(item),
+              )
+              ? product.categoryId
+              : null;
           _pvp.text = _amount(product.listPriceMinor);
           final defaults = data.productDefaults[product.id];
           final cost = defaults?.unitPurchasePriceMinor;

@@ -1,0 +1,73 @@
+{
+  "version": "0.14.0+21",
+  "schemaVersion": 11,
+  "tests": {
+    "focusedPassed": 27,
+    "failed": 0,
+    "skipped": 0,
+    "fullSuiteRepeated": false,
+    "analyzeClean": true,
+    "formattedDartFiles": 4,
+    "formatClean": true,
+    "independentReviewOutstandingFindings": 0
+  },
+  "behavior": {
+    "eventCategoryExcludedFromNewPurchases": true,
+    "historicalProductNotReclassifiedBySelection": true,
+    "preparedIntakeRecoveryPreserved": true,
+    "eventsNavigationBeforeSystem": true,
+    "eventsBodyEmpty": true,
+    "noEventsControllerOrOperations": true,
+    "commercialNavigationIndexesUnchanged": true,
+    "wideAndNarrowNavigationVerified": true
+  },
+  "originalPosOpenedOrModified": false,
+  "businessOperationsPostedByAgent": false,
+  "build": {
+    "seconds": 74.2785234,
+    "executableVersion": "0.14.0+21",
+    "appSha256": "6B5ED170E37EE511FFC281DF33E00716D8F34AC5B5DF1D2BA810EAA55288763F",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.14.0-windows-x64.zip",
+    "files": 17,
+    "bytes": 14757469,
+    "sha256": "82B401F2783690A5EF735CD5932BEFCF536C5E7AB68C76181FC8559DF44D1C8D",
+    "allFilesMatchStableAndVersioned": true,
+    "privateDataAbsent": true,
+    "versionedCopy": "dist/0.14.0/ValinorSanctum2",
+    "currentAliasPublished": true,
+    "zipHashUnchangedAfterNativeLaunch": true
+  },
+  "data": {
+    "tablesComparedAroundFinalLaunch": 49,
+    "allRecordsUnchanged": true,
+    "schemaUnchanged": true,
+    "balancesUnchanged": true,
+    "inventoryUnchanged": true,
+    "integrityOk": true,
+    "foreignKeyViolations": 0
+  },
+  "native": {
+    "launchedFinalBundle": true,
+    "eventsNavigationObserved": true,
+    "navigationLabelsObserved": [
+      "Inicio",
+      "Catálogo",
+      "Compras",
+      "Ventas",
+      "Cobros",
+      "Tesorería",
+      "Eventos",
+      "Sistema"
+    ],
+    "versionLabelObserved": true,
+    "method": "Accessibility",
+    "eventsBodyVerifiedInWidgets": true,
+    "formsExercised": false,
+    "screenshotsCaptured": false,
+    "windowLeftOpenForUser": true
+  },
+  "verifiedAtUtc": "2026-10-21T19:50:38.121Z"
+}
