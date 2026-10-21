@@ -151,3 +151,7 @@ Estas decisiones no impiden documentar el alcance confirmado. Deben resolverse s
 - [Esquema actual de ventas y líneas](../lib/core/infrastructure/database/schema.dart): la estructura comercial se reutiliza y cualquier ampliación futura debe preservar las migraciones publicadas y la historia.
 
 Este levantamiento no modifica el programa, el esquema, perfiles, saldos o inventario. No incluye torneos con rondas, posiciones, emparejamientos, cupos, reservas, calendario o gestión nominal de jugadores, porque no se han solicitado.
+
+## 10. Implementación posterior autorizada
+
+El propietario solicitó implementar la sección y confirmó después **Desactivar a todos los eventos**. La implementación 0.15.0 y sus decisiones técnicas se describen en [Eventos operativos](38-eventos-operativos.md): PU redondeado con mitades hacia arriba y PVP positivo en el flujo actual. La edición, reactivación, reversas, gratuidad, recurrencia automática e informes adicionales continúan fuera de este incremento. Los apartados anteriores conservan el levantamiento original y sus pendientes a esa fecha.

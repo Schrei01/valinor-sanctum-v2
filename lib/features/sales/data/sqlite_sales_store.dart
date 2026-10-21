@@ -40,7 +40,7 @@ class SqliteSalesStore implements SalesStore {
       orderBy: 'prepared_at_utc, command_id',
     );
     final products = await txn.rawQuery('''
-SELECT c.* FROM catalog_items c
+SELECT c.*, EXISTS(SELECT 1 FROM events WHERE product_id=c.id) is_event FROM catalog_items c
 LEFT JOIN categories k ON k.id = c.category_id
 WHERE c.is_active = 1 AND (c.category_id IS NULL OR k.is_active = 1)
 ORDER BY c.name COLLATE NOCASE, c.id
@@ -114,6 +114,7 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
       products: products
           .map(
             (row) => CatalogProduct(
+              isEvent: row['is_event'] == 1,
               id: row['id'] as String,
               name: row['name'] as String,
               sku: row['sku'] as String?,
@@ -489,6 +490,27 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
     var totalCost = BigInt.zero;
     for (final line in draft.lines) {
       final product = await _activeProduct(txn, line.productId);
+      final event = await txn.query(
+        'events',
+        where: 'product_id=?',
+        whereArgs: [line.productId],
+      );
+      if (event.isNotEmpty) {
+        final origin = (await txn.query(
+          'business_documents',
+          where: 'id=?',
+          whereArgs: [event.single['document_id']],
+        )).single;
+        if (DateTime.parse(
+          origin['occurred_at_utc'] as String,
+        ).isAfter(occurredAt)) {
+          throw const SalesValidationException(
+            'La venta no puede ser anterior a la creación del evento.',
+          );
+        }
+        planned.add(_PlannedLine(line, product['name'] as String, 0, []));
+        continue;
+      }
       final laterSales = await txn.rawQuery(
         '''
 SELECT s.sold_at_utc FROM sales s
@@ -626,15 +648,17 @@ WHERE l.product_id = ?
         ),
         'total_cost_minor': plan.cost,
       });
-      await txn.insert('sale_outflows', {
-        'id': InventoryIds.next(),
-        'document_id': document,
-        'sequence': sequence,
-        'product_id': plan.input.productId,
-        'sale_line_id': line,
-        'quantity': plan.input.quantity,
-        'cost_minor': plan.cost,
-      });
+      if (plan.allocations.isNotEmpty) {
+        await txn.insert('sale_outflows', {
+          'id': InventoryIds.next(),
+          'document_id': document,
+          'sequence': sequence,
+          'product_id': plan.input.productId,
+          'sale_line_id': line,
+          'quantity': plan.input.quantity,
+          'cost_minor': plan.cost,
+        });
+      }
       for (
         var allocationSequence = 0;
         allocationSequence < plan.allocations.length;
@@ -872,6 +896,13 @@ SELECT a.* FROM all_sale_cost_allocations a
 JOIN sale_lines sl ON sl.id = a.sale_line_id
 JOIN business_documents d ON d.id = sl.sale_id AND d.status = 'posted'
 JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
+UNION ALL
+SELECT allocation.id, NULL, allocation.sequence, allocation.quantity, allocation.cost_minor,
+ CASE WHEN allocation.cost_layer_id IS NULL THEN 'opening' ELSE 'purchase' END,
+ coalesce(allocation.cost_layer_id,allocation.opening_item_id)
+FROM event_cost_allocations allocation JOIN event_products part ON part.id=allocation.event_product_id
+JOIN business_documents d ON d.id=part.event_id AND d.status='posted'
+JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
 ''');
     final consumed = <(String, String), _Totals>{};
     for (final row in allocations) {

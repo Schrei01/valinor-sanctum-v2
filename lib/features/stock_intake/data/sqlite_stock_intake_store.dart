@@ -132,7 +132,7 @@ ORDER BY r.occurred_at_utc DESC,e.request_id
             .where((c) => _allowedCategory(c.name))
             .toList(),
         suppliers: inventory.suppliers,
-        products: inventory.products,
+        products: inventory.products.where((p) => !p.isEvent).toList(),
         stock: inventory.stock,
         productDefaults: await _productDefaults(txn),
         paymentOptions: paymentOptions,

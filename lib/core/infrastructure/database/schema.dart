@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'event_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 11;
+  static const int version = 12;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -64,6 +65,7 @@ abstract final class DatabaseSchema {
     9 => migration9Name,
     10 => migration10Name,
     11 => migration11Name,
+    12 => 'events_and_service_sales_v12',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -79,8 +81,29 @@ abstract final class DatabaseSchema {
     9 => migration9Checksum,
     10 => migration10Checksum,
     11 => migration11Checksum,
+    12 => checksum(migration12Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
+
+  static final List<String> migration12Statements = List.unmodifiable(
+    EventSchema.build(
+      salePosting: _openingAwareSalePostingTrigger(),
+      purchaseAllocation: _openingAwarePurchaseAllocationTrigger(),
+      openingAllocation: migration8Statements.singleWhere(
+        (s) => s.startsWith(
+          'CREATE TRIGGER inventory_opening_allocations_validate_insert\n',
+        ),
+      ),
+      entryPosting: migration9Statements
+          .where(
+            (s) => s.startsWith('CREATE TRIGGER entries_validate_posting\n'),
+          )
+          .last,
+      fundsInvalid: _treasuryOperationMoneyInvalid('NEW.id'),
+      freezeJournal: _freezeTreasuryOperationJournal(),
+      utcKey: _utcSortKey,
+    ),
+  );
 
   static String checksum(String input) {
     var hash = BigInt.parse('cbf29ce484222325', radix: 16);

@@ -32,6 +32,7 @@ class CatalogProduct {
     this.categoryId,
     required this.listPriceMinor,
     this.isActive = true,
+    this.isEvent = false,
   });
   final String id;
   final String name;
@@ -39,6 +40,7 @@ class CatalogProduct {
   final String? categoryId;
   final int listPriceMinor;
   final bool isActive;
+  final bool isEvent;
 }
 
 class StockPosition {

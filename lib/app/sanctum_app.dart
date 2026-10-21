@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../features/events/application/events_controller.dart';
+import '../features/events/presentation/events_page.dart';
 import 'dart:ui' show AppExitResponse;
 import 'package:flutter/material.dart';
 import '../features/workspace/application/workspace_controller.dart';
@@ -73,6 +75,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   StockIntakeController? _stockIntake;
   TreasuryController? _treasury;
   TreasuryOperationController? _treasuryOperations;
+  EventsController? _events;
   bool _supplierWasConfirming = false;
   late final AppLifecycleListener _exitListener;
 
@@ -104,6 +107,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     if (index == 2) unawaited(_stockIntake?.load());
     if (index == 3) unawaited(_quickSales?.load());
     if (index == 4) unawaited(_collections?.load());
+    if (index == 6) unawaited(_events?.load());
     if (index == 5) {
       unawaited(_treasury?.load());
       unawaited(_treasuryOperations?.load());
@@ -129,6 +133,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     _stockIntake?.dispose();
     _treasury?.dispose();
     _treasuryOperations?.dispose();
+    _events?.dispose();
     super.dispose();
   }
 
@@ -137,6 +142,13 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     listenable: widget.controller,
     builder: (context, _) {
       final controller = widget.controller;
+      final eventsStore = controller.eventsStore;
+      if (!identical(_events?.store, eventsStore)) {
+        _events?.dispose();
+        _events = eventsStore == null
+            ? null
+            : EventsController(store: eventsStore);
+      }
       final store = controller.inventoryStore;
       if (!identical(_inventory?.store, store)) {
         _inventory?.dispose();
@@ -328,6 +340,9 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                         profile: controller.profile!,
                                         referenceStore:
                                             controller.referenceInventoryStore,
+                                        onDeactivateEvent: _events == null
+                                            ? null
+                                            : _deactivateEvent,
                                       ),
                                 wide,
                               ),
@@ -387,7 +402,18 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                       ),
                                 wide,
                               ),
-                              const SizedBox.expand(key: Key('events-empty')),
+                              _scrollPage(
+                                controller.profile == null
+                                    ? const _ConfigureFirst()
+                                    : _events == null
+                                    ? const _ModuleUnavailable()
+                                    : EventsPage(
+                                        key: ObjectKey(_events),
+                                        controller: _events!,
+                                        profile: controller.profile!,
+                                      ),
+                                wide,
+                              ),
                               _scrollPage(
                                 _System(controller: controller),
                                 wide,
@@ -412,6 +438,19 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
       );
     },
   );
+
+  Future<void> _deactivateEvent(String id) async {
+    final ok = await _events?.deactivate(id) ?? false;
+    if (ok) {
+      await _inventory?.load();
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_events?.error ?? 'No se pudo desactivar el evento.'),
+        ),
+      );
+    }
+  }
 
   Widget _scrollPage(Widget child, bool wide) => SingleChildScrollView(
     padding: EdgeInsets.all(wide ? 36 : 20),
@@ -597,7 +636,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.14.0',
+                    'Versión 0.15.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

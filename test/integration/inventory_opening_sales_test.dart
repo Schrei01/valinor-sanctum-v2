@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:valinor_sanctum_2/features/events/data/sqlite_events_store.dart';
+import 'package:valinor_sanctum_2/features/events/domain/events_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/database/app_database.dart';
 import 'package:valinor_sanctum_2/features/collections/data/sqlite_collections_store.dart';
@@ -117,6 +119,97 @@ void main() {
   Future<StockPosition> stock(String product) async => (await inventory.load())
       .stock
       .singleWhere((position) => position.productId == product);
+
+  test(
+    'only zero-cost prizes still require minimum and consume quantities without a monetary journal',
+    () async {
+      final imported = await opening();
+      final zero = imported.productIdsBySourceId['zero-cost']!;
+      final events = SqliteEventsStore(app, synthetic: true);
+      await events.prepare(
+        CreateEvent(
+          commandId: 'zero-prizes',
+          name: 'Evento de prueba',
+          minimumPeople: 3,
+          fixedCostMinor: 0,
+          pvpMinor: 1000,
+          occurredAtUtc: openingAt.add(const Duration(minutes: 10)),
+          products: [EventProductInput(zero, 2)],
+        ),
+      );
+      await events.confirm('zero-prizes');
+      final record = (await events.load()).events.single;
+      expect(record.unitCostMinor, 0);
+      expect(record.totalCostMinor, 0);
+      expect((await stock(zero)).quantity, 2);
+      final document = (await app.database.query(
+        'events',
+      )).single['document_id'];
+      final journal = await app.database.rawQuery(
+        'SELECT line.* FROM journal_lines line JOIN journal_entries entry ON entry.id=line.entry_id WHERE entry.document_id=?',
+        [document],
+      );
+      expect(journal, isEmpty);
+      expect(await app.database.query('sales'), isEmpty);
+      expect(await app.database.query('purchases'), isEmpty);
+    },
+  );
+
+  test(
+    'event prizes consume opening stock including confirmed zero cost, then sale consumes only remaining units',
+    () async {
+      final imported = await opening();
+      final normal = imported.productIdsBySourceId['normal']!,
+          zero = imported.productIdsBySourceId['zero-cost']!;
+      final events = SqliteEventsStore(app, synthetic: true);
+      await expectLater(
+        events.prepare(
+          CreateEvent(
+            commandId: 'invalid-min',
+            name: 'Evento sintético',
+            minimumPeople: 0,
+            fixedCostMinor: 0,
+            pvpMinor: 1000,
+            occurredAtUtc: openingAt.add(const Duration(minutes: 10)),
+            products: [EventProductInput(zero, 1)],
+          ),
+        ),
+        throwsA(isA<EventsValidationException>()),
+      );
+      await events.prepare(
+        CreateEvent(
+          commandId: 'opening-prizes',
+          name: 'Evento sintético',
+          minimumPeople: 2,
+          fixedCostMinor: 0,
+          pvpMinor: 1000,
+          occurredAtUtc: openingAt.add(const Duration(minutes: 10)),
+          products: [EventProductInput(normal, 2), EventProductInput(zero, 1)],
+        ),
+      );
+      final event = await events.confirm('opening-prizes');
+      expect((await stock(normal)).quantity, 1);
+      expect((await stock(normal)).totalCostMinor, 101);
+      expect((await stock(zero)).quantity, 3);
+      final record = (await events.load()).events.single;
+      expect(record.productsCostMinor, 202);
+      expect(record.unitCostMinor, 101);
+      await prepare('after-prizes', [
+        line('l1', normal, 1, 500),
+        line('l2', event, 10, 1000),
+      ]);
+      await quick.confirmPrepared('after-prizes');
+      expect((await stock(normal)).quantity, 0);
+      final sale = (await app.database.query('sales')).single;
+      expect(sale['total_cost_minor'], 101);
+      await prepare('oversell-prizes', [line('l3', normal, 1, 500)]);
+      await expectLater(
+        quick.confirmPrepared('oversell-prizes'),
+        throwsA(anything),
+      );
+      expect((await app.readHealth())['foreignKeyViolations'], 0);
+    },
+  );
 
   test(
     'posted opening supplies saleable stock and supplier filters without inventing purchases or debt',

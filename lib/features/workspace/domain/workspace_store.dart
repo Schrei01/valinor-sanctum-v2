@@ -1,4 +1,5 @@
 import 'business_profile.dart';
+import '../../events/domain/events_store.dart';
 import '../../inventory/domain/inventory_store.dart';
 import '../../inventory/domain/reference_inventory.dart';
 import '../../sales/domain/sales_store.dart';
@@ -32,6 +33,7 @@ class WorkspaceSession {
     this.treasuryStore,
     this.treasuryOperationStore,
     this.legacyTreasuryStore,
+    this.eventsStore,
   });
   final WorkspaceStore store;
   final String databasePath;
@@ -46,4 +48,5 @@ class WorkspaceSession {
   final TreasuryStore? treasuryStore;
   final TreasuryOperationStore? treasuryOperationStore;
   final LegacyTreasuryStore? legacyTreasuryStore;
+  final EventsStore? eventsStore;
 }

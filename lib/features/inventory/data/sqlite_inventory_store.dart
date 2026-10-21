@@ -19,24 +19,24 @@ class SqliteInventoryStore implements InventoryStore {
   static const _payableAccountId = 'system:supplier-payable';
 
   @override
-  Future<InventorySnapshot> load() =>
-      _database.database.transaction((txn) async {
-        await _profile(txn);
-        final categories = await txn.query(
-          'categories',
-          orderBy: 'name COLLATE NOCASE, id',
-        );
-        final suppliers = await txn.query(
-          'counterparties',
-          where: 'is_supplier = 1',
-          orderBy: 'name COLLATE NOCASE, id',
-        );
-        final products = await txn.query(
-          'catalog_items',
-          orderBy: 'name COLLATE NOCASE, id',
-        );
-        final stock = await _stock(txn);
-        final supplierLinks = await txn.rawQuery('''
+  Future<InventorySnapshot> load() => _database.database.transaction((
+    txn,
+  ) async {
+    await _profile(txn);
+    final categories = await txn.query(
+      'categories',
+      orderBy: 'name COLLATE NOCASE, id',
+    );
+    final suppliers = await txn.query(
+      'counterparties',
+      where: 'is_supplier = 1',
+      orderBy: 'name COLLATE NOCASE, id',
+    );
+    final products = await txn.rawQuery(
+      'SELECT product.*, EXISTS(SELECT 1 FROM events WHERE product_id=product.id) is_event FROM catalog_items product ORDER BY name COLLATE NOCASE,id',
+    );
+    final stock = await _stock(txn);
+    final supplierLinks = await txn.rawQuery('''
 SELECT DISTINCT line.product_id, purchase.supplier_id
 FROM purchase_lines line
 JOIN purchases purchase ON purchase.document_id = line.purchase_id
@@ -51,111 +51,112 @@ JOIN journal_entries entry ON entry.document_id = document.id AND entry.status =
 WHERE item.supplier_id IS NOT NULL
 ORDER BY product_id, supplier_id
 ''');
-        final productSupplierIds = <String, List<String>>{};
-        for (final row in supplierLinks) {
-          productSupplierIds
-              .putIfAbsent(row['product_id'] as String, () => [])
-              .add(row['supplier_id'] as String);
-        }
-        final receipts = await txn.rawQuery('''
+    final productSupplierIds = <String, List<String>>{};
+    for (final row in supplierLinks) {
+      productSupplierIds
+          .putIfAbsent(row['product_id'] as String, () => [])
+          .add(row['supplier_id'] as String);
+    }
+    final receipts = await txn.rawQuery('''
 SELECT p.* FROM purchases p
 JOIN business_documents d ON d.id = p.document_id AND d.status = 'posted'
 JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
 ORDER BY p.received_at_utc DESC, p.document_id
 ''');
-        final receiptLines = await txn.rawQuery('''
+    final receiptLines = await txn.rawQuery('''
 SELECT l.* FROM purchase_lines l
 JOIN business_documents d ON d.id = l.purchase_id AND d.status = 'posted'
 JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
 ORDER BY l.purchase_id, l.sequence
 ''');
-        final linesByReceipt = <String, List<PurchaseReceiptLine>>{};
-        final paymentRows = await txn.rawQuery('''
+    final linesByReceipt = <String, List<PurchaseReceiptLine>>{};
+    final paymentRows = await txn.rawQuery('''
 SELECT o.origin_document_id, s.amount_minor FROM payable_settlements s
 JOIN obligations o ON o.id = s.payable_id
 JOIN business_documents d ON d.id = s.supplier_payment_id AND d.status = 'posted'
 JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
 ''');
-        final paidByReceipt = <String, BigInt>{};
-        for (final row in paymentRows) {
-          final id = row['origin_document_id'] as String;
-          paidByReceipt[id] =
-              (paidByReceipt[id] ?? BigInt.zero) +
-              BigInt.from(row['amount_minor'] as int);
-        }
-        for (final line in receiptLines) {
-          linesByReceipt
-              .putIfAbsent(line['purchase_id'] as String, () => [])
-              .add(
-                PurchaseReceiptLine(
-                  productName: line['name_snapshot'] as String,
-                  quantity: line['quantity'] as int,
-                  totalCostMinor: line['acquisition_total_minor'] as int,
-                ),
-              );
-        }
-        return InventorySnapshot(
-          productSupplierIds: productSupplierIds,
-          categories: categories
-              .map(
-                (r) => InventoryCategory(
-                  id: r['id'] as String,
-                  name: r['name'] as String,
-                  isActive: r['is_active'] == 1,
-                ),
-              )
-              .toList(),
-          suppliers: suppliers
-              .map(
-                (r) => InventorySupplier(
-                  id: r['id'] as String,
-                  name: r['name'] as String,
-                  isActive: r['is_active'] == 1,
-                ),
-              )
-              .toList(),
-          products: products
-              .map(
-                (r) => CatalogProduct(
-                  id: r['id'] as String,
-                  name: r['name'] as String,
-                  sku: r['sku'] as String?,
-                  categoryId: r['category_id'] as String?,
-                  listPriceMinor: r['list_price_minor'] as int,
-                  isActive: r['is_active'] == 1,
-                ),
-              )
-              .toList(),
-          stock: stock.entries
-              .map(
-                (e) => StockPosition(
-                  productId: e.key,
-                  quantity: _int64(e.value.quantity, 'Existencias'),
-                  totalCostMinor: _int64(e.value.cost, 'Valor de existencias'),
-                ),
-              )
-              .toList(),
-          receipts: receipts
-              .map(
-                (r) => PurchaseReceiptSummary(
-                  documentId: r['document_id'] as String,
-                  supplierName: r['supplier_name_snapshot'] as String,
-                  reference: r['supplier_reference'] as String?,
-                  totalMinor: r['payable_minor'] as int,
-                  paidMinor: _int64(
-                    paidByReceipt[r['document_id']] ?? BigInt.zero,
-                    'Total pagado',
-                  ),
-                  receivedAtUtc: DateTime.parse(
-                    r['received_at_utc'] as String,
-                  ).toUtc(),
-                  dueDate: r['due_date'] as String,
-                  lines: linesByReceipt[r['document_id']] ?? const [],
-                ),
-              )
-              .toList(),
-        );
-      });
+    final paidByReceipt = <String, BigInt>{};
+    for (final row in paymentRows) {
+      final id = row['origin_document_id'] as String;
+      paidByReceipt[id] =
+          (paidByReceipt[id] ?? BigInt.zero) +
+          BigInt.from(row['amount_minor'] as int);
+    }
+    for (final line in receiptLines) {
+      linesByReceipt
+          .putIfAbsent(line['purchase_id'] as String, () => [])
+          .add(
+            PurchaseReceiptLine(
+              productName: line['name_snapshot'] as String,
+              quantity: line['quantity'] as int,
+              totalCostMinor: line['acquisition_total_minor'] as int,
+            ),
+          );
+    }
+    return InventorySnapshot(
+      productSupplierIds: productSupplierIds,
+      categories: categories
+          .map(
+            (r) => InventoryCategory(
+              id: r['id'] as String,
+              name: r['name'] as String,
+              isActive: r['is_active'] == 1,
+            ),
+          )
+          .toList(),
+      suppliers: suppliers
+          .map(
+            (r) => InventorySupplier(
+              id: r['id'] as String,
+              name: r['name'] as String,
+              isActive: r['is_active'] == 1,
+            ),
+          )
+          .toList(),
+      products: products
+          .map(
+            (r) => CatalogProduct(
+              isEvent: r['is_event'] == 1,
+              id: r['id'] as String,
+              name: r['name'] as String,
+              sku: r['sku'] as String?,
+              categoryId: r['category_id'] as String?,
+              listPriceMinor: r['list_price_minor'] as int,
+              isActive: r['is_active'] == 1,
+            ),
+          )
+          .toList(),
+      stock: stock.entries
+          .map(
+            (e) => StockPosition(
+              productId: e.key,
+              quantity: _int64(e.value.quantity, 'Existencias'),
+              totalCostMinor: _int64(e.value.cost, 'Valor de existencias'),
+            ),
+          )
+          .toList(),
+      receipts: receipts
+          .map(
+            (r) => PurchaseReceiptSummary(
+              documentId: r['document_id'] as String,
+              supplierName: r['supplier_name_snapshot'] as String,
+              reference: r['supplier_reference'] as String?,
+              totalMinor: r['payable_minor'] as int,
+              paidMinor: _int64(
+                paidByReceipt[r['document_id']] ?? BigInt.zero,
+                'Total pagado',
+              ),
+              receivedAtUtc: DateTime.parse(
+                r['received_at_utc'] as String,
+              ).toUtc(),
+              dueDate: r['due_date'] as String,
+              lines: linesByReceipt[r['document_id']] ?? const [],
+            ),
+          )
+          .toList(),
+    );
+  });
 
   @override
   Future<void> saveCategory(InventoryCategory category) async {
@@ -702,6 +703,10 @@ ORDER BY m.stock_sequence
 SELECT o.product_id, o.quantity, o.cost_minor FROM sale_outflows o
 JOIN business_documents d ON d.id = o.document_id AND d.status = 'posted'
 JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
+UNION ALL
+SELECT part.product_id,part.quantity,part.cost_minor FROM event_products part
+JOIN business_documents d ON d.id=part.event_id AND d.status='posted'
+JOIN journal_entries j ON j.document_id=d.id AND j.status='posted'
 ''');
     for (final row in outflows) {
       final value = result.putIfAbsent(

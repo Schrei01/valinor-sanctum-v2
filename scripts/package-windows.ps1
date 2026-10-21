@@ -98,8 +98,9 @@ Registra el saldo inicial real antes del primer movimiento de cada cuenta si cor
 Consulta el Historial de ingresos desde la misma sección Compras.
 Catálogo muestra productos: filtra por Categoría y Proveedor, y busca por nombre o SKU.
 Sus columnas son Producto, PVP, Unidades y Proveedor.
-Todos los productos limpia los filtros y la búsqueda. Catálogo es solo consulta.
-Catálogo muestra solo productos con unidades disponibles; los agotados se conservan
+Todos los productos limpia los filtros y la búsqueda. Catálogo consulta los productos
+y permite desactivar eventos conservando sus costos e historial.
+Catálogo muestra eventos activos y productos con unidades disponibles; los agotados se conservan
 para reponerlos desde Compras. Un inventario inicial confirmado está disponible en Ventas.
 Si hay una copia de inventario cargada localmente, Catálogo permite consultarla
 en Inventario de la copia y volver al Catálogo de esta app con el selector de origen.
@@ -113,7 +114,14 @@ Puedes combinar líneas pagadas y fiadas: solo lo pagado entra a Caja o Nequi.
 Lo fiado aumenta Deudas en Tesorería y se cobra después desde Cobros.
 Las cuentas de mostrador se guardan automáticamente mientras las preparas.
 Ventas es la única pantalla de ventas; no hay acceso al formulario anterior.
-Eventos tiene su propia sección en el menú y permanece vacía por ahora.
+En Eventos crea pasadías, torneos o ligas con categoría Evento automática.
+Indica mínimo de personas, costo fijo opcional desde Caja o Nequi y varios
+productos del catálogo con sus cantidades. Si hay costos o productos, mínimo 1.
+El PU se calcula con costo FIFO y mínimo de personas; introduce el PVP que cobrarás.
+Crear evento descuenta dinero y productos una sola vez. Luego vende sus inscripciones
+desde Ventas, sin límite de stock y sin repetir costos. Reintenta las solicitudes
+pendientes desde Eventos si se interrumpe el guardado.
+Desactivar retira el evento de Catálogo y Ventas, sin devolver dinero ni productos.
 Tesorería reemplaza Pagos: consulta Caja, Nequi, Caja mayor y Deudas de clientes.
 Total disponible suma Caja y Nequi; la reserva y las deudas se muestran aparte.
 En Tesorería usa Registrar gasto para pagar Arriendo, Aseo, Servicios u Otro

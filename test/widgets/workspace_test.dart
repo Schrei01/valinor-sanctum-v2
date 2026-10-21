@@ -59,7 +59,7 @@ void main() {
       expect(store.saves, 1);
       await tester.tap(find.text('Eventos'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('events-empty')), findsOneWidget);
+      expect(find.byKey(const Key('events-empty')), findsNothing);
       expect(find.byType(TextField), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -82,7 +82,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Eventos'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('events-empty')), findsOneWidget);
+    expect(find.byKey(const Key('events-empty')), findsNothing);
     await tester.tap(find.text('Sistema'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('database-path')), findsOneWidget);

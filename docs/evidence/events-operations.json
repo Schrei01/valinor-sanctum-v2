@@ -1,0 +1,75 @@
+{
+  "version": "0.15.0+22",
+  "schemaVersion": 12,
+  "tests": {
+    "fullSuitePassed": 626,
+    "fullSuiteSkipped": 3,
+    "fullSuiteFailures": 0,
+    "finalFocusedPassed": 32,
+    "finalFocusedApplicationCases": 31,
+    "finalFocusedSyntheticRenderCases": 1,
+    "distinctApplicationCasesPassedAcrossRuns": 627,
+    "analyzeClean": true,
+    "formattedDartFiles": 25,
+    "formatClean": true,
+    "syntheticPreviewHarnessFirstAttemptInterrupted": true,
+    "syntheticPreviewHarnessRecovery": "Font loading moved into runAsync; final synthetic render completed and image inspected."
+  },
+  "behavior": {
+    "categoryAlwaysEvento": true,
+    "multiplePhysicalPrizes": true,
+    "fixedCostFromCajaOrNequi": true,
+    "minimumRequiredWithCostOrProducts": true,
+    "unitCostHalfUpMinorUnits": true,
+    "pvpManualPositive": true,
+    "atomicCreation": true,
+    "durableIdempotentRecovery": true,
+    "eventInscriptionsReuseSaleLines": true,
+    "noRepeatedPrizeOrFixedCostOnSale": true,
+    "eventDeactivationPreservesFacts": true,
+    "physicalOutOfStockStillHidden": true
+  },
+  "migration": {
+    "historicalMigrationsUnchanged": 11,
+    "priorTablesCompared": 49,
+    "rehearsalPreservedAllPriorRows": true,
+    "livePreservedAllPriorRows": true,
+    "manualBackupVerified": true,
+    "automaticBackupMatches": true,
+    "newTables": [
+      "event_cost_allocations",
+      "event_products",
+      "event_requests",
+      "events"
+    ],
+    "newTablesEmpty": true,
+    "integrityOk": true,
+    "foreignKeyViolations": 0
+  },
+  "build": {
+    "seconds": 66.0143451,
+    "executableVersion": "0.15.0+22",
+    "appSha256": "6D14FF260909CFEA0B76152B14BBF465F3E69439A8CD0058C8FC0438E8167CA9",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "version": "0.15.0+22",
+    "files": 17,
+    "archiveBytes": 14811175,
+    "archiveSha256": "564380A61C978208D3DB68366B2D02489D12335DDF1FAE19F8E22933FC29F962",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
+    "privateDataExcluded": true
+  },
+  "native": {
+    "launchedStableBundle": true,
+    "windowLeftOpenForUser": true,
+    "formsExercised": false,
+    "nativeScreenshotCaptured": false,
+    "limitation": "Window enumeration returned a stale id and recovery failed before reading the form.",
+    "syntheticFormImageInspected": true
+  },
+  "activeProfileBusinessOperationsPostedByAgent": false,
+  "originalPosOpenedOrModifiedByAgent": false,
+  "verifiedAtUtc": "2026-10-21T23:25:50.609Z"
+}

@@ -15,10 +15,12 @@ class CatalogPage extends StatefulWidget {
     required this.controller,
     required this.profile,
     this.referenceStore,
+    this.onDeactivateEvent,
   });
   final InventoryController controller;
   final BusinessProfile profile;
   final ReferenceInventoryStore? referenceStore;
+  final Future<void> Function(String)? onDeactivateEvent;
 
   @override
   State<CatalogPage> createState() => _CatalogPageState();
@@ -135,7 +137,7 @@ class _CatalogPageState extends State<CatalogPage> {
             title: 'Catálogo',
             subtitle: showingReference
                 ? 'Consulta el inventario guardado en la copia.'
-                : 'Filtra productos por categoría o proveedor. Ingresa productos y cantidades desde Compras.',
+                : 'Filtra productos por categoría o proveedor. Ingresa mercancía desde Compras y crea eventos desde Eventos.',
             busy: controller.busy || _referenceLoading,
             onRefresh: _refresh,
           ),
@@ -495,7 +497,11 @@ class _CatalogPageState extends State<CatalogPage> {
   Widget _products(InventorySnapshot data) {
     final positions = {for (final stock in data.stock) stock.productId: stock};
     final available = data.products
-        .where((item) => (positions[item.id]?.quantity ?? 0) > 0)
+        .where(
+          (item) => item.isEvent
+              ? item.isActive
+              : (positions[item.id]?.quantity ?? 0) > 0,
+        )
         .toList();
     final rows = available
         .where(
@@ -534,7 +540,7 @@ class _CatalogPageState extends State<CatalogPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${rows.length} ${rows.length == 1 ? 'producto' : 'productos'} con existencias',
+          '${rows.length} ${rows.length == 1 ? 'producto' : 'productos'} ${rows.any((p) => p.isEvent) ? 'disponibles' : 'con existencias'}',
         ),
         const SizedBox(height: 8),
         Card(
@@ -544,11 +550,14 @@ class _CatalogPageState extends State<CatalogPage> {
             child: DataTable(
               dataRowMinHeight: 64,
               dataRowMaxHeight: 64,
-              columns: const [
+              columns: [
                 DataColumn(label: Text('Producto')),
                 DataColumn(label: Text('PVP'), numeric: true),
                 DataColumn(label: Text('Unidades'), numeric: true),
                 DataColumn(label: Text('Proveedor')),
+                if (rows.any((p) => p.isEvent) &&
+                    widget.onDeactivateEvent != null)
+                  const DataColumn(label: Text('Evento')),
               ],
               rows: [
                 for (final product
@@ -591,8 +600,28 @@ class _CatalogPageState extends State<CatalogPage> {
                           ),
                         ),
                       ),
-                      DataCell(Text('${positions[product.id]?.quantity ?? 0}')),
-                      _supplierCell(supplierNames(product.id)),
+                      DataCell(
+                        Text(
+                          product.isEvent
+                              ? 'No aplica'
+                              : '${positions[product.id]?.quantity ?? 0}',
+                        ),
+                      ),
+                      _supplierCell(
+                        product.isEvent
+                            ? 'No aplica'
+                            : supplierNames(product.id),
+                      ),
+                      if (rows.any((p) => p.isEvent) &&
+                          widget.onDeactivateEvent != null)
+                        DataCell(
+                          product.isEvent
+                              ? TextButton(
+                                  onPressed: () => _deactivate(product),
+                                  child: const Text('Desactivar'),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
                     ],
                   ),
               ],
@@ -602,6 +631,29 @@ class _CatalogPageState extends State<CatalogPage> {
         _pagination(rows.length, page),
       ],
     );
+  }
+
+  Future<void> _deactivate(CatalogProduct product) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Desactivar ${product.name}'),
+        content: const Text(
+          'El evento dejará de estar disponible para vender. Se conservará su historial y no se devolverá dinero ni inventario.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Desactivar'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await widget.onDeactivateEvent?.call(product.id);
   }
 
   DataCell _supplierCell(String name) => DataCell(

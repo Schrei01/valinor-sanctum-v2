@@ -112,6 +112,7 @@ ORDER BY c.name COLLATE NOCASE,c.id
     final lines = await txn.rawQuery('''
 SELECT l.debit_minor,l.credit_minor,c.id cash_account_id,c.name account_name,
  d.id document_id,d.occurred_at_utc,d.type,
+ event.name_snapshot event_name,
  col.sale_label_snapshot,col.customer_name_snapshot,
  pay.supplier_name_snapshot,
  op.kind treasury_kind,op.source_account_id treasury_source_account_id,
@@ -132,6 +133,7 @@ JOIN ledger_accounts a ON a.id=l.account_id AND a.class='asset' AND a.role='cash
 LEFT JOIN collections col ON col.document_id=d.id
 LEFT JOIN supplier_payments pay ON pay.document_id=d.id
 LEFT JOIN treasury_operations op ON op.document_id=d.id
+LEFT JOIN events event ON event.document_id=d.id
 ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
 ''');
     final balances = <String, BigInt>{};
@@ -263,6 +265,7 @@ class _MovementAccumulator {
     final document = row['document_id'] as String;
     final concept = switch (row['type']) {
       'cash_opening' => 'Saldo inicial',
+      'event_creation' => 'Costo de evento: ${row['event_name']}',
       'treasury_opening' => 'Saldo inicial de la copia',
       'cash_expense' => 'Gasto: ${row['treasury_reason']}${_note()}',
       'cash_transfer' =>
