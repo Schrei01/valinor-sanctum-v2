@@ -13,7 +13,7 @@ import '../../sales/domain/sales_store.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../domain/quick_sales_store.dart';
 
-/// A quick sale composes the established FIFO sale and its full receipt inside
+/// A quick sale composes the established FIFO sale and its paid portion inside
 /// one transaction. Its durable parent request precedes every business effect.
 class SqliteQuickSalesStore implements QuickSalesStore {
   SqliteQuickSalesStore(this._database, {this.synthetic = false});
@@ -137,12 +137,22 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           where: 'id=?',
           whereArgs: [row['command_id']],
         )).single;
-        final facts = await txn.query(
+        final cashFacts = await txn.query(
           'quick_sale_line_payments',
           where: 'request_id=?',
           whereArgs: [row['command_id']],
           orderBy: 'sequence',
         );
+        final creditFacts = await txn.query(
+          'quick_sale_line_tenders',
+          where: 'request_id=?',
+          whereArgs: [row['command_id']],
+          orderBy: 'sequence',
+        );
+        final facts = <Map<String, Object?>>[...cashFacts, ...creditFacts]
+          ..sort(
+            (a, b) => (a['sequence'] as int).compareTo(b['sequence'] as int),
+          );
         final payload =
             jsonDecode(row['canonical_payload'] as String)
                 as Map<String, dynamic>;
@@ -160,6 +170,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
                     unitPriceMinor: f['unit_price_minor'] as int,
                     totalMinor: f['total_minor'] as int,
                     paymentLabel: f['payment_option_label_snapshot'] as String,
+                    isCredit: f['is_credit'] == 1,
                   ),
                 )
                 .toList(),
@@ -180,9 +191,12 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
   @override
   Future<QuickSaleAccount> saveAccount(SaveQuickSaleAccount input) async {
     _id(input.id);
+    final customer = input.customerName.trim();
     if (input.expectedRevision < 0 ||
         input.label.length > 120 ||
-        input.lines.length > 100) {
+        input.lines.length > 100 ||
+        customer.length > 120 ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(customer)) {
       throw const QuickSalesValidationException(
         'La cuenta admite hasta 100 líneas y un nombre de 120 caracteres.',
       );
@@ -217,6 +231,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         if (old.status == 'open' &&
             old.revision == input.expectedRevision + 1 &&
             old.label == input.label &&
+            old.customerName == customer &&
             _sameLines(old.lines, input.lines)) {
           return old;
         }
@@ -235,6 +250,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         await txn.insert('quick_sales_accounts', {
           'id': input.id,
           'label': input.label,
+          'customer_name': customer,
           'revision': revision,
           'status': 'open',
           'updated_at_utc': now.toIso8601String(),
@@ -244,6 +260,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           'quick_sales_accounts',
           {
             'label': input.label,
+            'customer_name': customer,
             'revision': revision,
             'updated_at_utc': now.toIso8601String(),
           },
@@ -265,12 +282,19 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           'product_id': line.productId,
           'quantity_text': line.quantityText,
           'unit_price_minor': line.unitPriceMinor,
-          'payment_option_id': line.paymentOptionId,
+          'payment_option_id':
+              line.paymentOptionId == QuickPaymentOption.creditId
+              ? null
+              : line.paymentOptionId,
+          'is_credit': line.paymentOptionId == QuickPaymentOption.creditId
+              ? 1
+              : 0,
         });
       }
       return QuickSaleAccount(
         id: input.id,
         label: input.label,
+        customerName: customer,
         revision: revision,
         status: 'open',
         updatedAtUtc: now,
@@ -367,6 +391,16 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       final lines = <Map<String, Object?>>[];
       final prices = <String, int>{};
       var total = BigInt.zero;
+      var creditTotal = BigInt.zero;
+      final hasCredit = account.lines.any(
+        (line) => line.paymentOptionId == QuickPaymentOption.creditId,
+      );
+      final customer = account.customerName.trim();
+      if (hasCredit && customer.isEmpty) {
+        throw const QuickSalesValidationException(
+          'Escribe el nombre del cliente que queda debiendo.',
+        );
+      }
       for (final line in account.lines) {
         if (line.productId == null ||
             line.unitPriceMinor == null ||
@@ -407,12 +441,16 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
             'Uno de los productos ya no está activo.',
           );
         }
-        final option = await _optionFact(txn, line.paymentOptionId!);
+        final isCredit = line.paymentOptionId == QuickPaymentOption.creditId;
+        final option = isCredit
+            ? _creditFact()
+            : await _optionFact(txn, line.paymentOptionId!);
         final amount = _int(
           BigInt.from(quantity) * BigInt.from(price),
           'Total de línea',
         );
         total += BigInt.from(amount);
+        if (isCredit) creditTotal += BigInt.from(amount);
         lines.add({
           'lineId': line.id,
           'productId': line.productId,
@@ -420,6 +458,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           'quantity': quantity,
           'unitPriceMinor': price,
           'totalMinor': amount,
+          if (hasCredit) 'isCredit': isCredit,
           ...option,
         });
       }
@@ -429,19 +468,27 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           'El total de venta debe ser positivo.',
         );
       }
+      if (hasCredit) {
+        await _checkCreditCapacity(txn, creditTotal);
+      }
       final now = DateTime.now().toUtc();
       final row = <String, Object?>{
         'command_id': commandId,
         'account_id': accountId,
         'account_revision': expectedRevision,
         'canonical_payload': jsonEncode({
-          'version': 1,
+          'version': hasCredit ? 2 : 1,
           'profileId': profile.profileId,
           'currency': profile.currencyCode,
           'scale': profile.moneyScale,
           'label': account.label,
           'occurredAtUtc': occurredAtUtc.toIso8601String(),
           'totalMinor': totalMinor,
+          if (hasCredit) ...{
+            'customerName': customer,
+            'creditMinor': _int(creditTotal, 'Total de deuda'),
+            'paidMinor': _int(total - creditTotal, 'Total pagado'),
+          },
           'lines': lines,
         }),
         'occurred_at_utc': occurredAtUtc.toIso8601String(),
@@ -507,6 +554,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       );
     }
     final payload = jsonDecode(canonical) as Map<String, dynamic>;
+    final creditCheckout = payload['version'] == 2;
     final profile = await _profile(txn);
     final accounts = await txn.query(
       'quick_sales_accounts',
@@ -519,15 +567,26 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         payload['profileId'] != profile.profileId ||
         payload['currency'] != profile.currencyCode ||
         payload['scale'] != profile.moneyScale ||
-        payload['version'] != 1 ||
+        (payload['version'] != 1 && !creditCheckout) ||
+        (creditCheckout &&
+            (accounts.single['customer_name'] != payload['customerName'] ||
+                (payload['customerName'] as String).trim().isEmpty)) ||
         payload['occurredAtUtc'] != request['occurred_at_utc']) {
       throw const QuickSalesValidationException(
         'La cuenta no coincide con la solicitud guardada.',
       );
     }
     final lines = (payload['lines'] as List).cast<Map<String, dynamic>>();
+    if (creditCheckout) {
+      await _checkCreditCapacity(
+        txn,
+        BigInt.from(payload['creditMinor'] as int),
+      );
+    }
     for (final line in lines) {
-      final current = await _optionFact(txn, line['paymentOptionId'] as String);
+      final current = creditCheckout && line['isCredit'] == true
+          ? _creditFact()
+          : await _optionFact(txn, line['paymentOptionId'] as String);
       if (current['cashAccountId'] != line['cashAccountId'] ||
           current['paymentMethodId'] != line['paymentMethodId'] ||
           current['cashAccountKind'] != line['cashAccountKind'] ||
@@ -572,7 +631,9 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       SaveSaleDraft(
         id: request['legacy_draft_id'] as String,
         label: payload['label'] as String,
-        customerName: 'Consumidor final',
+        customerName: creditCheckout
+            ? payload['customerName'] as String
+            : 'Consumidor final',
         expectedRevision: 0,
         lines: grouped.entries
             .map(
@@ -611,6 +672,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
     final payments =
         <String, ({String account, String method, BigInt amount})>{};
     for (final line in lines) {
+      if (creditCheckout && line['isCredit'] == true) continue;
       final amount = line['totalMinor'] as int;
       if (amount == 0) continue;
       final key = '${line['cashAccountId']}\u0000${line['paymentMethodId']}';
@@ -622,47 +684,54 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       );
     }
     final collectionCommand = request['collection_command_id'] as String;
-    await _collections.prepareCollectionInTransaction(
-      txn,
-      CollectionCommand(
-        commandId: collectionCommand,
-        receivableId: receivable['id'] as String,
-        occurredAtUtc: occurred,
-        parts: payments.values
-            .map(
-              (p) => CollectionPartInput(
-                cashAccountId: p.account,
-                paymentMethodId: p.method,
-                amountMinor: _int(p.amount, 'Cobro por forma de pago'),
-              ),
-            )
-            .toList(),
-      ),
-      snapshots: payments.values.map((p) {
-        final line = lines.firstWhere(
-          (l) =>
-              l['cashAccountId'] == p.account &&
-              l['paymentMethodId'] == p.method,
-        );
-        return CollectionPart(
-          cashAccountId: p.account,
-          paymentMethodId: p.method,
-          cashAccountName: line['cashAccountName'] as String,
-          cashAccountKind: line['cashAccountKind'] as String,
-          paymentMethodCode: line['paymentMethodCode'] as String,
-          paymentMethodName: line['paymentMethodName'] as String,
-          amountMinor: _int(p.amount, 'Cobro por forma de pago'),
-        );
-      }).toList(),
-    );
-    final collection = await _collections.confirmInTransaction(
-      txn,
-      collectionCommand,
-    );
-    if (collection.remainingMinor != 0 ||
-        collection.totalMinor != sale.totalMinor) {
+    CollectionResult? collection;
+    if (payments.isNotEmpty) {
+      await _collections.prepareCollectionInTransaction(
+        txn,
+        CollectionCommand(
+          commandId: collectionCommand,
+          receivableId: receivable['id'] as String,
+          occurredAtUtc: occurred,
+          parts: payments.values
+              .map(
+                (p) => CollectionPartInput(
+                  cashAccountId: p.account,
+                  paymentMethodId: p.method,
+                  amountMinor: _int(p.amount, 'Cobro por forma de pago'),
+                ),
+              )
+              .toList(),
+        ),
+        snapshots: payments.values.map((p) {
+          final line = lines.firstWhere(
+            (l) =>
+                l['cashAccountId'] == p.account &&
+                l['paymentMethodId'] == p.method,
+          );
+          return CollectionPart(
+            cashAccountId: p.account,
+            paymentMethodId: p.method,
+            cashAccountName: line['cashAccountName'] as String,
+            cashAccountKind: line['cashAccountKind'] as String,
+            paymentMethodCode: line['paymentMethodCode'] as String,
+            paymentMethodName: line['paymentMethodName'] as String,
+            amountMinor: _int(p.amount, 'Cobro por forma de pago'),
+          );
+        }).toList(),
+      );
+      collection = await _collections.confirmInTransaction(
+        txn,
+        collectionCommand,
+      );
+    }
+    final creditMinor = creditCheckout ? payload['creditMinor'] as int : 0;
+    final paidMinor = creditCheckout
+        ? payload['paidMinor'] as int
+        : sale.totalMinor;
+    if ((collection?.remainingMinor ?? sale.totalMinor) != creditMinor ||
+        (collection?.totalMinor ?? 0) != paidMinor) {
       throw const QuickSalesValidationException(
-        'La venta debe quedar cobrada en su totalidad.',
+        'El cobro y la deuda no coinciden con la venta preparada.',
       );
     }
     final legacyLines = await txn.query(
@@ -675,35 +744,48 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       final saleLine = legacyLines.singleWhere(
         (l) => l['product_id'] == line['productId'],
       );
-      await txn.insert('quick_sale_line_payments', {
-        'id': InventoryIds.next(),
-        'request_id': commandId,
-        'sequence': i,
-        'source_line_id': line['lineId'],
-        'sale_document_id': sale.documentId,
-        'sale_line_id': saleLine['id'],
-        'collection_document_id': collection.documentId,
-        'product_id': line['productId'],
-        'product_name_snapshot': line['productName'],
-        'quantity': line['quantity'],
-        'unit_price_minor': line['unitPriceMinor'],
-        'total_minor': line['totalMinor'],
-        'payment_option_id': line['paymentOptionId'],
-        'payment_option_label_snapshot': line['paymentOptionLabel'],
-        'cash_account_id': line['cashAccountId'],
-        'payment_method_id': line['paymentMethodId'],
-        'cash_account_name_snapshot': line['cashAccountName'],
-        'cash_account_kind_snapshot': line['cashAccountKind'],
-        'payment_method_code_snapshot': line['paymentMethodCode'],
-        'payment_method_name_snapshot': line['paymentMethodName'],
-      });
+      await txn.insert(
+        creditCheckout ? 'quick_sale_line_tenders' : 'quick_sale_line_payments',
+        {
+          'id': InventoryIds.next(),
+          'request_id': commandId,
+          'sequence': i,
+          'source_line_id': line['lineId'],
+          'sale_document_id': sale.documentId,
+          'sale_line_id': saleLine['id'],
+          'collection_document_id': line['isCredit'] == true
+              ? null
+              : collection?.documentId,
+          'product_id': line['productId'],
+          'product_name_snapshot': line['productName'],
+          'quantity': line['quantity'],
+          'unit_price_minor': line['unitPriceMinor'],
+          'total_minor': line['totalMinor'],
+          'payment_option_id': line['isCredit'] == true
+              ? null
+              : line['paymentOptionId'],
+          'payment_option_label_snapshot': line['paymentOptionLabel'],
+          'cash_account_id': line['cashAccountId'],
+          'payment_method_id': line['paymentMethodId'],
+          'cash_account_name_snapshot': line['cashAccountName'],
+          'cash_account_kind_snapshot': line['cashAccountKind'],
+          'payment_method_code_snapshot': line['paymentMethodCode'],
+          'payment_method_name_snapshot': line['paymentMethodName'],
+          if (creditCheckout) ...{
+            'is_credit': line['isCredit'] == true ? 1 : 0,
+            'customer_name_snapshot': payload['customerName'],
+          },
+        },
+      );
     }
     final result = QuickSaleResult(
       commandId: commandId,
       saleDocumentId: sale.documentId,
-      collectionDocumentId: collection.documentId,
+      collectionDocumentId: collection?.documentId,
       totalMinor: sale.totalMinor,
       totalCostMinor: sale.totalCostMinor,
+      creditMinor: creditMinor,
+      customerName: creditCheckout ? payload['customerName'] as String : '',
     );
     final now = DateTime.now().toUtc().toIso8601String();
     await txn.insert('command_log', {
@@ -716,9 +798,13 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         'result': {
           'commandId': commandId,
           'saleDocumentId': sale.documentId,
-          'collectionDocumentId': collection.documentId,
+          'collectionDocumentId': collection?.documentId,
           'totalMinor': result.totalMinor,
           'totalCostMinor': result.totalCostMinor,
+          if (creditCheckout) ...{
+            'creditMinor': result.creditMinor,
+            'customerName': result.customerName,
+          },
         },
       }),
       'response_version': 1,
@@ -822,8 +908,28 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
             isActive: r['available'] == 1,
           ),
         )
-        .toList();
+        .toList()
+      ..add(
+        const QuickPaymentOption(
+          id: QuickPaymentOption.creditId,
+          label: 'Deudas',
+          cashAccountId: '',
+          paymentMethodId: '',
+          isCredit: true,
+        ),
+      );
   }
+
+  static Map<String, Object?> _creditFact() => {
+    'paymentOptionId': QuickPaymentOption.creditId,
+    'paymentOptionLabel': 'Deudas',
+    'cashAccountId': null,
+    'paymentMethodId': null,
+    'cashAccountName': null,
+    'cashAccountKind': null,
+    'paymentMethodCode': null,
+    'paymentMethodName': null,
+  };
 
   static Future<Map<String, Object?>> _optionFact(
     DatabaseExecutor txn,
@@ -851,6 +957,50 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
     };
   }
 
+  /// The dashboard includes ordinary receivables and the aggregate legacy
+  /// opening. Check the final residual, rather than gross temporary balances
+  /// between the atomic sale and collection child documents.
+  static Future<void> _checkCreditCapacity(
+    DatabaseExecutor txn,
+    BigInt additionalCredit,
+  ) async {
+    final receivables = await txn.rawQuery('''
+SELECT r.id,r.initial_minor FROM customer_receivables r
+JOIN sales s ON s.document_id=r.origin_document_id
+JOIN business_documents d ON d.id=r.origin_document_id AND d.status='posted'
+JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
+''');
+    final settlements = await txn.rawQuery('''
+SELECT s.receivable_id,s.amount_minor FROM receivable_settlements s
+JOIN business_documents d ON d.id=s.collection_id AND d.status='posted'
+JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
+''');
+    final legacy = await txn.rawQuery('''
+SELECT o.receivables_minor FROM treasury_openings o
+JOIN business_documents d ON d.id=o.document_id AND d.status='posted'
+JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
+''');
+    final collected = <String, BigInt>{};
+    for (final row in settlements) {
+      final id = row['receivable_id'] as String;
+      collected[id] =
+          (collected[id] ?? BigInt.zero) +
+          BigInt.from(row['amount_minor'] as int);
+    }
+    var total = additionalCredit;
+    for (final row in receivables) {
+      final remaining =
+          BigInt.from(row['initial_minor'] as int) -
+          (collected[row['id']] ?? BigInt.zero);
+      _int(remaining, 'Saldo por cobrar');
+      total += remaining;
+    }
+    for (final row in legacy) {
+      total += BigInt.from(row['receivables_minor'] as int);
+    }
+    _int(total, 'Deudas de clientes');
+  }
+
   static Future<void> _unusedCommand(DatabaseExecutor txn, String id) async {
     if ((await txn.query(
       'paid_purchase_requests',
@@ -866,6 +1016,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       'sale_confirmations',
       'collection_requests',
       'supplier_payment_requests',
+      'treasury_operation_requests',
     ]) {
       if ((await txn.query(
         table,
@@ -917,6 +1068,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
     return QuickSaleAccount(
       id: row['id'] as String,
       label: row['label'] as String,
+      customerName: row['customer_name'] as String? ?? '',
       revision: row['revision'] as int,
       status: row['status'] as String,
       updatedAtUtc: DateTime.parse(row['updated_at_utc'] as String).toUtc(),
@@ -928,7 +1080,9 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
               productId: l['product_id'] as String?,
               quantityText: l['quantity_text'] as String,
               unitPriceMinor: l['unit_price_minor'] as int?,
-              paymentOptionId: l['payment_option_id'] as String?,
+              paymentOptionId: l['is_credit'] == 1
+                  ? QuickPaymentOption.creditId
+                  : l['payment_option_id'] as String?,
             ),
           )
           .toList(),
@@ -948,6 +1102,8 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       preparedAtUtc: DateTime.parse(row['prepared_at_utc'] as String).toUtc(),
       status: row['status'] as String,
       rejectionReason: row['rejection_reason'] as String?,
+      creditMinor: p['creditMinor'] as int? ?? 0,
+      customerName: p['customerName'] as String? ?? '',
     );
   }
 
@@ -966,9 +1122,11 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
     return QuickSaleResult(
       commandId: r['commandId'] as String,
       saleDocumentId: r['saleDocumentId'] as String,
-      collectionDocumentId: r['collectionDocumentId'] as String,
+      collectionDocumentId: r['collectionDocumentId'] as String?,
       totalMinor: r['totalMinor'] as int,
       totalCostMinor: r['totalCostMinor'] as int,
+      creditMinor: r['creditMinor'] as int? ?? 0,
+      customerName: r['customerName'] as String? ?? '',
     );
   }
 

@@ -960,7 +960,9 @@ void main() {
       for (final table in before.keys) {
         final after = await app.database.query(table);
         expect(
-          table == 'schema_migrations' ? after.take(6).toList() : after,
+          table == 'schema_migrations'
+              ? after.take(6).toList()
+              : _priorColumns(after, before[table]!),
           before[table],
           reason: table,
         );
@@ -1058,7 +1060,9 @@ void main() {
         for (final table in before.keys) {
           final after = await app.database.query(table);
           expect(
-            table == 'schema_migrations' ? after.take(7).toList() : after,
+            table == 'schema_migrations'
+                ? after.take(7).toList()
+                : _priorColumns(after, before[table]!),
             before[table],
             reason: table,
           );
@@ -1092,82 +1096,110 @@ void main() {
     },
   );
 
-  test(
-    'v9 migrates with prior records preserved and an unchanged verified backup',
-    () async {
-      final path = p.join(fixtureDirectory.path, 'upgrade_v9.sqlite3');
-      final old = await _createVersion6(path);
-      await _insertVersion6History(old);
-      for (final migration in [
-        (7, DatabaseSchema.migration7Statements),
-        (8, DatabaseSchema.migration8Statements),
-        (9, DatabaseSchema.migration9Statements),
-      ]) {
-        for (final statement in migration.$2) {
-          await old.execute(statement);
-        }
-        await old.execute('PRAGMA user_version = ${migration.$1}');
-        await old.insert('schema_migrations', {
-          'version': migration.$1,
-          'name': DatabaseSchema.nameForVersion(migration.$1),
-          'migration_checksum': DatabaseSchema.checksumForVersion(migration.$1),
-          'schema_checksum': await _testSchemaChecksum(old),
-          'applied_at_utc': _timestamp,
-        });
-      }
-      final before = await _allRows(old);
-      await old.close();
-      final app = await AppDatabase.open(path: path);
-      try {
-        expect(
-          (await app.readHealth())['schemaVersion'],
-          DatabaseSchema.version,
+  for (final startingVersion in [9, 10]) {
+    test(
+      'v$startingVersion migrates with prior records preserved and an unchanged verified backup',
+      () async {
+        final path = p.join(
+          fixtureDirectory.path,
+          'upgrade_v$startingVersion.sqlite3',
         );
-        for (final table in before.keys) {
-          final after = await app.database.query(table);
+        final old = await _createVersion6(path);
+        await _insertVersion6History(old);
+        for (final migration in [
+          (7, DatabaseSchema.migration7Statements),
+          (8, DatabaseSchema.migration8Statements),
+          (9, DatabaseSchema.migration9Statements),
+          (10, DatabaseSchema.migration10Statements),
+        ].where((migration) => migration.$1 <= startingVersion)) {
+          for (final statement in migration.$2) {
+            await old.execute(statement);
+          }
+          await old.execute('PRAGMA user_version = ${migration.$1}');
+          await old.insert('schema_migrations', {
+            'version': migration.$1,
+            'name': DatabaseSchema.nameForVersion(migration.$1),
+            'migration_checksum': DatabaseSchema.checksumForVersion(
+              migration.$1,
+            ),
+            'schema_checksum': await _testSchemaChecksum(old),
+            'applied_at_utc': _timestamp,
+          });
+        }
+        final before = await _allRows(old);
+        await old.close();
+        final app = await AppDatabase.open(path: path);
+        try {
           expect(
-            table == 'schema_migrations' ? after.take(9).toList() : after,
-            before[table],
-            reason: table,
+            (await app.readHealth())['schemaVersion'],
+            DatabaseSchema.version,
           );
+          for (final table in before.keys) {
+            final after = await app.database.query(table);
+            expect(
+              table == 'schema_migrations'
+                  ? after.take(startingVersion).toList()
+                  : _priorColumns(after, before[table]!),
+              before[table],
+              reason: table,
+            );
+          }
+          expect(
+            (await app.database.query(
+              'quick_sales_accounts',
+            )).every((row) => row['customer_name'] == ''),
+            isTrue,
+          );
+          expect(
+            (await app.database.query(
+              'quick_sales_lines',
+            )).every((row) => row['is_credit'] == 0),
+            isTrue,
+          );
+          for (final table in [
+            'quick_sale_line_tenders',
+            'treasury_operation_requests',
+            'treasury_operations',
+          ]) {
+            expect(await app.database.query(table), isEmpty);
+          }
+        } finally {
+          await app.close();
         }
-        for (final table in [
-          'treasury_operation_requests',
-          'treasury_operations',
-        ]) {
-          expect(await app.database.query(table), isEmpty);
-        }
-      } finally {
-        await app.close();
-      }
-      final backups = await Directory(
-        p.join(fixtureDirectory.path, 'backups'),
-      ).list().toList();
-      expect(backups, hasLength(1));
-      expect(p.basename(backups.single.path), contains('.v9.'));
-      final backup = await databaseFactoryFfi.openDatabase(
-        backups.single.path,
-        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
-      );
-      try {
-        expect(await backup.getVersion(), 9);
-        expect(await _allRows(backup), before);
-        expect(await backup.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+        final backups = await Directory(
+          p.join(fixtureDirectory.path, 'backups'),
+        ).list().toList();
+        expect(backups, hasLength(1));
         expect(
-          (await backup.rawQuery('PRAGMA quick_check')).single.values.single,
-          'ok',
+          p.basename(backups.single.path),
+          contains('.v$startingVersion.'),
         );
-      } finally {
-        await backup.close();
-      }
-      final reopened = await AppDatabase.open(path: path);
-      await reopened.close();
-      expect(
-        await Directory(p.join(fixtureDirectory.path, 'backups')).list().length,
-        1,
-      );
-    },
-  );
+        final backup = await databaseFactoryFfi.openDatabase(
+          backups.single.path,
+          options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+        );
+        try {
+          expect(await backup.getVersion(), startingVersion);
+          expect(await _allRows(backup), before);
+          expect(await backup.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+          expect(
+            (await backup.rawQuery('PRAGMA quick_check')).single.values.single,
+            'ok',
+          );
+        } finally {
+          await backup.close();
+        }
+        final reopened = await AppDatabase.open(path: path);
+        await reopened.close();
+        expect(
+          await Directory(
+            p.join(fixtureDirectory.path, 'backups'),
+          ).list().length,
+          1,
+        );
+      },
+    );
+  }
 
   test('historical v6 drift is refused before migration or backup', () async {
     final path = p.join(fixtureDirectory.path, 'history_failure_v6.sqlite3');
@@ -2056,6 +2088,16 @@ Future<void> _insertVersion3Sale(DatabaseExecutor db) async {
     where: 'id = ?',
     whereArgs: ['old-tab'],
   );
+}
+
+// ALTER migrations may add columns; every prior value must remain identical.
+List<Map<String, Object?>> _priorColumns(
+  List<Map<String, Object?>> after,
+  List<Map<String, Object?>> before,
+) {
+  if (before.isEmpty) return after;
+  final keys = before.first.keys;
+  return after.map((row) => {for (final key in keys) key: row[key]}).toList();
 }
 
 Future<Map<String, List<Map<String, Object?>>>> _allRows(

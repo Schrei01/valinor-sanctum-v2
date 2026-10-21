@@ -68,7 +68,13 @@ void main() {
   test('defaults are idempotent catalog configuration with no money', () async {
     await quick.ensureDefaults();
     final snapshot = await quick.load();
-    expect(snapshot.paymentOptions.map((p) => p.label), ['Efectivo', 'Nequi']);
+    expect(snapshot.paymentOptions.map((p) => p.label), [
+      'Efectivo',
+      'Nequi',
+      'Deudas',
+    ]);
+    expect(snapshot.paymentOptions.last.isCredit, isTrue);
+    expect(await count('quick_payment_options'), 2);
     expect(await count('cash_accounts'), 2);
     expect(await count('payment_methods'), 2);
     expect(await count('collections'), 0);

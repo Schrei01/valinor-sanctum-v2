@@ -23,10 +23,12 @@ class QuickSaleAccount {
     required this.status,
     required this.updatedAtUtc,
     required List<QuickSaleLine> lines,
+    this.customerName = '',
     this.confirmedDocumentId,
   }) : lines = List.unmodifiable(lines);
   final String id;
   final String label;
+  final String customerName;
   final int revision;
   final String status;
   final DateTime updatedAtUtc;
@@ -40,26 +42,32 @@ class SaveQuickSaleAccount {
     required this.label,
     required this.expectedRevision,
     required List<QuickSaleLine> lines,
+    this.customerName = '',
   }) : lines = List.unmodifiable(lines);
   final String id;
   final String label;
+  final String customerName;
   final int expectedRevision;
   final List<QuickSaleLine> lines;
 }
 
 class QuickPaymentOption {
+  static const creditId = 'quick-debt';
+
   const QuickPaymentOption({
     required this.id,
     required this.label,
     required this.cashAccountId,
     required this.paymentMethodId,
     this.isActive = true,
+    this.isCredit = false,
   });
   final String id;
   final String label;
   final String cashAccountId;
   final String paymentMethodId;
   final bool isActive;
+  final bool isCredit;
 }
 
 class PreparedQuickSale {
@@ -73,6 +81,8 @@ class PreparedQuickSale {
     required this.preparedAtUtc,
     required this.status,
     this.rejectionReason,
+    this.creditMinor = 0,
+    this.customerName = '',
   });
   final String commandId;
   final String accountId;
@@ -83,6 +93,8 @@ class PreparedQuickSale {
   final DateTime preparedAtUtc;
   final String status;
   final String? rejectionReason;
+  final int creditMinor;
+  final String customerName;
 }
 
 class QuickSaleResult {
@@ -92,12 +104,16 @@ class QuickSaleResult {
     required this.collectionDocumentId,
     required this.totalMinor,
     required this.totalCostMinor,
+    this.creditMinor = 0,
+    this.customerName = '',
   });
   final String commandId;
   final String saleDocumentId;
-  final String collectionDocumentId;
+  final String? collectionDocumentId;
   final int totalMinor;
   final int totalCostMinor;
+  final int creditMinor;
+  final String customerName;
 }
 
 class ConfirmedQuickSaleLine {
@@ -107,12 +123,14 @@ class ConfirmedQuickSaleLine {
     required this.unitPriceMinor,
     required this.totalMinor,
     required this.paymentLabel,
+    this.isCredit = false,
   });
   final String productName;
   final int quantity;
   final int unitPriceMinor;
   final int totalMinor;
   final String paymentLabel;
+  final bool isCredit;
 }
 
 class ConfirmedQuickSale {

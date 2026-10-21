@@ -118,8 +118,10 @@ SELECT l.debit_minor,l.credit_minor,c.id cash_account_id,c.name account_name,
  op.source_account_name_snapshot treasury_source_name,
  op.destination_account_name_snapshot treasury_destination_name,
  op.reason treasury_reason,op.note treasury_note,
- EXISTS(SELECT 1 FROM quick_sale_line_payments q
-   WHERE q.collection_document_id=d.id) is_quick_sale,
+ (EXISTS(SELECT 1 FROM quick_sale_line_payments q
+   WHERE q.collection_document_id=d.id)
+  OR EXISTS(SELECT 1 FROM quick_sale_line_tenders q
+   WHERE q.collection_document_id=d.id)) is_quick_sale,
  EXISTS(SELECT 1 FROM paid_purchase_entries p
    WHERE p.payment_document_id=d.id) is_paid_purchase
 FROM journal_lines l

@@ -35,6 +35,8 @@ class FakeQuickSalesStore implements QuickSalesStore {
   final options = <QuickPaymentOption>[];
   final pending = <PreparedQuickSale>[];
   final sales = <ConfirmedQuickSale>[];
+  final balances = <String, int>{'cash-account': 0, 'nequi-account': 0};
+  final customerDebts = <String, int>{};
   final savedInputs = <SaveQuickSaleAccount>[];
   final preparedIds = <String>[];
   final confirmedIds = <String>[];
@@ -70,6 +72,13 @@ class FakeQuickSalesStore implements QuickSalesStore {
         cashAccountId: 'nequi-account',
         paymentMethodId: 'nequi-method',
       ),
+      const QuickPaymentOption(
+        id: QuickPaymentOption.creditId,
+        label: 'Deudas',
+        cashAccountId: '',
+        paymentMethodId: '',
+        isCredit: true,
+      ),
     ]);
   }
 
@@ -93,6 +102,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
     input.id,
     input.expectedRevision,
     input.label,
+    input.customerName,
     for (final line in input.lines)
       [
         line.id,
@@ -122,6 +132,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
       final saved = QuickSaleAccount(
         id: input.id,
         label: input.label,
+        customerName: input.customerName,
         revision: input.expectedRevision + 1,
         status: 'open',
         updatedAtUtc: DateTime.utc(2026, 10, 19),
@@ -171,6 +182,21 @@ class FakeQuickSalesStore implements QuickSalesStore {
         'Selecciona producto, cantidad y forma de pago en cada línea.',
       );
     }
+    final hasCredit = account.lines.any(
+      (line) => line.paymentOptionId == QuickPaymentOption.creditId,
+    );
+    if (hasCredit && account.customerName.trim().isEmpty) {
+      throw const QuickSalesValidationException(
+        'Escribe el nombre del cliente.',
+      );
+    }
+    final credit = account.lines
+        .where((line) => line.paymentOptionId == QuickPaymentOption.creditId)
+        .fold(
+          0,
+          (sum, line) =>
+              sum + line.unitPriceMinor! * int.parse(line.quantityText),
+        );
     final prepared = PreparedQuickSale(
       commandId: commandId,
       accountId: accountId,
@@ -181,6 +207,8 @@ class FakeQuickSalesStore implements QuickSalesStore {
         (sum, line) =>
             sum + line.unitPriceMinor! * int.parse(line.quantityText),
       ),
+      creditMinor: credit,
+      customerName: hasCredit ? account.customerName.trim() : '',
       occurredAtUtc: occurredAtUtc,
       preparedAtUtc: occurredAtUtc,
       status: 'prepared',
@@ -206,6 +234,8 @@ class FakeQuickSalesStore implements QuickSalesStore {
             accountRevision: prepared.accountRevision,
             label: prepared.label,
             totalMinor: prepared.totalMinor,
+            creditMinor: prepared.creditMinor,
+            customerName: prepared.customerName,
             occurredAtUtc: prepared.occurredAtUtc,
             preparedAtUtc: prepared.preparedAtUtc,
             status: 'rejected',
@@ -221,11 +251,49 @@ class FakeQuickSalesStore implements QuickSalesStore {
     final result = QuickSaleResult(
       commandId: commandId,
       saleDocumentId: 'sale-$commandId',
-      collectionDocumentId: 'collection-$commandId',
+      collectionDocumentId: prepared.totalMinor == prepared.creditMinor
+          ? null
+          : 'collection-$commandId',
       totalMinor: prepared.totalMinor,
       totalCostMinor: 100000,
+      creditMinor: prepared.creditMinor,
+      customerName: prepared.customerName,
     );
     _results[commandId] = result;
+    for (final line in account.lines) {
+      final quantity = int.parse(line.quantityText);
+      final amount = quantity * line.unitPriceMinor!;
+      if (line.paymentOptionId == QuickPaymentOption.creditId) {
+        customerDebts.update(
+          prepared.customerName,
+          (current) => current + amount,
+          ifAbsent: () => amount,
+        );
+      } else {
+        final option = options.firstWhere(
+          (item) => item.id == line.paymentOptionId,
+        );
+        balances.update(
+          option.cashAccountId,
+          (current) => current + amount,
+          ifAbsent: () => amount,
+        );
+      }
+      final stockIndex = stock.indexWhere(
+        (item) => item.productId == line.productId,
+      );
+      final position = stock[stockIndex];
+      stock[stockIndex] = StockPosition(
+        productId: position.productId,
+        quantity: position.quantity - quantity,
+        totalCostMinor:
+            position.totalCostMinor -
+            (position.quantity == 0
+                    ? 0
+                    : position.totalCostMinor ~/ position.quantity) *
+                quantity,
+      );
+    }
     sales.insert(
       0,
       ConfirmedQuickSale(
@@ -245,6 +313,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
               paymentLabel: options
                   .firstWhere((item) => item.id == line.paymentOptionId)
                   .label,
+              isCredit: line.paymentOptionId == QuickPaymentOption.creditId,
             ),
         ],
       ),
@@ -268,6 +337,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
       QuickSaleAccount(
         id: account.id,
         label: account.label,
+        customerName: account.customerName,
         revision: account.revision + 1,
         status: 'open',
         updatedAtUtc: account.updatedAtUtc,

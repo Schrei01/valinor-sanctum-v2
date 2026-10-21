@@ -117,19 +117,21 @@ class QuickSalesPage extends StatelessWidget {
                 ExpansionTile(
                   key: const Key('quick-history'),
                   tilePadding: EdgeInsets.zero,
-                  title: Text('Últimas ventas pagadas (${data.sales.length})'),
+                  title: Text('Últimas ventas (${data.sales.length})'),
                   children: [
                     for (final sale in data.sales.take(10))
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: Text(sale.label),
                         subtitle: Text(
-                          sale.lines
-                              .map(
-                                (line) =>
-                                    '${line.quantity} × ${line.productName} · ${line.paymentLabel}',
-                              )
-                              .join('\n'),
+                          [
+                            if (sale.result.creditMinor > 0)
+                              'Cliente: ${sale.result.customerName} · Deudas: ${inventoryMoney(sale.result.creditMinor, profile)}',
+                            ...sale.lines.map(
+                              (line) =>
+                                  '${line.quantity} × ${line.productName} · ${line.paymentLabel}',
+                            ),
+                          ].join('\n'),
                         ),
                         trailing: Text(
                           inventoryMoney(sale.result.totalMinor, profile),
@@ -165,7 +167,11 @@ class _QuickAccountCard extends StatefulWidget {
 
 class _QuickAccountCardState extends State<_QuickAccountCard> {
   late final _label = TextEditingController(text: widget.account.label);
+  late final _customer = TextEditingController(
+    text: widget.account.customerName,
+  );
   final _labelFocus = FocusNode();
+  final _customerFocus = FocusNode();
 
   @override
   void didUpdateWidget(covariant _QuickAccountCard oldWidget) {
@@ -173,12 +179,18 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     if (!_labelFocus.hasFocus && _label.text != widget.account.label) {
       _label.text = widget.account.label;
     }
+    if (!_customerFocus.hasFocus &&
+        _customer.text != widget.account.customerName) {
+      _customer.text = widget.account.customerName;
+    }
   }
 
   @override
   void dispose() {
     _label.dispose();
+    _customer.dispose();
     _labelFocus.dispose();
+    _customerFocus.dispose();
     super.dispose();
   }
 
@@ -188,7 +200,8 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
         account.lines.any(
           (line) => line.productId != null || line.quantityText != '1',
         ) ||
-        !RegExp(r'^Cuenta \d+$').hasMatch(account.label);
+        !RegExp(r'^Cuenta \d+$').hasMatch(account.label) ||
+        account.customerName.trim().isNotEmpty;
     if (hasData) {
       final accepted = await showDialog<bool>(
         context: context,
@@ -252,6 +265,8 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     final pending = controller.pendingFor(account.id);
     final error = controller.errorFor(account.id);
     final total = controller.totalFor(account);
+    final hasCredit = controller.hasCreditFor(account);
+    final credit = controller.creditTotalFor(account);
     final groups = <String, BigInt>{};
     for (final line in account.lines) {
       final option = widget.data.paymentOptions
@@ -327,6 +342,25 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
               ],
             ),
             const SizedBox(height: 16),
+            if (hasCredit) ...[
+              TextField(
+                key: ValueKey('quick-customer-${account.id}'),
+                controller: _customer,
+                focusNode: _customerFocus,
+                enabled: !locked,
+                maxLength: 120,
+                decoration: const InputDecoration(
+                  labelText: 'Cliente de la deuda',
+                  helperText:
+                      'El valor de las líneas en Deudas quedará a su nombre.',
+                  counterText: '',
+                  isDense: true,
+                ),
+                onChanged: (value) =>
+                    controller.updateCustomerName(account.id, value),
+              ),
+              const SizedBox(height: 16),
+            ],
             for (final line in account.lines)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -372,6 +406,12 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                   key: ValueKey('quick-total-${account.id}'),
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
+                if (hasCredit)
+                  Text(
+                    'Cobrado: ${_money(total - credit)} · Deudas: ${_money(credit)}',
+                    key: ValueKey('quick-credit-summary-${account.id}'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 if (groups.length > 1)
                   Text(
                     groups.entries

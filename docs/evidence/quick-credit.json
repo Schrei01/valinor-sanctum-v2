@@ -1,0 +1,102 @@
+{
+  "verifiedAtUtc": "2026-10-21T15:37:36.809Z",
+  "version": "0.13.0+18",
+  "schemaVersion": 11,
+  "tests": {
+    "fullSuite": {
+      "passed": 601,
+      "skipped": 3,
+      "failed": 0
+    },
+    "newCases": {
+      "storage": 18,
+      "sqlSchema": 6,
+      "controller": 5,
+      "widgets": 8,
+      "v10BackupMigration": 1,
+      "total": 38
+    },
+    "analyzeClean": true,
+    "formattedModifiedDartFiles": 18,
+    "formatClean": true,
+    "independentReviewOutstandingFindings": 0
+  },
+  "behavior": {
+    "creditOptionInSales": true,
+    "explicitCustomerRequired": true,
+    "allCreditAndMixedSales": true,
+    "paidLinesOnlyCollected": true,
+    "noCollectionDocumentWhenNothingPaid": true,
+    "stockFifoSaleAndReceivableAtomic": true,
+    "subsequentCollectionsDoNotRepeatInventory": true,
+    "virtualDebtHasNoMonetaryIdentity": true,
+    "durablePreparationAndIdempotentRetry": true,
+    "legacyV1CanonicalAndResponsesPreserved": true,
+    "immutableConfirmedHistory": true,
+    "creditCapacityIncludesLegacyReceivables": true,
+    "purchaseTransferLabelUsesSameNequiAccount": true,
+    "otherSectionsKeepNequi": true,
+    "historicalLabelsUnchanged": true
+  },
+  "data": {
+    "manualV10BackupVerified": true,
+    "finalIsolatedRehearsalVerified": true,
+    "priorTablesCompared": 48,
+    "priorRecordsPreservedInRehearsal": true,
+    "newTable": "quick_sale_line_tenders",
+    "rehearsalNewTableEmpty": true,
+    "integrityOk": true,
+    "foreignKeyViolations": 0,
+    "priorMigrationNamesAndChecksumsUnchanged": 10,
+    "automaticV10BackupMatchesManual": true,
+    "allPriorRecordsPreserved": true,
+    "balancesUnchanged": true,
+    "inventoryAndCommercialFactsUnchanged": true,
+    "newTableEmpty": true,
+    "priorValuesUnchanged": true,
+    "appendedMigrationVersion": 11,
+    "addedDefaultColumns": [
+      "quick_sales_accounts.customer_name",
+      "quick_sales_lines.is_credit"
+    ]
+  },
+  "originalPosOpenedOrModified": false,
+  "businessOperationsPostedByAgent": false,
+  "build": {
+    "seconds": 67.9405426,
+    "executableVersion": "0.13.0+18",
+    "appSha256": "177AA0FDB2F4A12B3E6F913E38EB7AD140823E6E975D323F14F7F7AE87F890B1",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.13.0-windows-x64.zip",
+    "files": 17,
+    "bytes": 14756682,
+    "sha256": "954B280B6FFF9FFA3CE9BB5DAFC8CD2FB9DECFA1A9FA90B9452000BC413D124D",
+    "allFilesMatchStableAndVersioned": true,
+    "privateDataAbsent": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.13.0/ValinorSanctum2",
+    "zipHashUnchangedAfterNativeLaunch": true
+  },
+  "native": {
+    "launchSucceeded": true,
+    "navigationLabelsObserved": [
+      "Inicio",
+      "Catálogo",
+      "Compras",
+      "Ventas",
+      "Cobros",
+      "Tesorería",
+      "Sistema"
+    ],
+    "method": "Accessibility and keyboard",
+    "screenshotsCaptured": false,
+    "formsSubmitted": false,
+    "creditFormExercised": false,
+    "purchaseTransferLabelObserved": false,
+    "formBehaviorCoveredByWidgetTests": true,
+    "limitation": "Indexed navigation click was rejected by cached accessibility state; the native form walkthrough was not completed.",
+    "windowLeftOpenForUser": true
+  }
+}

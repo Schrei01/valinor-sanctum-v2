@@ -300,4 +300,113 @@ void main() {
       expect(store.sales, hasLength(1));
     },
   );
+
+  test(
+    'customer edits replay an uncertain save before newer changes',
+    () async {
+      final id = account();
+      fill(id, payment: QuickPaymentOption.creditId);
+      controller.updateCustomerName(id, 'Cliente inicial');
+      store.saveFailure = StateError('response lost');
+      store.saveBeforeFailure = true;
+      expect(await controller.flush(id), isFalse);
+      final originalInput = store.savedInputs.single;
+      controller.updateCustomerName(id, 'Cliente posterior');
+      store.saveFailure = null;
+      expect(await controller.flush(id), isTrue);
+      expect(store.savedInputs[1], same(originalInput));
+      expect(store.savedInputs.last.customerName, 'Cliente posterior');
+      expect(store.accounts.single.customerName, 'Cliente posterior');
+      expect(store.maximumActiveSaves, 1);
+    },
+  );
+
+  test('credit requires an explicit valid customer before preparing', () async {
+    final id = account();
+    fill(id, payment: QuickPaymentOption.creditId);
+    for (final name in ['', ' ', 'x' * 121, 'Cliente\ninválido']) {
+      controller.updateCustomerName(id, name);
+      expect(await controller.register(id), isFalse);
+      expect(controller.errorFor(id), contains('nombre del cliente'));
+    }
+    expect(store.preparedIds, isEmpty);
+    expect(store.customerDebts, isEmpty);
+    controller.updateCustomerName(id, '  Cliente válido  ');
+    expect(await controller.register(id), isTrue);
+    expect(store.sales.single.result.customerName, 'Cliente válido');
+    expect(store.customerDebts['Cliente válido'], 300000);
+  });
+
+  test(
+    'unknown credit result locks the named debtor and reconciles once',
+    () async {
+      final id = account();
+      fill(id, payment: QuickPaymentOption.creditId);
+      controller.updateCustomerName(id, 'Cliente fijo');
+      store.confirmationFailure = StateError('lost result');
+      store.commitBeforeFailure = true;
+      expect(await controller.register(id), isFalse);
+      final commandId = controller.pendingFor(id)!.commandId;
+      controller.updateCustomerName(id, 'No debe cambiar');
+      expect(controller.accounts.single.customerName, 'Cliente fijo');
+      expect(controller.pendingFor(id)!.customerName, 'Cliente fijo');
+      expect(controller.pendingFor(id)!.creditMinor, 300000);
+      await controller.load();
+      expect(controller.accounts, isEmpty);
+      expect(store.customerDebts, {'Cliente fijo': 300000});
+      expect(store.stock.first.quantity, 19);
+      expect(store.confirmedIds, [commandId]);
+    },
+  );
+
+  test(
+    'cash selection preserves customer draft without creating a debt',
+    () async {
+      final id = account();
+      fill(id, payment: QuickPaymentOption.creditId);
+      controller.updateCustomerName(id, 'Cliente conservado');
+      controller.addLine(id);
+      expect(controller.accounts.single.customerName, 'Cliente conservado');
+      controller.removeLine(id, controller.accounts.single.lines.last.id);
+      fill(id, payment: 'cash');
+      expect(controller.accounts.single.customerName, 'Cliente conservado');
+      expect(await controller.register(id), isTrue);
+      expect(store.sales.single.result.creditMinor, 0);
+      expect(store.sales.single.result.customerName, isEmpty);
+      expect(store.customerDebts, isEmpty);
+      expect(store.balances['cash-account'], 300000);
+    },
+  );
+
+  test(
+    'reopening recovers the exact prepared debtor and retry identity',
+    () async {
+      final id = account();
+      fill(id, payment: QuickPaymentOption.creditId);
+      controller.updateCustomerName(id, 'Cliente preparado');
+      store.preparationFailure = StateError('preparation response lost');
+      store.prepareBeforeFailure = true;
+      expect(await controller.register(id), isFalse);
+      final commandId = store.preparedIds.single;
+      controller.dispose();
+      controller = QuickSalesController(
+        store: store,
+        autosaveDelay: const Duration(days: 1),
+      );
+      await controller.load();
+      expect(controller.isLocked(id), isTrue);
+      expect(controller.pendingFor(id)!.commandId, commandId);
+      expect(controller.pendingFor(id)!.customerName, 'Cliente preparado');
+      expect(controller.pendingFor(id)!.creditMinor, 300000);
+      controller.updateCustomerName(id, 'No debe reemplazarlo');
+      expect(controller.accounts.single.customerName, 'Cliente preparado');
+      store.preparationFailure = null;
+      expect(await controller.retry(id), isTrue);
+      expect(store.preparedIds, [commandId]);
+      expect(store.confirmedIds, [commandId]);
+      expect(store.customerDebts, {'Cliente preparado': 300000});
+      expect(store.stock.first.quantity, 19);
+      expect(store.balances.values.every((amount) => amount == 0), isTrue);
+    },
+  );
 }

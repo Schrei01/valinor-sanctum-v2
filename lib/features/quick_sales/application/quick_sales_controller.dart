@@ -66,7 +66,9 @@ class QuickSalesController extends ChangeNotifier {
         for (final id in ids) {
           _closedIds.add(id);
           _cards.remove(id)?.timer?.cancel();
-          notice = '${sold.label}: venta pagada recuperada.';
+          notice = sold.result.creditMinor > 0
+              ? '${sold.label}: venta con deuda recuperada.'
+              : '${sold.label}: venta pagada recuperada.';
         }
       }
       for (final account in next.accounts) {
@@ -163,6 +165,9 @@ class QuickSalesController extends ChangeNotifier {
 
   void rename(String id, String label) => _change(id, label: label);
 
+  void updateCustomerName(String id, String customerName) =>
+      _change(id, customerName: customerName);
+
   void addLine(String id) {
     final card = _cards[id];
     if (card == null) return;
@@ -195,10 +200,20 @@ class QuickSalesController extends ChangeNotifier {
     );
   }
 
-  void _change(String id, {String? label, List<QuickSaleLine>? lines}) {
+  void _change(
+    String id, {
+    String? label,
+    String? customerName,
+    List<QuickSaleLine>? lines,
+  }) {
     final card = _cards[id];
     if (_disposed || card == null || isLocked(id)) return;
-    card.account = _copy(card.account, label: label, lines: lines);
+    card.account = _copy(
+      card.account,
+      label: label,
+      customerName: customerName,
+      lines: lines,
+    );
     card.generation++;
     card.error = null;
     notice = null;
@@ -238,6 +253,7 @@ class QuickSalesController extends ChangeNotifier {
           SaveQuickSaleAccount(
             id: card.account.id,
             label: card.account.label,
+            customerName: card.account.customerName,
             expectedRevision: card.account.revision,
             lines: card.account.lines,
           );
@@ -278,6 +294,20 @@ class QuickSalesController extends ChangeNotifier {
             BigInt.from(int.tryParse(line.quantityText) ?? 0),
   );
 
+  bool hasCreditFor(QuickSaleAccount account) => account.lines.any(
+    (line) => line.paymentOptionId == QuickPaymentOption.creditId,
+  );
+
+  BigInt creditTotalFor(QuickSaleAccount account) => account.lines
+      .where((line) => line.paymentOptionId == QuickPaymentOption.creditId)
+      .fold(
+        BigInt.zero,
+        (sum, line) =>
+            sum +
+            BigInt.from(line.unitPriceMinor ?? 0) *
+                BigInt.from(int.tryParse(line.quantityText) ?? 0),
+      );
+
   Future<bool> register(String id) async {
     final card = _cards[id];
     if (_disposed || card == null || isLocked(id)) return false;
@@ -298,6 +328,16 @@ class QuickSalesController extends ChangeNotifier {
       _emit();
       return false;
     }
+    final customer = card.account.customerName.trim();
+    if (hasCreditFor(card.account) &&
+        (customer.isEmpty ||
+            customer.length > 120 ||
+            RegExp(r'[\x00-\x1f\x7f]').hasMatch(customer))) {
+      card.error = 'Escribe el nombre del cliente para registrar la deuda.';
+      card.acting = false;
+      _emit();
+      return false;
+    }
     final preparation = _Preparation(
       commandId: InventoryIds.next(),
       accountId: id,
@@ -311,6 +351,8 @@ class QuickSalesController extends ChangeNotifier {
       accountRevision: card.account.revision,
       label: card.account.label,
       totalMinor: total.toInt(),
+      creditMinor: creditTotalFor(card.account).toInt(),
+      customerName: hasCreditFor(card.account) ? customer : '',
       occurredAtUtc: now,
       preparedAtUtc: now,
       status: 'prepared',
@@ -346,10 +388,12 @@ class QuickSalesController extends ChangeNotifier {
         );
         card.preparation = null;
       }
-      await store.confirmPrepared(pending.commandId);
+      final result = await store.confirmPrepared(pending.commandId);
       _closedIds.add(card.account.id);
       _cards.remove(card.account.id)?.timer?.cancel();
-      notice = '${card.account.label}: venta registrada y pagada.';
+      notice = result.creditMinor > 0
+          ? '${card.account.label}: venta registrada con deuda a nombre de ${result.customerName}.'
+          : '${card.account.label}: venta registrada y pagada.';
       await _reload();
       return true;
     } on QuickSalesValidationException catch (failure) {
@@ -363,6 +407,8 @@ class QuickSalesController extends ChangeNotifier {
           accountRevision: pending.accountRevision,
           label: pending.label,
           totalMinor: pending.totalMinor,
+          creditMinor: pending.creditMinor,
+          customerName: pending.customerName,
           occurredAtUtc: pending.occurredAtUtc,
           preparedAtUtc: pending.preparedAtUtc,
           status: 'rejected',
@@ -493,11 +539,13 @@ class QuickSalesController extends ChangeNotifier {
   QuickSaleAccount _copy(
     QuickSaleAccount current, {
     String? label,
+    String? customerName,
     List<QuickSaleLine>? lines,
     int? revision,
   }) => QuickSaleAccount(
     id: current.id,
     label: label ?? current.label,
+    customerName: customerName ?? current.customerName,
     revision: revision ?? current.revision,
     status: current.status,
     updatedAtUtc: current.updatedAtUtc,

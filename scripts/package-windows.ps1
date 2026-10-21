@@ -93,7 +93,8 @@ Configura tu perfil. En Compras ingresa nombre, costo unitario, PVP, proveedor,
 categoría, SKU opcional y cantidad. Puedes crear el producto o reponer uno existente.
 Al elegir un producto se completan SKU, categoría, PVP, proveedor y último costo
 conocido. Puedes modificarlos antes de ingresar la compra; completa la cantidad.
-Elige Efectivo o Nequi para pagar: el ingreso y la salida de dinero se guardan juntos.
+Elige Efectivo o Transferencia para pagar: el ingreso y la salida de dinero se guardan juntos.
+Transferencia es el nombre de Nequi solo en Compras y usa esa misma cuenta.
 Registra el saldo inicial real antes del primer movimiento de cada cuenta si corresponde.
 Consulta el Historial de ingresos desde la misma sección Compras.
 Catálogo muestra productos: filtra por Categoría y Proveedor, y busca por nombre o SKU.
@@ -105,7 +106,10 @@ Si hay una copia de inventario cargada localmente, Catálogo permite consultarla
 en Inventario de la copia y volver al Catálogo de esta app con el selector de origen.
 La copia muestra su corte, cantidades, PVP y lotes; no está disponible para vender.
 En Ventas crea varias cuentas, agrega productos y elige la forma de pago por línea.
-Registrar venta guarda entrega, stock, costo y cobro de contado en una sola operación.
+Registrar venta guarda entrega, stock, costo y cobro en una sola operación.
+Para fiar, elige Deudas en la línea e indica el cliente de la deuda en la cuenta.
+Puedes combinar líneas pagadas y fiadas: solo lo pagado entra a Caja o Nequi.
+Lo fiado aumenta Deudas en Tesorería y se cobra después desde Cobros.
 Las cuentas de mostrador se guardan automáticamente mientras las preparas.
 Ventas es la única pantalla de ventas; no hay acceso al formulario anterior.
 Tesorería reemplaza Pagos: consulta Caja, Nequi, Caja mayor y Deudas de clientes.

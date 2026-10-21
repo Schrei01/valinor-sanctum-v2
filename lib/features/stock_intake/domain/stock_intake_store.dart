@@ -19,6 +19,9 @@ class IntakePaymentOption {
   final bool openingRecorded;
   final bool canRecordOpening;
   final bool isActive;
+
+  /// Purchases uses a local label without renaming the monetary identity.
+  String get displayLabel => label == 'Nequi' ? 'Transferencia' : label;
 }
 
 class StockIntakeCommand {

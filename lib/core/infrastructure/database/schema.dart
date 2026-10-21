@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 10;
+  static const int version = 11;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -48,6 +48,10 @@ abstract final class DatabaseSchema {
   static String get migration10Checksum =>
       checksum(migration10Statements.join('\n;\n'));
 
+  static const String migration11Name = 'quick_sales_customer_credit_v11';
+  static String get migration11Checksum =>
+      checksum(migration11Statements.join('\n;\n'));
+
   static String nameForVersion(int version) => switch (version) {
     1 => migrationName,
     2 => migration2Name,
@@ -59,6 +63,7 @@ abstract final class DatabaseSchema {
     8 => migration8Name,
     9 => migration9Name,
     10 => migration10Name,
+    11 => migration11Name,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -73,6 +78,7 @@ abstract final class DatabaseSchema {
     8 => migration8Checksum,
     9 => migration9Checksum,
     10 => migration10Checksum,
+    11 => migration11Checksum,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -2815,6 +2821,367 @@ END
 ''',
     ..._freezeTreasuryOperationJournal(),
   ]);
+
+  /// Credit is a tender classification, never a fictitious cash account. Legacy
+  /// fully paid checkouts retain their original request and payment facts.
+  static final List<String> migration11Statements = List<String>.unmodifiable([
+    "ALTER TABLE quick_sales_accounts ADD COLUMN customer_name TEXT NOT NULL DEFAULT '' CHECK (length(trim(customer_name)) <= 160)",
+    'ALTER TABLE quick_sales_lines ADD COLUMN is_credit INTEGER NOT NULL DEFAULT 0 CHECK (typeof(is_credit)=\'integer\' AND is_credit IN (0,1))',
+    '''
+CREATE TABLE quick_sale_line_tenders (
+  id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+  request_id TEXT NOT NULL REFERENCES quick_sale_requests(command_id) ON DELETE RESTRICT,
+  sequence INTEGER NOT NULL CHECK (typeof(sequence)='integer' AND sequence >= 0),
+  source_line_id TEXT NOT NULL UNIQUE REFERENCES quick_sales_lines(id) ON DELETE RESTRICT,
+  sale_document_id TEXT NOT NULL REFERENCES sales(document_id) ON DELETE RESTRICT,
+  sale_line_id TEXT NOT NULL REFERENCES sale_lines(id) ON DELETE RESTRICT,
+  collection_document_id TEXT REFERENCES collections(document_id) ON DELETE RESTRICT,
+  product_id TEXT NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+  product_name_snapshot TEXT NOT NULL CHECK (length(trim(product_name_snapshot)) BETWEEN 1 AND 160),
+  quantity INTEGER NOT NULL CHECK (typeof(quantity)='integer' AND quantity > 0),
+  unit_price_minor INTEGER NOT NULL CHECK (typeof(unit_price_minor)='integer' AND unit_price_minor >= 0),
+  total_minor INTEGER NOT NULL CHECK (typeof(total_minor)='integer' AND total_minor >= 0
+    AND typeof(quantity*unit_price_minor)='integer' AND quantity*unit_price_minor=total_minor),
+  is_credit INTEGER NOT NULL CHECK (typeof(is_credit)='integer' AND is_credit IN (0,1)),
+  customer_name_snapshot TEXT NOT NULL CHECK (length(trim(customer_name_snapshot)) BETWEEN 1 AND 160),
+  payment_option_id TEXT REFERENCES quick_payment_options(id) ON DELETE RESTRICT,
+  payment_option_label_snapshot TEXT NOT NULL CHECK (length(trim(payment_option_label_snapshot)) BETWEEN 1 AND 160),
+  cash_account_id TEXT REFERENCES cash_accounts(id) ON DELETE RESTRICT,
+  payment_method_id TEXT REFERENCES payment_methods(id) ON DELETE RESTRICT,
+  cash_account_name_snapshot TEXT,
+  cash_account_kind_snapshot TEXT,
+  payment_method_code_snapshot TEXT,
+  payment_method_name_snapshot TEXT,
+  UNIQUE (request_id,sequence),
+  CHECK ((is_credit=1 AND collection_document_id IS NULL AND payment_option_id IS NULL
+      AND payment_option_label_snapshot='Deudas' AND cash_account_id IS NULL AND payment_method_id IS NULL
+      AND cash_account_name_snapshot IS NULL AND cash_account_kind_snapshot IS NULL
+      AND payment_method_code_snapshot IS NULL AND payment_method_name_snapshot IS NULL)
+    OR (is_credit=0 AND payment_option_id IS NOT NULL AND cash_account_id IS NOT NULL
+      AND payment_method_id IS NOT NULL AND cash_account_name_snapshot IS NOT NULL
+      AND length(trim(cash_account_name_snapshot)) BETWEEN 1 AND 160
+      AND cash_account_kind_snapshot IS NOT NULL AND cash_account_kind_snapshot IN ('cash','bank','mobile','clearing')
+      AND payment_method_code_snapshot IS NOT NULL AND length(trim(payment_method_code_snapshot)) BETWEEN 1 AND 32
+      AND payment_method_name_snapshot IS NOT NULL AND length(trim(payment_method_name_snapshot)) BETWEEN 1 AND 160
+      AND (total_minor=0 OR collection_document_id IS NOT NULL)))
+)
+''',
+    'CREATE INDEX idx_quick_line_tenders_sale ON quick_sale_line_tenders(sale_document_id)',
+    '''
+CREATE TRIGGER quick_sales_lines_credit_identity_insert
+BEFORE INSERT ON quick_sales_lines
+WHEN NEW.is_credit=1 AND NEW.payment_option_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'Credit draft lines cannot reference monetary payment options'); END
+''',
+    '''
+CREATE TRIGGER quick_sales_lines_credit_identity_update
+BEFORE UPDATE ON quick_sales_lines
+WHEN NEW.is_credit=1 AND NEW.payment_option_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'Credit draft lines cannot reference monetary payment options'); END
+''',
+    '''
+CREATE TRIGGER quick_sales_customer_locked
+BEFORE UPDATE OF customer_name ON quick_sales_accounts
+WHEN NEW.customer_name IS NOT OLD.customer_name AND (OLD.status <> 'open' OR NEW.status <> 'open'
+  OR EXISTS (SELECT 1 FROM quick_sale_requests WHERE account_id=OLD.id AND status <> 'cancelled'))
+BEGIN SELECT RAISE(ABORT, 'A prepared or closed debtor name is immutable'); END
+''',
+    '''
+CREATE TRIGGER quick_credit_requests_validate_insert
+BEFORE INSERT ON quick_sale_requests
+WHEN EXISTS (SELECT 1 FROM quick_sales_lines WHERE account_id=NEW.account_id AND is_credit=1)
+  OR (CASE WHEN json_valid(NEW.canonical_payload) THEN json_extract(NEW.canonical_payload,'\$.version')=2 ELSE 0 END)
+BEGIN
+  SELECT CASE WHEN NOT json_valid(NEW.canonical_payload)
+    THEN RAISE(ABORT, 'Credit checkout requires valid canonical JSON') END;
+  SELECT CASE WHEN NOT (${_quickCreditInputMatches('NEW')})
+    THEN RAISE(ABORT, 'Credit checkout must capture its named debtor, exact lines and tender totals') END;
+END
+''',
+    'DROP TRIGGER quick_sale_requests_validate_update',
+    _quickCreditRequestUpdateTrigger(),
+    '''
+CREATE TRIGGER quick_line_tenders_validate_insert
+BEFORE INSERT ON quick_sale_line_tenders
+BEGIN
+  SELECT CASE WHEN EXISTS (SELECT 1 FROM quick_sale_line_tenders WHERE id=NEW.id
+      OR source_line_id=NEW.source_line_id OR (request_id=NEW.request_id AND sequence=NEW.sequence))
+    OR EXISTS (SELECT 1 FROM quick_sale_line_payments WHERE source_line_id=NEW.source_line_id)
+    THEN RAISE(ABORT, 'Quick sale tender history cannot be replaced or duplicated') END;
+  SELECT CASE WHEN NOT (${_quickCreditTenderMatches()})
+    THEN RAISE(ABORT, 'Quick tender must match its canonical source, posted sale and actual collection') END;
+END
+''',
+    for (final action in ['UPDATE', 'DELETE'])
+      '''
+CREATE TRIGGER quick_line_tenders_no_${action.toLowerCase()}
+BEFORE $action ON quick_sale_line_tenders
+BEGIN SELECT RAISE(ABORT, 'Quick sale tender history is immutable'); END
+''',
+    '''
+CREATE TRIGGER quick_legacy_payments_reject_credit
+BEFORE INSERT ON quick_sale_line_payments
+WHEN EXISTS (SELECT 1 FROM quick_sales_lines WHERE id=NEW.source_line_id AND is_credit=1)
+  OR EXISTS (SELECT 1 FROM quick_sale_line_tenders WHERE source_line_id=NEW.source_line_id)
+  OR EXISTS (SELECT 1 FROM quick_sale_requests WHERE command_id=NEW.request_id
+    AND CASE WHEN json_valid(canonical_payload) THEN json_extract(canonical_payload,'\$.version')=2 ELSE 0 END)
+BEGIN SELECT RAISE(ABORT, 'Credit checkout uses unified tender history'); END
+''',
+  ]);
+
+  static String _quickCreditInputMatches(String request) =>
+      '''EXISTS (
+    SELECT 1 FROM quick_sales_accounts account JOIN app_profile profile
+    WHERE account.id=$request.account_id AND account.revision=$request.account_revision
+      AND json_type($request.canonical_payload)='object'
+      AND json_type($request.canonical_payload,'\$.version')='integer'
+      AND json_extract($request.canonical_payload,'\$.version') IS 2
+      AND ${_quickCreditTextFields('$request.canonical_payload', ['profileId', 'currency', 'label', 'occurredAtUtc'])}
+      AND json_extract($request.canonical_payload,'\$.profileId') IS profile.profile_id
+      AND json_extract($request.canonical_payload,'\$.currency') IS profile.currency_code
+      AND json_extract($request.canonical_payload,'\$.scale') IS profile.money_scale
+      AND json_extract($request.canonical_payload,'\$.label') IS account.label
+      AND json_extract($request.canonical_payload,'\$.occurredAtUtc') IS $request.occurred_at_utc
+      AND json_type($request.canonical_payload,'\$.customerName')='text'
+      AND length(trim(account.customer_name)) BETWEEN 1 AND 160
+      AND json_extract($request.canonical_payload,'\$.customerName') IS account.customer_name
+      AND json_type($request.canonical_payload,'\$.totalMinor')='integer'
+      AND json_extract($request.canonical_payload,'\$.totalMinor') > 0
+      AND json_type($request.canonical_payload,'\$.creditMinor')='integer'
+      AND json_extract($request.canonical_payload,'\$.creditMinor') >= 0
+      AND json_type($request.canonical_payload,'\$.paidMinor')='integer'
+      AND json_extract($request.canonical_payload,'\$.paidMinor') >= 0
+      AND json_extract($request.canonical_payload,'\$.totalMinor')-json_extract($request.canonical_payload,'\$.creditMinor')
+        IS json_extract($request.canonical_payload,'\$.paidMinor')
+      AND json_type($request.canonical_payload,'\$.lines')='array'
+      AND json_array_length($request.canonical_payload,'\$.lines')=(SELECT count(*) FROM quick_sales_lines WHERE account_id=account.id)
+      AND EXISTS (SELECT 1 FROM quick_sales_lines WHERE account_id=account.id AND is_credit=1)
+      AND NOT EXISTS (SELECT 1 FROM json_each($request.canonical_payload,'\$.lines') canonical
+        WHERE NOT (${_quickCreditCanonicalLineMatches(request)}))
+      AND ${_quickCreditCanonicalRemainder(request, 'totalMinor')}=0
+      AND ${_quickCreditCanonicalRemainder(request, 'creditMinor', credit: true)}=0
+      AND ${_quickCreditCanonicalRemainder(request, 'paidMinor', credit: false)}=0
+  )''';
+
+  static String _quickCreditCanonicalRemainder(
+    String request,
+    String field, {
+    bool? credit,
+  }) => _supplierBoundedRemainder(
+    "json_extract($request.canonical_payload,'\$.$field')",
+    "json_each($request.canonical_payload,'\$.lines') canonical",
+    credit == null
+        ? '1'
+        : "json_extract(canonical.value,'\$.isCredit')=${credit ? 1 : 0}",
+    "json_extract(canonical.value,'\$.totalMinor')",
+    'canonical.key',
+  );
+
+  static String _quickCreditCanonicalLineMatches(String request) =>
+      '''EXISTS (
+    SELECT 1 FROM quick_sales_lines source JOIN catalog_items product ON product.id=source.product_id
+    WHERE source.account_id=$request.account_id AND source.sequence=canonical.key
+      AND canonical.type='object'
+      AND ${_quickCreditTextFields('canonical.value', ['lineId', 'productId', 'productName', 'paymentOptionId', 'paymentOptionLabel'])}
+      AND json_extract(canonical.value,'\$.lineId') IS source.id
+      AND json_extract(canonical.value,'\$.productId') IS source.product_id
+      AND json_extract(canonical.value,'\$.productName') IS product.name
+      AND json_type(canonical.value,'\$.isCredit') IN ('true','false')
+      AND json_extract(canonical.value,'\$.isCredit') IS source.is_credit
+      AND json_type(canonical.value,'\$.quantity')='integer' AND json_extract(canonical.value,'\$.quantity') > 0
+      AND trim(source.quantity_text) NOT GLOB '*[^0-9]*'
+      AND ltrim(trim(source.quantity_text),'0')=CAST(json_extract(canonical.value,'\$.quantity') AS TEXT)
+      AND json_type(canonical.value,'\$.unitPriceMinor')='integer'
+      AND json_extract(canonical.value,'\$.unitPriceMinor') IS source.unit_price_minor
+      AND source.unit_price_minor >= 0
+      AND json_type(canonical.value,'\$.totalMinor')='integer'
+      AND typeof(json_extract(canonical.value,'\$.quantity')*source.unit_price_minor)='integer'
+      AND json_extract(canonical.value,'\$.quantity')*source.unit_price_minor IS json_extract(canonical.value,'\$.totalMinor')
+      AND ((source.is_credit=1 AND source.payment_option_id IS NULL
+          AND json_extract(canonical.value,'\$.paymentOptionId') IS 'quick-debt'
+          AND json_extract(canonical.value,'\$.paymentOptionLabel') IS 'Deudas'
+          AND ${_quickCreditNullMoney('canonical.value')})
+        OR (source.is_credit=0 AND EXISTS (
+          SELECT 1 FROM quick_payment_options option JOIN cash_accounts cash ON cash.id=option.cash_account_id
+          JOIN ledger_accounts ledger ON ledger.id=cash.ledger_account_id
+          JOIN payment_methods method ON method.id=option.payment_method_id
+          WHERE option.id=source.payment_option_id AND option.is_active=1 AND cash.is_active=1
+            AND ${_quickCreditTextFields('canonical.value', ['cashAccountId', 'paymentMethodId', 'cashAccountName', 'cashAccountKind', 'paymentMethodCode', 'paymentMethodName'])}
+            AND ledger.is_active=1 AND ledger.class='asset' AND ledger.role='cash' AND method.is_active=1
+            AND json_extract(canonical.value,'\$.paymentOptionId') IS option.id
+            AND json_extract(canonical.value,'\$.paymentOptionLabel') IS option.label
+            AND json_extract(canonical.value,'\$.cashAccountId') IS cash.id
+            AND json_extract(canonical.value,'\$.paymentMethodId') IS method.id
+            AND json_extract(canonical.value,'\$.cashAccountName') IS cash.name
+            AND json_extract(canonical.value,'\$.cashAccountKind') IS cash.kind
+            AND json_extract(canonical.value,'\$.paymentMethodCode') IS method.code
+            AND json_extract(canonical.value,'\$.paymentMethodName') IS method.name)))
+  )''';
+
+  static String _quickCreditNullMoney(String value) => [
+    'cashAccountId',
+    'paymentMethodId',
+    'cashAccountName',
+    'cashAccountKind',
+    'paymentMethodCode',
+    'paymentMethodName',
+  ].map((field) => "json_type($value,'\$.$field') IS 'null'").join(' AND ');
+
+  static String _quickCreditTextFields(String value, List<String> fields) =>
+      fields
+          .map((field) => "json_type($value,'\$.$field') IS 'text'")
+          .join(' AND ');
+
+  static String _quickCreditTenderMatches() => '''EXISTS (
+    SELECT 1 FROM quick_sale_requests request
+    JOIN quick_sales_lines source ON source.account_id=request.account_id
+    JOIN json_each(request.canonical_payload,'\$.lines') canonical ON canonical.key=NEW.sequence
+    JOIN sale_lines line ON line.id=NEW.sale_line_id
+    JOIN sales sale ON sale.document_id=line.sale_id
+    JOIN business_documents sale_doc ON sale_doc.id=sale.document_id
+    JOIN journal_entries sale_entry ON sale_entry.document_id=sale_doc.id
+    WHERE request.command_id=NEW.request_id AND request.status='executing'
+      AND json_extract(request.canonical_payload,'\$.version') IS 2
+      AND source.id=NEW.source_line_id AND source.sequence=NEW.sequence
+      AND source.product_id=NEW.product_id AND source.unit_price_minor=NEW.unit_price_minor
+      AND source.is_credit=NEW.is_credit AND source.payment_option_id IS NEW.payment_option_id
+      AND trim(source.quantity_text) NOT GLOB '*[^0-9]*'
+      AND ltrim(trim(source.quantity_text),'0')=CAST(NEW.quantity AS TEXT)
+      AND line.sale_id=NEW.sale_document_id AND line.product_id=NEW.product_id
+      AND line.unit_price_minor=NEW.unit_price_minor AND line.name_snapshot=NEW.product_name_snapshot
+      AND sale_doc.command_id=request.sale_command_id AND sale_doc.status='posted' AND sale_entry.status='posted'
+      AND sale.customer_name_snapshot IS NEW.customer_name_snapshot
+      AND NEW.customer_name_snapshot IS json_extract(request.canonical_payload,'\$.customerName')
+      AND json_extract(canonical.value,'\$.lineId') IS NEW.source_line_id
+      AND json_extract(canonical.value,'\$.productId') IS NEW.product_id
+      AND json_extract(canonical.value,'\$.productName') IS NEW.product_name_snapshot
+      AND json_extract(canonical.value,'\$.quantity') IS NEW.quantity
+      AND json_extract(canonical.value,'\$.unitPriceMinor') IS NEW.unit_price_minor
+      AND json_extract(canonical.value,'\$.totalMinor') IS NEW.total_minor
+      AND json_extract(canonical.value,'\$.isCredit') IS NEW.is_credit
+      AND json_extract(canonical.value,'\$.paymentOptionId') IS CASE NEW.is_credit WHEN 1 THEN 'quick-debt' ELSE NEW.payment_option_id END
+      AND json_extract(canonical.value,'\$.paymentOptionLabel') IS NEW.payment_option_label_snapshot
+      AND json_extract(canonical.value,'\$.cashAccountId') IS NEW.cash_account_id
+      AND json_extract(canonical.value,'\$.paymentMethodId') IS NEW.payment_method_id
+      AND json_extract(canonical.value,'\$.cashAccountName') IS NEW.cash_account_name_snapshot
+      AND json_extract(canonical.value,'\$.cashAccountKind') IS NEW.cash_account_kind_snapshot
+      AND json_extract(canonical.value,'\$.paymentMethodCode') IS NEW.payment_method_code_snapshot
+      AND json_extract(canonical.value,'\$.paymentMethodName') IS NEW.payment_method_name_snapshot
+      AND (NEW.is_credit=1 OR EXISTS (SELECT 1 FROM quick_payment_options option
+        JOIN cash_accounts cash ON cash.id=option.cash_account_id
+        JOIN ledger_accounts ledger ON ledger.id=cash.ledger_account_id
+        JOIN payment_methods method ON method.id=option.payment_method_id
+        WHERE option.id=NEW.payment_option_id AND option.is_active=1
+          AND cash.id=NEW.cash_account_id AND cash.is_active=1
+          AND cash.kind IS NEW.cash_account_kind_snapshot
+          AND ledger.is_active=1 AND ledger.class='asset' AND ledger.role='cash'
+          AND method.id=NEW.payment_method_id AND method.is_active=1
+          AND method.code IS NEW.payment_method_code_snapshot))
+      AND (NEW.is_credit=1
+        OR (json_extract(request.canonical_payload,'\$.paidMinor')=0 AND NEW.collection_document_id IS NULL)
+        OR EXISTS (SELECT 1 FROM collections collection
+          JOIN business_documents collection_doc ON collection_doc.id=collection.document_id
+          JOIN journal_entries collection_entry ON collection_entry.document_id=collection_doc.id
+          JOIN customer_receivables receivable ON receivable.id=collection.receivable_id
+          WHERE collection.document_id=NEW.collection_document_id
+            AND collection_doc.command_id=request.collection_command_id AND collection_doc.status='posted'
+            AND collection_entry.status='posted' AND receivable.origin_document_id=sale_doc.id
+            AND collection.total_minor IS json_extract(request.canonical_payload,'\$.paidMinor')
+            AND collection.remaining_minor IS json_extract(request.canonical_payload,'\$.creditMinor')
+            AND (NEW.total_minor=0 OR EXISTS (SELECT 1 FROM collection_parts part
+              WHERE part.collection_id=collection.document_id AND part.cash_account_id=NEW.cash_account_id
+                AND part.payment_method_id=NEW.payment_method_id
+                AND part.cash_account_name_snapshot IS NEW.cash_account_name_snapshot
+                AND part.cash_account_kind_snapshot IS NEW.cash_account_kind_snapshot
+                AND part.payment_method_code_snapshot IS NEW.payment_method_code_snapshot
+                AND part.payment_method_name_snapshot IS NEW.payment_method_name_snapshot))))
+  )''';
+
+  static String _quickCreditRequestUpdateTrigger() {
+    final legacy = migration6Statements.singleWhere(
+      (statement) => statement.contains(
+        'CREATE TRIGGER quick_sale_requests_validate_update\n',
+      ),
+    );
+    return legacy
+        .replaceFirst(
+          'OR EXISTS (SELECT 1 FROM quick_sale_line_payments WHERE request_id = OLD.command_id))',
+          'OR EXISTS (SELECT 1 FROM quick_sale_line_payments WHERE request_id = OLD.command_id) '
+              'OR EXISTS (SELECT 1 FROM quick_sale_line_tenders WHERE request_id = OLD.command_id))',
+        )
+        .replaceFirst(
+          'NOT (${_quickConfirmedResult()})',
+          '''NOT (CASE WHEN json_valid(OLD.canonical_payload) THEN
+        CASE WHEN json_extract(OLD.canonical_payload,'\$.version')=2 THEN (${_quickCreditConfirmedResult()})
+          ELSE (${_quickConfirmedResult()} AND NOT EXISTS (SELECT 1 FROM quick_sales_lines
+            WHERE account_id=OLD.account_id AND is_credit=1)
+            AND NOT EXISTS (SELECT 1 FROM quick_sale_line_tenders WHERE request_id=OLD.command_id)) END
+        ELSE (${_quickConfirmedResult()}) END)''',
+        );
+  }
+
+  static String _quickCreditConfirmedResult() =>
+      '''EXISTS (
+    SELECT 1 FROM command_log parent
+    JOIN business_documents sale_doc ON sale_doc.command_id=OLD.sale_command_id
+    JOIN sales sale ON sale.document_id=sale_doc.id
+    JOIN journal_entries sale_entry ON sale_entry.document_id=sale_doc.id
+    JOIN customer_receivables receivable ON receivable.origin_document_id=sale_doc.id
+    JOIN sale_confirmations sale_request ON sale_request.command_id=OLD.sale_command_id
+    WHERE parent.id=OLD.command_id AND parent.command_type='quick_sale' AND parent.response_version=1
+      AND parent.actor_id=sale_doc.actor_id AND parent.authorization_policy_version='development-single-user-v1'
+      AND sale.draft_id=OLD.legacy_draft_id AND sale_doc.status='posted' AND sale_entry.status='posted'
+      AND sale_doc.occurred_at_utc=OLD.occurred_at_utc AND sale_request.status='confirmed'
+      AND sale.label_snapshot IS json_extract(OLD.canonical_payload,'\$.label')
+      AND sale.customer_name_snapshot IS json_extract(OLD.canonical_payload,'\$.customerName')
+      AND receivable.customer_name_snapshot IS sale.customer_name_snapshot
+      AND sale.receivable_minor IS json_extract(OLD.canonical_payload,'\$.totalMinor')
+      AND receivable.initial_minor=sale.receivable_minor
+      AND json_valid(parent.response_json)
+      AND json_extract(parent.response_json,'\$.canonicalPayload') IS OLD.canonical_payload
+      AND json_extract(parent.response_json,'\$.result.commandId') IS OLD.command_id
+      AND json_extract(parent.response_json,'\$.result.saleDocumentId') IS sale.document_id
+      AND json_type(parent.response_json,'\$.result.totalMinor')='integer'
+      AND json_type(parent.response_json,'\$.result.totalCostMinor')='integer'
+      AND json_type(parent.response_json,'\$.result.creditMinor')='integer'
+      AND json_extract(parent.response_json,'\$.result.totalMinor') IS sale.receivable_minor
+      AND json_extract(parent.response_json,'\$.result.totalCostMinor') IS sale.total_cost_minor
+      AND json_extract(parent.response_json,'\$.result.creditMinor') IS json_extract(OLD.canonical_payload,'\$.creditMinor')
+      AND json_extract(parent.response_json,'\$.result.customerName') IS sale.customer_name_snapshot
+      AND NOT EXISTS (SELECT 1 FROM quick_sale_line_payments WHERE request_id=OLD.command_id)
+      AND (SELECT count(*) FROM quick_sale_line_tenders WHERE request_id=OLD.command_id)
+        =(SELECT count(*) FROM quick_sales_lines WHERE account_id=OLD.account_id)
+      AND EXISTS (SELECT 1 FROM quick_sale_line_tenders WHERE request_id=OLD.command_id AND is_credit=1)
+      AND ${_supplierBoundedRemainder('sale.receivable_minor', 'quick_sale_line_tenders tender', 'tender.request_id=OLD.command_id', 'tender.total_minor', 'tender.sequence')}=0
+      AND ${_supplierBoundedRemainder("json_extract(OLD.canonical_payload,'\$.creditMinor')", 'quick_sale_line_tenders tender', 'tender.request_id=OLD.command_id AND tender.is_credit=1', 'tender.total_minor', 'tender.sequence')}=0
+      AND ${_supplierBoundedRemainder("json_extract(OLD.canonical_payload,'\$.paidMinor')", 'quick_sale_line_tenders tender', 'tender.request_id=OLD.command_id AND tender.is_credit=0', 'tender.total_minor', 'tender.sequence')}=0
+      AND NOT EXISTS (SELECT 1 FROM sale_lines line WHERE line.sale_id=sale.document_id AND
+        ${_supplierBoundedRemainder('line.quantity', 'quick_sale_line_tenders tender', 'tender.request_id=OLD.command_id AND tender.sale_line_id=line.id', 'tender.quantity', 'tender.sequence')}<>0)
+      AND ${_supplierBoundedRemainder('receivable.initial_minor', 'receivable_settlements settlement JOIN business_documents settled_doc ON settled_doc.id=settlement.collection_id', "settlement.receivable_id=receivable.id AND settled_doc.status='posted'", 'settlement.amount_minor', 'settlement.collection_id')} IS json_extract(OLD.canonical_payload,'\$.creditMinor')
+      AND ((json_extract(OLD.canonical_payload,'\$.paidMinor')=0
+          AND json_type(parent.response_json,'\$.result.collectionDocumentId')='null'
+          AND NOT EXISTS (SELECT 1 FROM command_log WHERE id=OLD.collection_command_id)
+          AND NOT EXISTS (SELECT 1 FROM collection_requests WHERE command_id=OLD.collection_command_id)
+          AND NOT EXISTS (SELECT 1 FROM business_documents WHERE command_id=OLD.collection_command_id)
+          AND NOT EXISTS (SELECT 1 FROM collections WHERE receivable_id=receivable.id))
+        OR EXISTS (SELECT 1 FROM collections collection
+          JOIN business_documents collection_doc ON collection_doc.id=collection.document_id
+          JOIN journal_entries collection_entry ON collection_entry.document_id=collection_doc.id
+          JOIN collection_requests collection_request ON collection_request.command_id=OLD.collection_command_id
+          WHERE collection_doc.command_id=OLD.collection_command_id AND collection_doc.status='posted'
+            AND collection_entry.status='posted' AND collection_request.status='confirmed'
+            AND collection_request.receivable_id=receivable.id AND collection.receivable_id=receivable.id
+            AND collection_doc.actor_id=parent.actor_id AND collection_doc.occurred_at_utc=OLD.occurred_at_utc
+            AND collection.total_minor IS json_extract(OLD.canonical_payload,'\$.paidMinor')
+            AND collection.remaining_minor IS json_extract(OLD.canonical_payload,'\$.creditMinor')
+            AND json_extract(parent.response_json,'\$.result.collectionDocumentId') IS collection.document_id
+            AND NOT EXISTS (SELECT 1 FROM collection_parts part WHERE part.collection_id=collection.document_id AND
+              ${_supplierBoundedRemainder('part.amount_minor', 'quick_sale_line_tenders tender', 'tender.request_id=OLD.command_id AND tender.is_credit=0 AND tender.cash_account_id=part.cash_account_id AND tender.payment_method_id=part.payment_method_id', 'tender.total_minor', 'tender.sequence')}<>0)
+            AND NOT EXISTS (SELECT 1 FROM quick_sale_line_tenders tender WHERE tender.request_id=OLD.command_id
+              AND tender.is_credit=0 AND tender.total_minor > 0 AND NOT EXISTS (SELECT 1 FROM collection_parts part
+                WHERE part.collection_id=collection.document_id AND part.cash_account_id=tender.cash_account_id
+                  AND part.payment_method_id=tender.payment_method_id))))
+  )''';
 
   static String _treasuryOperationMatches(
     String fact, {

@@ -169,7 +169,7 @@ void main() {
       await fill(tester);
       expect(find.text('Total de compra: COP 3.703,50'), findsOneWidget);
       await tap(tester, keyed('intake-payment-'));
-      await tap(tester, find.text('Nequi').last);
+      await tap(tester, find.text('Transferencia').last);
       expect(find.text('Saldo disponible: COP 5.000,00'), findsOneWidget);
       await capture(tester);
       await tap(tester, find.byKey(const Key('intake-submit')));
@@ -275,7 +275,7 @@ void main() {
       await open(tester);
       await enter(tester, 'intake-quantity', '7');
       await tap(tester, keyed('intake-payment-'));
-      await tap(tester, find.text('Nequi').last);
+      await tap(tester, find.text('Transferencia').last);
       await enter(tester, 'intake-name', 'KNOWN');
       await tap(tester, find.text('Artículo conocido').last);
       expect(value(tester, 'intake-cost'), '0,00');
@@ -465,7 +465,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.text('Nequi'),
+          matching: find.text('Transferencia'),
         ),
         findsOneWidget,
       );
