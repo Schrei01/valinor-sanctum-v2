@@ -741,7 +741,9 @@ class _PurchasesPageState extends State<PurchasesPage> {
                         '${entry.productName} · ${entry.quantity} unidades',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      Chip(label: Text('Pagada · ${entry.paymentLabel}')),
+                      Chip(
+                        label: Text('Pagada · ${entry.displayPaymentLabel}'),
+                      ),
                       Text(
                         inventoryMoney(entry.totalCostMinor, widget.profile),
                         style: const TextStyle(fontWeight: FontWeight.w600),

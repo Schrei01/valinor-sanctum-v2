@@ -1,0 +1,65 @@
+{
+  "version": "0.13.1+19",
+  "schemaVersion": 11,
+  "tests": {
+    "focusedPassed": 39,
+    "failed": 0,
+    "skipped": 0,
+    "scope": [
+      "stock_intake_test.dart",
+      "stock_intake_controller_test.dart",
+      "stock_intake_store_test.dart"
+    ],
+    "fullSuiteRepeated": false,
+    "analyzeClean": true,
+    "formattedDartFiles": 4,
+    "formatClean": true
+  },
+  "behavior": {
+    "purchaseHistoryShowsTransferencia": true,
+    "paymentSelectorPendingAndOpeningUseSameDisplayAlias": true,
+    "openingUnavailableMessageUsesTransferencia": true,
+    "storedNequiLabelsUnchanged": true,
+    "monetaryIdentitiesUnchanged": true,
+    "otherSectionsKeepNequi": true
+  },
+  "originalPosOpenedOrModified": false,
+  "businessOperationsPostedByAgent": false,
+  "build": {
+    "seconds": 60.1516383,
+    "executableVersion": "0.13.1+19",
+    "appSha256": "761E4FDC9D508B5C796A758F7626A359948B662D607734CBABEEB04E949AFCFE",
+    "sanctumOverrides": false
+  },
+  "package": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.13.1-windows-x64.zip",
+    "files": 17,
+    "bytes": 14756804,
+    "sha256": "91B9A517D476A7FFD3B51F58D4E60C9C938E607C4DD4427EE889E208E6E58B0D",
+    "allFilesMatchStableAndVersioned": true,
+    "privateDataAbsent": true,
+    "currentAliasPublished": true,
+    "versionedCopy": "dist/0.13.1/ValinorSanctum2",
+    "zipHashUnchangedAfterNativeLaunch": true
+  },
+  "data": {
+    "tablesCompared": 49,
+    "allRecordsUnchanged": true,
+    "schemaUnchanged": true,
+    "balancesUnchanged": true,
+    "inventoryUnchanged": true,
+    "integrityOk": true,
+    "foreignKeyViolations": 0
+  },
+  "native": {
+    "launchedFinalBundle": true,
+    "navigationObserved": true,
+    "method": "Accessibility and keyboard",
+    "purchaseFormExercised": false,
+    "screenshotsCaptured": false,
+    "limitation": "Accessibility focus stayed on the window and keyboard navigation could not be confirmed; form behavior was verified in widget tests.",
+    "businessOperationsSubmitted": false,
+    "windowLeftOpenForUser": true
+  },
+  "verifiedAtUtc": "2026-10-21T15:50:59.653Z"
+}

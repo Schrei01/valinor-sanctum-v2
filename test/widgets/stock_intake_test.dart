@@ -180,7 +180,8 @@ void main() {
       expect(store.stock.single.quantity, 3);
       expect(store.products.single.listPriceMinor, 250000);
       expect(find.text('Agua sintética · 3 unidades'), findsOneWidget);
-      expect(find.text('Pagada · Nequi'), findsOneWidget);
+      expect(store.entries.single.paymentLabel, 'Nequi');
+      expect(find.text('Pagada · Transferencia'), findsOneWidget);
       expect(value(tester, 'intake-name'), isEmpty);
       expect(value(tester, 'intake-quantity'), '1');
       expect(tester.takeException(), isNull);

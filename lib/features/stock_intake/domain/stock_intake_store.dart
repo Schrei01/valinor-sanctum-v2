@@ -1,5 +1,8 @@
 import '../../inventory/domain/inventory_store.dart';
 
+String _displayPurchasePaymentLabel(String label) =>
+    label.trim().toLowerCase() == 'nequi' ? 'Transferencia' : label;
+
 class IntakePaymentOption {
   const IntakePaymentOption({
     required this.id,
@@ -21,7 +24,7 @@ class IntakePaymentOption {
   final bool isActive;
 
   /// Purchases uses a local label without renaming the monetary identity.
-  String get displayLabel => label == 'Nequi' ? 'Transferencia' : label;
+  String get displayLabel => _displayPurchasePaymentLabel(label);
 }
 
 class StockIntakeCommand {
@@ -112,6 +115,9 @@ class StockIntakeEntry {
   final int totalCostMinor;
   final String paymentLabel;
   final DateTime occurredAtUtc;
+
+  /// Keep the recorded label intact while using the current purchases wording.
+  String get displayPaymentLabel => _displayPurchasePaymentLabel(paymentLabel);
 }
 
 /// Suggested values from the latest posted receipt or initial inventory.
