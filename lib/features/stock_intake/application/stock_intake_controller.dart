@@ -300,7 +300,7 @@ class StockIntakeController extends ChangeNotifier {
     }
     if (total > BigInt.from(option.balanceMinor)) {
       throw ArgumentError(
-        'El saldo de ${option.displayLabel} no alcanza para esta compra.',
+        'El saldo de ${option.label} no alcanza para esta compra.',
       );
     }
   }

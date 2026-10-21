@@ -1,5 +1,7 @@
 # Transferencia en Compras — 0.13.1
 
+> Alcance actualizado en 0.13.2: **Nequi en Compras y Transferencia en Ventas**. Consulta [la aclaración vigente](35-nombres-pago-ventas.md).
+
 El historial de Compras todavía mostraba **Pagada · Nequi**, incluso para ingresos nuevos. Ahora presenta **Pagada · Transferencia**, igual que el selector **Pagar desde**, los formularios pendientes y el saldo inicial. El aviso de cuenta no disponible también usa Transferencia.
 
 El cambio se aplica al mostrar los datos: las compras nuevas y anteriores conservan su etiqueta original en SQLite, la misma cuenta monetaria y el mismo medio de pago. No se reescribe el historial ni se modifican saldos, inventario o documentos. El esquema sigue en v11. Ventas, Tesorería y Cobros conservan el nombre Nequi.

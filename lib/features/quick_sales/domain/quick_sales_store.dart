@@ -1,5 +1,8 @@
 import '../../inventory/domain/inventory_store.dart';
 
+String _displaySalesPaymentLabel(String label) =>
+    label.trim().toLowerCase() == 'nequi' ? 'Transferencia' : label;
+
 class QuickSaleLine {
   const QuickSaleLine({
     required this.id,
@@ -68,6 +71,9 @@ class QuickPaymentOption {
   final String paymentMethodId;
   final bool isActive;
   final bool isCredit;
+
+  /// Sales wording does not rename the stored payment or monetary account.
+  String get displayLabel => _displaySalesPaymentLabel(label);
 }
 
 class PreparedQuickSale {
@@ -131,6 +137,8 @@ class ConfirmedQuickSaleLine {
   final int totalMinor;
   final String paymentLabel;
   final bool isCredit;
+
+  String get displayPaymentLabel => _displaySalesPaymentLabel(paymentLabel);
 }
 
 class ConfirmedQuickSale {

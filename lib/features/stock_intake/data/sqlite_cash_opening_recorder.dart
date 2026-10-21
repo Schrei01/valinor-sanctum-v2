@@ -105,7 +105,7 @@ WHERE q.id=?
           options.single['class'] != 'asset' ||
           options.single['role'] != 'cash') {
         throw const StockIntakeValidationException(
-          'Selecciona una cuenta de Efectivo o Transferencia disponible.',
+          'Selecciona una cuenta de Efectivo o Nequi disponible.',
         );
       }
       final account = options.single;

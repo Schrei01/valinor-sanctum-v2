@@ -1,5 +1,7 @@
 # Ventas con Deudas — 0.13.0
 
+> Alcance actualizado en 0.13.2: **Nequi en Compras y Transferencia en Ventas**. Consulta [la aclaración vigente](35-nombres-pago-ventas.md).
+
 Ventas incorpora **Deudas** como forma de pago de cada línea. Se conserva la pantalla de varias cuentas y el registro con una sola acción.
 
 ## Registrar una venta fiada

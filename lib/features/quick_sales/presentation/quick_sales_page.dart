@@ -129,7 +129,7 @@ class QuickSalesPage extends StatelessWidget {
                               'Cliente: ${sale.result.customerName} · Deudas: ${inventoryMoney(sale.result.creditMinor, profile)}',
                             ...sale.lines.map(
                               (line) =>
-                                  '${line.quantity} × ${line.productName} · ${line.paymentLabel}',
+                                  '${line.quantity} × ${line.productName} · ${line.displayPaymentLabel}',
                             ),
                           ].join('\n'),
                         ),
@@ -277,7 +277,7 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
           BigInt.from(line.unitPriceMinor ?? 0) *
           BigInt.from(int.tryParse(line.quantityText) ?? 0);
       groups.update(
-        option.label,
+        option.displayLabel,
         (current) => current + amount,
         ifAbsent: () => amount,
       );
@@ -689,7 +689,9 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           DropdownMenuItem(
             value: option.id,
             child: Text(
-              option.isActive ? option.label : '${option.label} (inactivo)',
+              option.isActive
+                  ? option.displayLabel
+                  : '${option.displayLabel} (inactivo)',
               overflow: TextOverflow.ellipsis,
             ),
           ),

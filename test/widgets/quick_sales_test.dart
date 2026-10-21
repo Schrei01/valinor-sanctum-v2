@@ -158,13 +158,17 @@ void main() {
       await tap(tester, keyed('quick-add-line-').first);
       await select(tester, 1, 'Snack sintético');
       await tap(tester, keyed('quick-payment-').at(1));
-      await tap(tester, find.text('Nequi').last);
+      await tap(tester, find.text('Transferencia').last);
       await select(tester, 2, 'Agua sintética');
       expect(
         controller.accounts.first.lines.map((line) => line.paymentOptionId),
         ['cash', 'nequi'],
       );
       expect(find.text('Total COP 8.000,00'), findsOneWidget);
+      expect(
+        find.textContaining('Transferencia: COP 2.000,00'),
+        findsOneWidget,
+      );
       await capture(tester);
       await tap(tester, keyed('quick-register-').first);
       expect(store.sales, hasLength(1));
@@ -178,6 +182,11 @@ void main() {
       expect(controller.accounts.single.lines.single.productId, 'water');
       expect(find.text('Cliente de la cuenta por cobrar'), findsNothing);
       expect(find.text('Confirmar entrega'), findsNothing);
+      await tap(tester, find.byKey(const Key('quick-history')));
+      expect(
+        find.textContaining('Snack sintético · Transferencia'),
+        findsOneWidget,
+      );
     },
   );
 
@@ -304,7 +313,7 @@ void main() {
       await tap(tester, keyed('quick-add-line-').first);
       await select(tester, 1, 'Snack sintético');
       await tap(tester, keyed('quick-payment-').at(1));
-      await tap(tester, find.text('Nequi').last);
+      await tap(tester, find.text('Transferencia').last);
       expect(tester.takeException(), isNull);
       await tap(tester, keyed('quick-register-').first);
       expect(store.sales.single.lines, hasLength(2));

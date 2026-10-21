@@ -320,7 +320,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                               ))
                                 DropdownMenuItem(
                                   value: option.id,
-                                  child: Text(option.displayLabel),
+                                  child: Text(option.label),
                                 ),
                             ],
                             onChanged: locked
@@ -645,7 +645,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${command.productName} · ${command.quantity} unidades · ${payment?.displayLabel ?? 'Cuenta guardada'}',
+              '${command.productName} · ${command.quantity} unidades · ${payment?.label ?? 'Cuenta guardada'}',
             ),
             if (pending.rejectionReason != null) Text(pending.rejectionReason!),
             const SizedBox(height: 12),
@@ -681,7 +681,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Saldo inicial pendiente: ${option?.displayLabel ?? 'Cuenta guardada'} · ${inventoryMoney(opening.amountMinor, widget.profile)}',
+              'Saldo inicial pendiente: ${option?.label ?? 'Cuenta guardada'} · ${inventoryMoney(opening.amountMinor, widget.profile)}',
             ),
             const SizedBox(height: 8),
             FilledButton(
@@ -741,9 +741,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                         '${entry.productName} · ${entry.quantity} unidades',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      Chip(
-                        label: Text('Pagada · ${entry.displayPaymentLabel}'),
-                      ),
+                      Chip(label: Text('Pagada · ${entry.paymentLabel}')),
                       Text(
                         inventoryMoney(entry.totalCostMinor, widget.profile),
                         style: const TextStyle(fontWeight: FontWeight.w600),
@@ -848,7 +846,7 @@ class _OpeningDialogState extends State<_OpeningDialog> {
                     for (final option in widget.options)
                       DropdownMenuItem(
                         value: option.id,
-                        child: Text(option.displayLabel),
+                        child: Text(option.label),
                       ),
                   ],
                   onChanged:

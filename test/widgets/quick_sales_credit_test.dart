@@ -167,7 +167,7 @@ void main() {
   );
 
   testWidgets(
-    'mixed account collects only cash and Nequi lines and leaves the debt',
+    'mixed account collects only cash and transfer lines and leaves the debt',
     (tester) async {
       await open(tester);
       await creditAccount(tester);
@@ -176,7 +176,7 @@ void main() {
       await product(tester, 1, 'Snack sintético');
       await tap(tester, keyed('quick-add-line-').first);
       await product(tester, 2, 'Agua sintética');
-      await payment(tester, 2, 'Nequi');
+      await payment(tester, 2, 'Transferencia');
       expect(
         find.text('Cobrado: COP 5.000,00 · Deudas: COP 3.000,00'),
         findsOneWidget,
