@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'event_schema.dart';
+import 'debtor_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 12;
+  static const int version = 13;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -66,6 +67,7 @@ abstract final class DatabaseSchema {
     10 => migration10Name,
     11 => migration11Name,
     12 => 'events_and_service_sales_v12',
+    13 => 'registered_debtors_and_person_payments_v13',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -82,6 +84,7 @@ abstract final class DatabaseSchema {
     10 => migration10Checksum,
     11 => migration11Checksum,
     12 => checksum(migration12Statements.join('\n;\n')),
+    13 => checksum(migration13Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -101,6 +104,35 @@ abstract final class DatabaseSchema {
           .last,
       fundsInvalid: _treasuryOperationMoneyInvalid('NEW.id'),
       freezeJournal: _freezeTreasuryOperationJournal(),
+      utcKey: _utcSortKey,
+    ),
+  );
+
+  static final List<String> migration13Statements = List.unmodifiable(
+    DebtorSchema.build(
+      creditTriggers: migration11Statements
+          .where(
+            (s) =>
+                s.startsWith(
+                  'CREATE TRIGGER quick_credit_requests_validate_insert\n',
+                ) ||
+                s.startsWith(
+                  'CREATE TRIGGER quick_sale_requests_validate_update\n',
+                ) ||
+                s.startsWith(
+                  'CREATE TRIGGER quick_line_tenders_validate_insert\n',
+                ) ||
+                s.startsWith(
+                  'CREATE TRIGGER quick_legacy_payments_reject_credit\n',
+                ),
+          )
+          .toList(),
+      collectionPosting: migration4Statements.singleWhere(
+        (s) => s.startsWith(
+          'CREATE TRIGGER collections_validate_document_posting\n',
+        ),
+      ),
+      journalFreeze: _freezeTreasuryOperationJournal(),
       utcKey: _utcSortKey,
     ),
   );

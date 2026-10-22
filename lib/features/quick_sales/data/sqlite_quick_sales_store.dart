@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../../debtors/domain/debtors_store.dart';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -184,6 +185,21 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         paymentOptions: options,
         pendingSales: requests.map(_prepared).toList(),
         sales: sales,
+        debtors:
+            (await txn.rawQuery(
+                  '''SELECT debtor.*,coalesce(sum(balance.remaining_minor),0) balance_minor FROM debtors debtor
+LEFT JOIN debtor_receivables link ON link.debtor_id=debtor.id LEFT JOIN customer_receivable_balances balance ON balance.id=link.receivable_id
+GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
+                ))
+                .map(
+                  (r) => DebtorSummary(
+                    id: r['id'] as String,
+                    name: r['name'] as String,
+                    balanceMinor: r['balance_minor'] as int,
+                    isActive: r['is_active'] == 1,
+                  ),
+                )
+                .toList(),
       );
     });
   }
@@ -191,7 +207,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
   @override
   Future<QuickSaleAccount> saveAccount(SaveQuickSaleAccount input) async {
     _id(input.id);
-    final customer = input.customerName.trim();
+    var customer = input.customerName.trim();
     if (input.expectedRevision < 0 ||
         input.label.length > 120 ||
         input.lines.length > 100 ||
@@ -216,6 +232,20 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
     }
     return _database.database.transaction((txn) async {
       await _profile(txn);
+      if (input.debtorId != null) {
+        _id(input.debtorId!);
+        final person = await txn.query(
+          'debtors',
+          where: 'id=?',
+          whereArgs: [input.debtorId],
+        );
+        if (person.length != 1) {
+          throw const QuickSalesValidationException(
+            'Selecciona una persona registrada en Deudores.',
+          );
+        }
+        customer = person.single['name'] as String;
+      }
       final rows = await txn.query(
         'quick_sales_accounts',
         where: 'id=?',
@@ -232,6 +262,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
             old.revision == input.expectedRevision + 1 &&
             old.label == input.label &&
             old.customerName == customer &&
+            old.debtorId == input.debtorId &&
             _sameLines(old.lines, input.lines)) {
           return old;
         }
@@ -251,6 +282,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           'id': input.id,
           'label': input.label,
           'customer_name': customer,
+          'debtor_id': input.debtorId,
           'revision': revision,
           'status': 'open',
           'updated_at_utc': now.toIso8601String(),
@@ -261,6 +293,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           {
             'label': input.label,
             'customer_name': customer,
+            'debtor_id': input.debtorId,
             'revision': revision,
             'updated_at_utc': now.toIso8601String(),
           },
@@ -295,6 +328,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         id: input.id,
         label: input.label,
         customerName: customer,
+        debtorId: input.debtorId,
         revision: revision,
         status: 'open',
         updatedAtUtc: now,
@@ -396,10 +430,22 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         (line) => line.paymentOptionId == QuickPaymentOption.creditId,
       );
       final customer = account.customerName.trim();
-      if (hasCredit && customer.isEmpty) {
+      if (hasCredit && (customer.isEmpty || account.debtorId == null)) {
         throw const QuickSalesValidationException(
-          'Escribe el nombre del cliente que queda debiendo.',
+          'Asigna la cuenta a una persona registrada en Deudores.',
         );
+      }
+      if (hasCredit) {
+        final person = await txn.query(
+          'debtors',
+          where: 'id=? AND is_active=1',
+          whereArgs: [account.debtorId],
+        );
+        if (person.length != 1 || person.single['name'] != customer) {
+          throw const QuickSalesValidationException(
+            'La persona no está habilitada para nuevas deudas.',
+          );
+        }
       }
       for (final line in account.lines) {
         if (line.productId == null ||
@@ -477,7 +523,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         'account_id': accountId,
         'account_revision': expectedRevision,
         'canonical_payload': jsonEncode({
-          'version': hasCredit ? 2 : 1,
+          'version': hasCredit ? 3 : 1,
           'profileId': profile.profileId,
           'currency': profile.currencyCode,
           'scale': profile.moneyScale,
@@ -486,6 +532,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           'totalMinor': totalMinor,
           if (hasCredit) ...{
             'customerName': customer,
+            'debtorId': account.debtorId,
             'creditMinor': _int(creditTotal, 'Total de deuda'),
             'paidMinor': _int(total - creditTotal, 'Total pagado'),
           },
@@ -554,7 +601,8 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       );
     }
     final payload = jsonDecode(canonical) as Map<String, dynamic>;
-    final creditCheckout = payload['version'] == 2;
+    final creditCheckout = payload['version'] == 2 || payload['version'] == 3;
+    final registeredCheckout = payload['version'] == 3;
     final profile = await _profile(txn);
     final accounts = await txn.query(
       'quick_sales_accounts',
@@ -577,6 +625,20 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       );
     }
     final lines = (payload['lines'] as List).cast<Map<String, dynamic>>();
+    if (registeredCheckout) {
+      final person = await txn.query(
+        'debtors',
+        where: 'id=? AND is_active=1',
+        whereArgs: [payload['debtorId']],
+      );
+      if (person.length != 1 ||
+          person.single['name'] != payload['customerName'] ||
+          accounts.single['debtor_id'] != payload['debtorId']) {
+        throw const QuickSalesValidationException(
+          'La persona de esta cuenta cambió o no está habilitada para fiado.',
+        );
+      }
+    }
     if (creditCheckout) {
       await _checkCreditCapacity(
         txn,
@@ -669,6 +731,16 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       where: 'origin_document_id=?',
       whereArgs: [sale.documentId],
     )).single;
+    if (registeredCheckout) {
+      await txn.insert('debtor_receivables', {
+        'receivable_id': receivable['id'],
+        'sales_receivable_id': receivable['id'],
+        'debtor_id': payload['debtorId'],
+        'source': 'sale',
+        'command_id': commandId,
+        'assigned_at_utc': DateTime.now().toUtc().toIso8601String(),
+      });
+    }
     final payments =
         <String, ({String account, String method, BigInt amount})>{};
     for (final line in lines) {
@@ -786,6 +858,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       totalCostMinor: sale.totalCostMinor,
       creditMinor: creditMinor,
       customerName: creditCheckout ? payload['customerName'] as String : '',
+      debtorId: registeredCheckout ? payload['debtorId'] as String : null,
     );
     final now = DateTime.now().toUtc().toIso8601String();
     await txn.insert('command_log', {
@@ -804,6 +877,7 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           if (creditCheckout) ...{
             'creditMinor': result.creditMinor,
             'customerName': result.customerName,
+            if (registeredCheckout) 'debtorId': result.debtorId,
           },
         },
       }),
@@ -965,20 +1039,21 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
     BigInt additionalCredit,
   ) async {
     final receivables = await txn.rawQuery('''
-SELECT r.id,r.initial_minor FROM customer_receivables r
-JOIN sales s ON s.document_id=r.origin_document_id
+SELECT r.id,r.initial_minor FROM all_customer_receivables r
 JOIN business_documents d ON d.id=r.origin_document_id AND d.status='posted'
 JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
 ''');
     final settlements = await txn.rawQuery('''
-SELECT s.receivable_id,s.amount_minor FROM receivable_settlements s
+SELECT s.receivable_id,s.amount_minor FROM all_receivable_settlements s
 JOIN business_documents d ON d.id=s.collection_id AND d.status='posted'
 JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
 ''');
     final legacy = await txn.rawQuery('''
-SELECT o.receivables_minor FROM treasury_openings o
-JOIN business_documents d ON d.id=o.document_id AND d.status='posted'
+SELECT line.debit_minor-line.credit_minor receivables_minor FROM journal_lines line
+JOIN journal_entries entry ON entry.id=line.entry_id
+JOIN business_documents d ON d.id=entry.document_id AND d.status='posted'
 JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
+WHERE line.account_id='system:legacy-customer-receivables'
 ''');
     final collected = <String, BigInt>{};
     for (final row in settlements) {
@@ -1069,6 +1144,7 @@ JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
       id: row['id'] as String,
       label: row['label'] as String,
       customerName: row['customer_name'] as String? ?? '',
+      debtorId: row['debtor_id'] as String?,
       revision: row['revision'] as int,
       status: row['status'] as String,
       updatedAtUtc: DateTime.parse(row['updated_at_utc'] as String).toUtc(),
@@ -1104,6 +1180,7 @@ JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
       rejectionReason: row['rejection_reason'] as String?,
       creditMinor: p['creditMinor'] as int? ?? 0,
       customerName: p['customerName'] as String? ?? '',
+      debtorId: p['debtorId'] as String?,
     );
   }
 
@@ -1127,6 +1204,7 @@ JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
       totalCostMinor: r['totalCostMinor'] as int,
       creditMinor: r['creditMinor'] as int? ?? 0,
       customerName: r['customerName'] as String? ?? '',
+      debtorId: r['debtorId'] as String?,
     );
   }
 

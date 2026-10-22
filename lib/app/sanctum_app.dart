@@ -7,8 +7,8 @@ import '../features/workspace/application/workspace_controller.dart';
 import '../features/inventory/application/inventory_controller.dart';
 import '../features/inventory/presentation/catalog_page.dart';
 import '../features/inventory/presentation/purchases_page.dart';
-import '../features/collections/application/collections_controller.dart';
-import '../features/collections/presentation/collections_page.dart';
+import '../features/debtors/application/debtors_controller.dart';
+import '../features/debtors/presentation/debtors_page.dart';
 import '../features/supplier_payments/application/supplier_payments_controller.dart';
 import '../features/supplier_payments/presentation/supplier_payments_page.dart';
 import '../features/quick_sales/application/quick_sales_controller.dart';
@@ -26,7 +26,7 @@ const _destinations = [
   (Icons.inventory_2_outlined, 'Catálogo'),
   (Icons.local_shipping_outlined, 'Compras'),
   (Icons.point_of_sale_outlined, 'Ventas'),
-  (Icons.payments_outlined, 'Cobros'),
+  (Icons.people_outline, 'Deudores'),
   (Icons.account_balance_outlined, 'Tesorería'),
   (Icons.event_outlined, 'Eventos'),
   (Icons.settings_outlined, 'Sistema'),
@@ -69,7 +69,7 @@ class _WorkspaceShell extends StatefulWidget {
 class _WorkspaceShellState extends State<_WorkspaceShell> {
   int _section = 0;
   InventoryController? _inventory;
-  CollectionsController? _collections;
+  DebtorsController? _debtors;
   SupplierPaymentsController? _supplierPayments;
   QuickSalesController? _quickSales;
   StockIntakeController? _stockIntake;
@@ -106,7 +106,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     if (index == 1) unawaited(_inventory?.load());
     if (index == 2) unawaited(_stockIntake?.load());
     if (index == 3) unawaited(_quickSales?.load());
-    if (index == 4) unawaited(_collections?.load());
+    if (index == 4) unawaited(_debtors?.load());
     if (index == 6) unawaited(_events?.load());
     if (index == 5) {
       unawaited(_treasury?.load());
@@ -126,7 +126,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   void dispose() {
     _exitListener.dispose();
     _inventory?.dispose();
-    _collections?.dispose();
+    _debtors?.dispose();
     _supplierPayments?.removeListener(_supplierPaymentsChanged);
     _supplierPayments?.dispose();
     _quickSales?.dispose();
@@ -189,19 +189,12 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
           _quickSales!.loadError == null) {
         unawaited(_quickSales!.load());
       }
-      final collectionsStore = controller.collectionsStore;
-      if (!identical(_collections?.store, collectionsStore)) {
-        _collections?.dispose();
-        _collections = collectionsStore == null
+      final debtorsStore = controller.debtorsStore;
+      if (!identical(_debtors?.store, debtorsStore)) {
+        _debtors?.dispose();
+        _debtors = debtorsStore == null
             ? null
-            : CollectionsController(store: collectionsStore);
-      }
-      if (_collections != null &&
-          controller.profile != null &&
-          _collections!.snapshot == null &&
-          !_collections!.loading &&
-          _collections!.loadError == null) {
-        unawaited(_collections!.load());
+            : DebtorsController(store: debtorsStore);
       }
       final supplierPaymentsStore = controller.supplierPaymentsStore;
       if (!identical(_supplierPayments?.store, supplierPaymentsStore)) {
@@ -367,11 +360,11 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                               _scrollPage(
                                 controller.profile == null
                                     ? const _ConfigureFirst()
-                                    : _collections == null
+                                    : _debtors == null
                                     ? const _ModuleUnavailable()
-                                    : CollectionsPage(
-                                        key: ObjectKey(_collections),
-                                        controller: _collections!,
+                                    : DebtorsPage(
+                                        key: ObjectKey(_debtors),
+                                        controller: _debtors!,
                                         profile: controller.profile!,
                                       ),
                                 wide,
@@ -636,7 +629,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.15.0',
+                    'Versión 0.16.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

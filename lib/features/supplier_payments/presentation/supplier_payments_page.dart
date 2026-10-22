@@ -320,7 +320,7 @@ class _SupplierPaymentsPageState extends State<SupplierPaymentsPage> {
                   const Padding(
                     padding: EdgeInsets.only(bottom: 16),
                     child: Text(
-                      'Necesitas una cuenta activa, disponible y con saldo registrado, y un medio activo. Configura las cuentas y los medios en Cobros. Los cobros confirmados aportan saldo; crear una cuenta no añade dinero.',
+                      'Necesitas una cuenta activa, disponible y con saldo registrado, y un medio activo. Consulta las cuentas y sus saldos en Tesorería. Los abonos confirmados en Deudores aportan saldo.',
                     ),
                   ),
                 for (var index = 0; index < _parts.length; index++)
@@ -813,7 +813,7 @@ class _SupplierPaymentsPageState extends State<SupplierPaymentsPage> {
       key: const Key('supplier-payment-balances'),
       initiallyExpanded: data.accounts.isEmpty || data.methods.isEmpty,
       title: const Text('Cuentas y saldos registrados'),
-      subtitle: const Text('Configura cuentas y medios en Cobros'),
+      subtitle: const Text('Consulta cuentas y saldos en Tesorería'),
       tilePadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       childrenPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
       children: [
@@ -840,7 +840,7 @@ class _SupplierPaymentsPageState extends State<SupplierPaymentsPage> {
           const Padding(
             padding: EdgeInsets.only(top: 12),
             child: Text(
-              'Aún no hay medios de pago. Puedes crearlos en Cobros.',
+              'Aún no hay medios de pago disponibles. Actualiza para cargar los medios locales.',
             ),
           ),
       ],

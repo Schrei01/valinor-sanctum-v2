@@ -197,7 +197,7 @@ void main() {
       final fake = store(configured: false);
       await open(tester, fake);
       expect(
-        find.textContaining('Configura las cuentas y los medios en Cobros'),
+        find.textContaining('Consulta las cuentas y sus saldos en Tesorería'),
         findsOneWidget,
       );
       expect(

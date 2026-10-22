@@ -1,4 +1,5 @@
 import '../../inventory/domain/inventory_store.dart';
+import '../../debtors/domain/debtors_store.dart';
 
 String _displaySalesPaymentLabel(String label) =>
     label.trim().toLowerCase() == 'nequi' ? 'Transferencia' : label;
@@ -27,11 +28,13 @@ class QuickSaleAccount {
     required this.updatedAtUtc,
     required List<QuickSaleLine> lines,
     this.customerName = '',
+    this.debtorId,
     this.confirmedDocumentId,
   }) : lines = List.unmodifiable(lines);
   final String id;
   final String label;
   final String customerName;
+  final String? debtorId;
   final int revision;
   final String status;
   final DateTime updatedAtUtc;
@@ -46,10 +49,12 @@ class SaveQuickSaleAccount {
     required this.expectedRevision,
     required List<QuickSaleLine> lines,
     this.customerName = '',
+    this.debtorId,
   }) : lines = List.unmodifiable(lines);
   final String id;
   final String label;
   final String customerName;
+  final String? debtorId;
   final int expectedRevision;
   final List<QuickSaleLine> lines;
 }
@@ -89,6 +94,7 @@ class PreparedQuickSale {
     this.rejectionReason,
     this.creditMinor = 0,
     this.customerName = '',
+    this.debtorId,
   });
   final String commandId;
   final String accountId;
@@ -101,6 +107,7 @@ class PreparedQuickSale {
   final String? rejectionReason;
   final int creditMinor;
   final String customerName;
+  final String? debtorId;
 }
 
 class QuickSaleResult {
@@ -112,6 +119,7 @@ class QuickSaleResult {
     required this.totalCostMinor,
     this.creditMinor = 0,
     this.customerName = '',
+    this.debtorId,
   });
   final String commandId;
   final String saleDocumentId;
@@ -120,6 +128,7 @@ class QuickSaleResult {
   final int totalCostMinor;
   final int creditMinor;
   final String customerName;
+  final String? debtorId;
 }
 
 class ConfirmedQuickSaleLine {
@@ -164,18 +173,21 @@ class QuickSalesSnapshot {
     required List<QuickPaymentOption> paymentOptions,
     required List<PreparedQuickSale> pendingSales,
     required List<ConfirmedQuickSale> sales,
+    List<DebtorSummary> debtors = const [],
   }) : accounts = List.unmodifiable(accounts),
        products = List.unmodifiable(products),
        stock = List.unmodifiable(stock),
        paymentOptions = List.unmodifiable(paymentOptions),
        pendingSales = List.unmodifiable(pendingSales),
-       sales = List.unmodifiable(sales);
+       sales = List.unmodifiable(sales),
+       debtors = List.unmodifiable(debtors);
   final List<QuickSaleAccount> accounts;
   final List<CatalogProduct> products;
   final List<StockPosition> stock;
   final List<QuickPaymentOption> paymentOptions;
   final List<PreparedQuickSale> pendingSales;
   final List<ConfirmedQuickSale> sales;
+  final List<DebtorSummary> debtors;
 }
 
 abstract interface class QuickSalesStore {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import '../support/register_debtor.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -53,11 +54,17 @@ void main() {
     List<QuickSaleLine> lines, {
     String customer = 'Cliente sintético',
     int revision = 0,
-  }) => quick.saveAccount(
+  }) async => quick.saveAccount(
     SaveQuickSaleAccount(
       id: id,
       label: 'Cuenta $id',
       customerName: customer,
+      debtorId:
+          customer.trim().isNotEmpty &&
+              !RegExp(r'[\x00-\x1f\x7f]').hasMatch(customer) &&
+              customer.trim().length <= 120
+          ? await registerDebtor(app, customer)
+          : null,
       expectedRevision: revision,
       lines: lines,
     ),
@@ -744,6 +751,7 @@ BEGIN SELECT RAISE(ABORT, 'synthetic storage interruption'); END
             id: 'disk',
             label: 'Cuenta durable',
             customerName: 'Ana',
+            debtorId: await registerDebtor(disk, 'Ana'),
             expectedRevision: 0,
             lines: [
               line('disk-debt'),

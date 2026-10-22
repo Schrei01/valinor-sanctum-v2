@@ -675,12 +675,12 @@ ORDER BY c.collected_at_utc DESC, c.document_id
     final rows = await txn.rawQuery('''
 SELECT r.*, s.label_snapshot FROM customer_receivables r
 JOIN sales s ON s.document_id = r.origin_document_id
-JOIN business_documents d ON d.id = s.document_id AND d.status = 'posted'
+JOIN business_documents d ON d.id = r.origin_document_id AND d.status = 'posted'
 JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
 ORDER BY r.issued_at_utc DESC, r.id
 ''');
     final settlements = await txn.rawQuery('''
-SELECT r.receivable_id, r.amount_minor FROM receivable_settlements r
+SELECT r.receivable_id, r.amount_minor FROM all_receivable_settlements r
 JOIN business_documents d ON d.id = r.collection_id AND d.status = 'posted'
 JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
 ''');
@@ -744,8 +744,8 @@ JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
     }
     final prior = await txn.rawQuery(
       '''
-SELECT c.collected_at_utc FROM collections c
-JOIN business_documents d ON d.id = c.document_id AND d.status = 'posted'
+SELECT d.occurred_at_utc collected_at_utc FROM all_receivable_settlements c
+JOIN business_documents d ON d.id = c.collection_id AND d.status = 'posted'
 JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
 WHERE c.receivable_id = ?
 ''',

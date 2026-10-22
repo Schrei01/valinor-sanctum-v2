@@ -167,11 +167,7 @@ class _QuickAccountCard extends StatefulWidget {
 
 class _QuickAccountCardState extends State<_QuickAccountCard> {
   late final _label = TextEditingController(text: widget.account.label);
-  late final _customer = TextEditingController(
-    text: widget.account.customerName,
-  );
   final _labelFocus = FocusNode();
-  final _customerFocus = FocusNode();
 
   @override
   void didUpdateWidget(covariant _QuickAccountCard oldWidget) {
@@ -179,18 +175,12 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     if (!_labelFocus.hasFocus && _label.text != widget.account.label) {
       _label.text = widget.account.label;
     }
-    if (!_customerFocus.hasFocus &&
-        _customer.text != widget.account.customerName) {
-      _customer.text = widget.account.customerName;
-    }
   }
 
   @override
   void dispose() {
     _label.dispose();
-    _customer.dispose();
     _labelFocus.dispose();
-    _customerFocus.dispose();
     super.dispose();
   }
 
@@ -343,21 +333,43 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
             ),
             const SizedBox(height: 16),
             if (hasCredit) ...[
-              TextField(
-                key: ValueKey('quick-customer-${account.id}'),
-                controller: _customer,
-                focusNode: _customerFocus,
-                enabled: !locked,
-                maxLength: 120,
-                decoration: const InputDecoration(
-                  labelText: 'Cliente de la deuda',
-                  helperText:
-                      'El valor de las líneas en Deudas quedará a su nombre.',
-                  counterText: '',
+              DropdownButtonFormField<String>(
+                key: ValueKey(
+                  'quick-customer-${account.id}-${account.debtorId}',
+                ),
+                initialValue: account.debtorId,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'Persona de la deuda',
+                  helperText: widget.data.debtors.isEmpty
+                      ? 'Primero registra la persona en Deudores.'
+                      : 'Todas las líneas en Deudas de esta cuenta quedarán a su nombre.',
                   isDense: true,
                 ),
-                onChanged: (value) =>
-                    controller.updateCustomerName(account.id, value),
+                items: [
+                  if (account.debtorId != null &&
+                      !widget.data.debtors.any(
+                        (p) => p.id == account.debtorId && p.isActive,
+                      ))
+                    DropdownMenuItem(
+                      value: account.debtorId,
+                      enabled: false,
+                      child: Text('${account.customerName} · Fiado bloqueado'),
+                    ),
+                  for (final person in widget.data.debtors.where(
+                    (p) => p.isActive,
+                  ))
+                    DropdownMenuItem(
+                      value: person.id,
+                      child: Text(
+                        '${person.name} · Debe ${inventoryMoney(person.balanceMinor, widget.profile)}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: locked
+                    ? null
+                    : (id) => controller.selectDebtor(account.id, id),
               ),
               const SizedBox(height: 16),
             ],

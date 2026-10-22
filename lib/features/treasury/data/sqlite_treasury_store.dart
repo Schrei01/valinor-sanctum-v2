@@ -113,6 +113,7 @@ ORDER BY c.name COLLATE NOCASE,c.id
 SELECT l.debit_minor,l.credit_minor,c.id cash_account_id,c.name account_name,
  d.id document_id,d.occurred_at_utc,d.type,
  event.name_snapshot event_name,
+ debtor_payment.name_snapshot debtor_name,
  col.sale_label_snapshot,col.customer_name_snapshot,
  pay.supplier_name_snapshot,
  op.kind treasury_kind,op.source_account_id treasury_source_account_id,
@@ -134,6 +135,7 @@ LEFT JOIN collections col ON col.document_id=d.id
 LEFT JOIN supplier_payments pay ON pay.document_id=d.id
 LEFT JOIN treasury_operations op ON op.document_id=d.id
 LEFT JOIN events event ON event.document_id=d.id
+LEFT JOIN debtor_payments debtor_payment ON debtor_payment.document_id=d.id
 ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
 ''');
     final balances = <String, BigInt>{};
@@ -185,9 +187,11 @@ ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
       return count <= 50;
     }).toList();
     final legacyRows = await txn.rawQuery('''
-SELECT o.receivables_minor FROM treasury_openings o
-JOIN business_documents d ON d.id=o.document_id AND d.status='posted'
+SELECT line.debit_minor-line.credit_minor receivables_minor FROM journal_lines line
+JOIN journal_entries entry ON entry.id=line.entry_id
+JOIN business_documents d ON d.id=entry.document_id AND d.status='posted'
 JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
+WHERE line.account_id='system:legacy-customer-receivables'
 ''');
     final legacyReceivables = legacyRows.fold(
       BigInt.zero,
@@ -214,13 +218,12 @@ JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
 
   static Future<int> _receivables(DatabaseExecutor txn) async {
     final rows = await txn.rawQuery('''
-SELECT r.id,r.initial_minor FROM customer_receivables r
-JOIN sales s ON s.document_id=r.origin_document_id
-JOIN business_documents d ON d.id=s.document_id AND d.status='posted'
+SELECT r.id,r.initial_minor FROM all_customer_receivables r
+JOIN business_documents d ON d.id=r.origin_document_id AND d.status='posted'
 JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
 ''');
     final payments = await txn.rawQuery('''
-SELECT r.receivable_id,r.amount_minor FROM receivable_settlements r
+SELECT r.receivable_id,r.amount_minor FROM all_receivable_settlements r
 JOIN business_documents d ON d.id=r.collection_id AND d.status='posted'
 JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
 ''');
@@ -266,6 +269,7 @@ class _MovementAccumulator {
     final concept = switch (row['type']) {
       'cash_opening' => 'Saldo inicial',
       'event_creation' => 'Costo de evento: ${row['event_name']}',
+      'debtor_collection' => 'Abono de: ${row['debtor_name']}',
       'treasury_opening' => 'Saldo inicial de la copia',
       'cash_expense' => 'Gasto: ${row['treasury_reason']}${_note()}',
       'cash_transfer' =>

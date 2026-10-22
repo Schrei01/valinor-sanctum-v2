@@ -168,6 +168,18 @@ class QuickSalesController extends ChangeNotifier {
   void updateCustomerName(String id, String customerName) =>
       _change(id, customerName: customerName);
 
+  void selectDebtor(String id, String? debtorId) {
+    final person = snapshot?.debtors
+        .where((p) => p.id == debtorId && p.isActive)
+        .firstOrNull;
+    _change(
+      id,
+      customerName: person?.name ?? '',
+      debtorId: person?.id,
+      clearDebtor: person == null,
+    );
+  }
+
   void addLine(String id) {
     final card = _cards[id];
     if (card == null) return;
@@ -204,6 +216,8 @@ class QuickSalesController extends ChangeNotifier {
     String id, {
     String? label,
     String? customerName,
+    String? debtorId,
+    bool clearDebtor = false,
     List<QuickSaleLine>? lines,
   }) {
     final card = _cards[id];
@@ -212,6 +226,8 @@ class QuickSalesController extends ChangeNotifier {
       card.account,
       label: label,
       customerName: customerName,
+      debtorId: debtorId,
+      clearDebtor: clearDebtor,
       lines: lines,
     );
     card.generation++;
@@ -254,6 +270,7 @@ class QuickSalesController extends ChangeNotifier {
             id: card.account.id,
             label: card.account.label,
             customerName: card.account.customerName,
+            debtorId: card.account.debtorId,
             expectedRevision: card.account.revision,
             lines: card.account.lines,
           );
@@ -330,10 +347,11 @@ class QuickSalesController extends ChangeNotifier {
     }
     final customer = card.account.customerName.trim();
     if (hasCreditFor(card.account) &&
-        (customer.isEmpty ||
+        (card.account.debtorId == null ||
+            customer.isEmpty ||
             customer.length > 120 ||
             RegExp(r'[\x00-\x1f\x7f]').hasMatch(customer))) {
-      card.error = 'Escribe el nombre del cliente para registrar la deuda.';
+      card.error = 'Asigna esta cuenta a una persona registrada en Deudores.';
       card.acting = false;
       _emit();
       return false;
@@ -353,6 +371,7 @@ class QuickSalesController extends ChangeNotifier {
       totalMinor: total.toInt(),
       creditMinor: creditTotalFor(card.account).toInt(),
       customerName: hasCreditFor(card.account) ? customer : '',
+      debtorId: card.account.debtorId,
       occurredAtUtc: now,
       preparedAtUtc: now,
       status: 'prepared',
@@ -540,12 +559,15 @@ class QuickSalesController extends ChangeNotifier {
     QuickSaleAccount current, {
     String? label,
     String? customerName,
+    String? debtorId,
+    bool clearDebtor = false,
     List<QuickSaleLine>? lines,
     int? revision,
   }) => QuickSaleAccount(
     id: current.id,
     label: label ?? current.label,
     customerName: customerName ?? current.customerName,
+    debtorId: clearDebtor ? null : debtorId ?? current.debtorId,
     revision: revision ?? current.revision,
     status: current.status,
     updatedAtUtc: current.updatedAtUtc,

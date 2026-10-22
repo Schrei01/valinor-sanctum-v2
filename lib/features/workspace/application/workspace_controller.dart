@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../../events/domain/events_store.dart';
+import '../../debtors/domain/debtors_store.dart';
 import 'package:flutter/foundation.dart';
 import '../domain/business_profile.dart';
 import '../domain/workspace_store.dart';
@@ -42,6 +43,7 @@ class WorkspaceController extends ChangeNotifier {
       _session?.treasuryOperationStore;
   LegacyTreasuryStore? get legacyTreasuryStore => _session?.legacyTreasuryStore;
   EventsStore? get eventsStore => _session?.eventsStore;
+  DebtorsStore? get debtorsStore => _session?.debtorsStore;
 
   Future<void> initialize() async {
     if (busy || _disposed || state == WorkspaceState.ready) return;

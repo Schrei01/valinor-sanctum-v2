@@ -73,9 +73,11 @@ void main() {
       expect(find.text('Volver al mostrador'), findsNothing);
       expect(find.text('Ventas y cuentas abiertas'), findsNothing);
       expect(find.text('Cuenta previa'), findsNothing);
+      await tester.ensureVisible(find.text('Sistema'));
       await tester.tap(find.text('Sistema'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Ventas'));
+      await tester.ensureVisible(find.text('Ventas').first);
+      await tester.tap(find.text('Ventas').first);
       await tester.pumpAndSettle();
       expect(find.text('Ventas'), findsNWidgets(2));
       expect(find.byKey(const Key('toggle-previous-accounts')), findsNothing);

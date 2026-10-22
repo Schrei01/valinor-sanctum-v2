@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../support/register_debtor.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/database/app_database.dart';
@@ -127,6 +128,7 @@ void main() {
         id: 'account',
         label: 'Cuenta sintética',
         customerName: debt ? 'Cliente sintético' : '',
+        debtorId: debt ? await registerDebtor(app, 'Cliente sintético') : null,
         expectedRevision: 0,
         lines: [
           QuickSaleLine(

@@ -93,7 +93,13 @@ void main() {
 
   Future<void> enter(WidgetTester tester, Finder finder, String value) async {
     await tester.ensureVisible(finder);
-    await tester.enterText(finder, value);
+    if (tester.widget(finder) is DropdownButtonFormField<String>) {
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining(value).last);
+    } else {
+      await tester.enterText(finder, value);
+    }
     await tester.pumpAndSettle();
   }
 
@@ -114,7 +120,7 @@ void main() {
   }
 
   String customerValue(WidgetTester tester) =>
-      tester.widget<TextField>(keyed('quick-customer-').first).controller!.text;
+      controller.accounts.single.customerName;
 
   testWidgets('Deudas asks for the client and blocks anonymous credit', (
     tester,
@@ -124,14 +130,14 @@ void main() {
     expect(keyed('quick-customer-'), findsNothing);
     await product(tester, 0, 'Agua sintética');
     await payment(tester, 0, 'Deudas');
-    expect(find.text('Cliente de la deuda'), findsOneWidget);
+    expect(find.text('Persona de la deuda'), findsOneWidget);
     expect(
       find.text('Cobrado: COP 0,00 · Deudas: COP 3.000,00'),
       findsOneWidget,
     );
     await tap(tester, keyed('quick-register-').first);
     expect(
-      find.text('Escribe el nombre del cliente para registrar la deuda.'),
+      find.text('Asigna esta cuenta a una persona registrada en Deudores.'),
       findsOneWidget,
     );
     expect(store.preparedIds, isEmpty);
@@ -250,8 +256,10 @@ void main() {
       store.commitBeforeFailure = true;
       await tap(tester, keyed('quick-register-').first);
       expect(
-        tester.widget<TextField>(keyed('quick-customer-')).enabled,
-        isFalse,
+        tester
+            .widget<DropdownButtonFormField<String>>(keyed('quick-customer-'))
+            .onChanged,
+        isNull,
       );
       expect(customerValue(tester), 'Cliente reintento');
       expect(store.stock.first.quantity, 19);

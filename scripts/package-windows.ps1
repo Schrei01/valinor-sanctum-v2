@@ -109,9 +109,14 @@ En Ventas crea varias cuentas, agrega productos y elige la forma de pago por lí
 Elige Efectivo, Transferencia o Deudas. Transferencia usa la cuenta de Nequi;
 ese nombre aparece en las líneas, resumen e historial de Ventas.
 Registrar venta guarda entrega, stock, costo y cobro en una sola operación.
-Para fiar, elige Deudas en la línea e indica el cliente de la deuda en la cuenta.
+Para fiar, registra primero la persona en Deudores y selecciónala en la cuenta de Ventas.
+Todas las líneas Deudas de una cuenta pertenecen a esa persona.
 Puedes combinar líneas pagadas y fiadas: solo lo pagado entra a Caja o Nequi.
-Lo fiado aumenta Deudas en Tesorería y se cobra después desde Cobros.
+Lo fiado aumenta la deuda de esa persona y Deudas en Tesorería.
+En Deudores selecciona la persona, valor del abono y Efectivo o Transferencia.
+Puedes pagar parcial o totalmente. El abono reduce su deuda y aumenta Caja o Nequi juntos.
+Al registrar deuda anterior indica si ya estaba incluida en la cartera importada
+o si es deuda adicional, para no duplicar el total.
 Las cuentas de mostrador se guardan automáticamente mientras las preparas.
 Ventas es la única pantalla de ventas; no hay acceso al formulario anterior.
 En Eventos crea pasadías, torneos o ligas con categoría Evento automática.
@@ -135,7 +140,6 @@ Los saldos de una copia verificada se cargan como apertura única, no como venta
 Deudas identifica la cartera anterior sin detalle cuando la fuente no trae clientes.
 Historial de la copia es consulta separada y no vuelve a mover dinero.
 Las confirmaciones pendientes se recuperan al reabrir para reintentar sin duplicar.
-Configura cuentas y medios locales y registra cobros o abonos de las ventas.
 Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.
 Registra pagos y abonos a proveedores con saldo disponible, incluso por varios medios.
 Las solicitudes de pago guardadas se recuperan al reabrir sin duplicarse.

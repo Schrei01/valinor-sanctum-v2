@@ -5,14 +5,12 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:valinor_sanctum_2/app/sanctum_app.dart';
+import 'package:valinor_sanctum_2/features/collections/application/collections_controller.dart';
+import 'package:valinor_sanctum_2/features/collections/presentation/collections_page.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/features/collections/domain/collections_store.dart';
-import 'package:valinor_sanctum_2/features/workspace/application/workspace_controller.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
-import 'package:valinor_sanctum_2/features/workspace/domain/workspace_store.dart';
 import '../support/fake_collections_store.dart';
-import '../support/fake_workspace_store.dart';
 
 void main() {
   setUpAll(() async {
@@ -85,28 +83,54 @@ void main() {
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final workspace = FakeWorkspaceStore()
-      ..profile = BusinessProfile(
-        profileId: 'test',
-        businessName: 'Ludoteca sintética',
-        currencyCode: 'COP',
-        moneyScale: 2,
-        timezone: 'America/Bogota',
-        createdAtUtc: DateTime.utc(2026, 10, 19),
-      );
-    final controller = WorkspaceController(
-      openSession: () async => WorkspaceSession(
-        store: workspace,
-        databasePath: 'perfil-sintetico/sanctum2.sqlite3',
-        profileId: 'test',
-        collectionsStore: fake,
-      ),
+    final profile = BusinessProfile(
+      profileId: 'test',
+      businessName: 'Ludoteca sintética',
+      currencyCode: 'COP',
+      moneyScale: 2,
+      timezone: 'America/Bogota',
+      createdAtUtc: DateTime.utc(2026, 10, 19),
     );
-    await controller.initialize();
+    final controller = CollectionsController(store: fake);
+    await controller.load();
+    var section = 0;
     await tester.pumpWidget(
       RepaintBoundary(
         key: const Key('collections-preview'),
-        child: SanctumApp(controller: controller),
+        child: MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setState) => Scaffold(
+              body: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    Wrap(
+                      children: [
+                        TextButton(
+                          onPressed: () => setState(() => section = 0),
+                          child: const Text('Cobros'),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() => section = 1),
+                          child: const Text('Sistema'),
+                        ),
+                      ],
+                    ),
+                    IndexedStack(
+                      index: section,
+                      children: [
+                        CollectionsPage(
+                          controller: controller,
+                          profile: profile,
+                        ),
+                        const SizedBox(),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();

@@ -327,11 +327,11 @@ void main() {
     for (final name in ['', ' ', 'x' * 121, 'Cliente\ninválido']) {
       controller.updateCustomerName(id, name);
       expect(await controller.register(id), isFalse);
-      expect(controller.errorFor(id), contains('nombre del cliente'));
+      expect(controller.errorFor(id), contains('persona registrada'));
     }
     expect(store.preparedIds, isEmpty);
     expect(store.customerDebts, isEmpty);
-    controller.updateCustomerName(id, '  Cliente válido  ');
+    controller.selectDebtor(id, 'Cliente válido');
     expect(await controller.register(id), isTrue);
     expect(store.sales.single.result.customerName, 'Cliente válido');
     expect(store.customerDebts['Cliente válido'], 300000);
@@ -342,7 +342,7 @@ void main() {
     () async {
       final id = account();
       fill(id, payment: QuickPaymentOption.creditId);
-      controller.updateCustomerName(id, 'Cliente fijo');
+      controller.selectDebtor(id, 'Cliente fijo');
       store.confirmationFailure = StateError('lost result');
       store.commitBeforeFailure = true;
       expect(await controller.register(id), isFalse);
@@ -364,7 +364,7 @@ void main() {
     () async {
       final id = account();
       fill(id, payment: QuickPaymentOption.creditId);
-      controller.updateCustomerName(id, 'Cliente conservado');
+      controller.selectDebtor(id, 'Cliente conservado');
       controller.addLine(id);
       expect(controller.accounts.single.customerName, 'Cliente conservado');
       controller.removeLine(id, controller.accounts.single.lines.last.id);
@@ -383,7 +383,7 @@ void main() {
     () async {
       final id = account();
       fill(id, payment: QuickPaymentOption.creditId);
-      controller.updateCustomerName(id, 'Cliente preparado');
+      controller.selectDebtor(id, 'Cliente preparado');
       store.preparationFailure = StateError('preparation response lost');
       store.prepareBeforeFailure = true;
       expect(await controller.register(id), isFalse);

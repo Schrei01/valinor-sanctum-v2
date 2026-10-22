@@ -1,10 +1,28 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:valinor_sanctum_2/features/debtors/domain/debtors_store.dart';
 
 import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
 
 class FakeQuickSalesStore implements QuickSalesStore {
+  final debtors = <DebtorSummary>[
+    for (final name in [
+      'Cliente sintético',
+      'Cliente mixto',
+      'Cliente guardado',
+      'Cliente conservado',
+      'Cliente reintento',
+      'Cliente inicial',
+      'Cliente corregido',
+      'Cliente estrecho',
+      'Cliente válido',
+      'Cliente fijo',
+      'Cliente preparado',
+      'Cliente posterior',
+    ])
+      DebtorSummary(id: name, name: name, balanceMinor: 0),
+  ];
   final accounts = <QuickSaleAccount>[];
   final products = <CatalogProduct>[
     const CatalogProduct(
@@ -87,6 +105,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
     if (loadFailure != null) throw loadFailure!;
     final result = QuickSalesSnapshot(
       accounts: accounts,
+      debtors: debtors,
       products: products,
       stock: stock,
       paymentOptions: options,
@@ -103,6 +122,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
     input.expectedRevision,
     input.label,
     input.customerName,
+    input.debtorId,
     for (final line in input.lines)
       [
         line.id,
@@ -133,6 +153,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
         id: input.id,
         label: input.label,
         customerName: input.customerName,
+        debtorId: input.debtorId,
         revision: input.expectedRevision + 1,
         status: 'open',
         updatedAtUtc: DateTime.utc(2026, 10, 19),
@@ -185,7 +206,8 @@ class FakeQuickSalesStore implements QuickSalesStore {
     final hasCredit = account.lines.any(
       (line) => line.paymentOptionId == QuickPaymentOption.creditId,
     );
-    if (hasCredit && account.customerName.trim().isEmpty) {
+    if (hasCredit &&
+        (account.debtorId == null || account.customerName.trim().isEmpty)) {
       throw const QuickSalesValidationException(
         'Escribe el nombre del cliente.',
       );
@@ -209,6 +231,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
       ),
       creditMinor: credit,
       customerName: hasCredit ? account.customerName.trim() : '',
+      debtorId: hasCredit ? account.debtorId : null,
       occurredAtUtc: occurredAtUtc,
       preparedAtUtc: occurredAtUtc,
       status: 'prepared',
@@ -236,6 +259,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
             totalMinor: prepared.totalMinor,
             creditMinor: prepared.creditMinor,
             customerName: prepared.customerName,
+            debtorId: prepared.debtorId,
             occurredAtUtc: prepared.occurredAtUtc,
             preparedAtUtc: prepared.preparedAtUtc,
             status: 'rejected',
@@ -258,6 +282,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
       totalCostMinor: 100000,
       creditMinor: prepared.creditMinor,
       customerName: prepared.customerName,
+      debtorId: prepared.debtorId,
     );
     _results[commandId] = result;
     for (final line in account.lines) {
@@ -338,6 +363,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
         id: account.id,
         label: account.label,
         customerName: account.customerName,
+        debtorId: account.debtorId,
         revision: account.revision + 1,
         status: 'open',
         updatedAtUtc: account.updatedAtUtc,

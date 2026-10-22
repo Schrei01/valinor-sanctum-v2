@@ -60,7 +60,7 @@ ORDER BY s.sold_at_utc DESC, s.document_id
 ''');
     final sales = <ConfirmedSale>[];
     final settlementRows = await txn.rawQuery('''
-SELECT r.origin_document_id, a.amount_minor FROM receivable_settlements a
+SELECT r.origin_document_id, a.amount_minor FROM all_receivable_settlements a
 JOIN customer_receivables r ON r.id = a.receivable_id
 JOIN business_documents d ON d.id = a.collection_id AND d.status = 'posted'
 JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'

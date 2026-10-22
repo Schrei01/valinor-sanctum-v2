@@ -1,0 +1,74 @@
+{
+  "version": "0.16.0+23",
+  "schemaVersion": 13,
+  "tests": {
+    "fullSuitePassed": 645,
+    "fullSuiteSkipped": 3,
+    "fullSuiteFailures": 2,
+    "fullSuiteFailureReasons": [
+      "Test fixture attempted an already immutable payment option identity change; replaced with permitted name change to test captured metadata.",
+      "Shell test tapped Sistema outside the scrolled navigation viewport; now ensures visibility."
+    ],
+    "finalFocusedPassed": 44,
+    "finalFocusedApplicationCases": 43,
+    "finalFocusedSyntheticRenderCases": 1,
+    "finalFocusedFailures": 0,
+    "distinctApplicationCasesPassedAcrossRuns": 650,
+    "analyzeClean": true,
+    "formattedDartFiles": 35,
+    "formatClean": true
+  },
+  "behavior": {
+    "registeredPersonRequiredForNewCredit": true,
+    "onePersonPerQuickAccount": true,
+    "previousDebtAllowed": true,
+    "legacyIncludedDebtDoesNotIncreaseTotal": true,
+    "additionalOpeningHasNoFictitiousSaleOrCash": true,
+    "partialAndFullPayments": true,
+    "paymentCannotExceedPersonBalance": true,
+    "paymentAppliesOldestFirst": true,
+    "cashAndDebtAtomic": true,
+    "transferUsesExistingNequiAccount": true,
+    "noRepeatedInventoryOnPayment": true,
+    "durableIdempotentRequests": true,
+    "legacyV2PreparedCreditReplayVerified": true,
+    "explicitHistoricalAssignment": true,
+    "blockedCreditStillAllowsPayment": true
+  },
+  "migration": {
+    "releasedVersions1Through12Unchanged": true,
+    "rehearsal": {
+      "schemaVersion": 13,
+      "integrity": "ok",
+      "foreignKeyViolations": 0,
+      "priorTables": 53,
+      "newTables": 7,
+      "allPriorRowsPreserved": true
+    },
+    "liveMigrationPending": true
+  },
+  "build": {
+    "seconds": 64.0319055,
+    "executableVersion": "0.16.0+23",
+    "appSha256": "5B450D83C1307F8A8356D13F3857656A1958A3D5168A9E5F3EC4B4835EA6F99D",
+    "sanctumOverrides": false
+  },
+  "bundle": {
+    "archiveBytes": 14808838,
+    "publicationPending": true,
+    "archiveSha256": "F83EE03A165FED376844C26EAD155F61E8D1A864029E585F501A7D63AD320364",
+    "privateDataExcluded": true,
+    "files": 17
+  },
+  "review": {
+    "kind": "local review",
+    "otherAgentReview": false,
+    "syntheticImageInspected": true,
+    "nativeVerificationPending": true
+  },
+  "limits": [
+    "One previous-debt opening per person.",
+    "Stable person names; no identity editing, automatic name merging, reversals, interest or credit limits.",
+    "No business test operations in the active owner profile."
+  ]
+}
