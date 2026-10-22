@@ -45,7 +45,19 @@
       "newTables": 7,
       "allPriorRowsPreserved": true
     },
-    "liveMigrationPending": true
+    "liveMigrationPending": false,
+    "closedRehearsalPassed": true,
+    "live": {
+      "schemaVersion": 13,
+      "integrity": "ok",
+      "foreignKeyViolations": 0,
+      "priorTables": 53,
+      "newTables": 7,
+      "allPriorRowsPreserved": true,
+      "automaticBackupMatchesManual": true
+    },
+    "noNewBusinessFacts": true,
+    "legacyMarkersMatchPriorV2Requests": true
   },
   "build": {
     "seconds": 64.0319055,
@@ -54,17 +66,28 @@
     "sanctumOverrides": false
   },
   "bundle": {
+    "version": "0.16.0+23",
+    "files": 17,
     "archiveBytes": 14808838,
-    "publicationPending": true,
     "archiveSha256": "F83EE03A165FED376844C26EAD155F61E8D1A864029E585F501A7D63AD320364",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
     "privateDataExcluded": true,
-    "files": 17
+    "publicationPending": false
   },
   "review": {
     "kind": "local review",
     "otherAgentReview": false,
     "syntheticImageInspected": true,
-    "nativeVerificationPending": true
+    "nativeVerificationPending": false,
+    "nativeObserved": [
+      "Application opened from stable bundle",
+      "Version 0.16.0",
+      "Deudores navigation entry"
+    ],
+    "nativeFormTraversalVerified": false,
+    "nativeLimitation": "Click returned element not available in cached app state; one refreshed recovery failed with FrameArrived timeout. No further app input.",
+    "applicationLeftOpenForOwner": true
   },
   "limits": [
     "One previous-debt opening per person.",
