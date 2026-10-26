@@ -1,0 +1,83 @@
+{
+  "version": "0.17.0+24",
+  "schemaVersion": 13,
+  "schemaMigration": false,
+  "tests": {
+    "broaderScope": "Report integration/controller and all widget tests",
+    "broaderPassed": 134,
+    "broaderFailures": 1,
+    "broaderFailureReason": "New large-turnover test omitted expense fixture initialization; ensureDefaults added in synthetic setup.",
+    "finalFocusedPassed": 28,
+    "finalFocusedApplicationCases": 27,
+    "finalFocusedRenderCases": 1,
+    "finalFocusedFailures": 0,
+    "finalLayoutPassed": 6,
+    "distinctApplicationCasesPassedAcrossRuns": 135,
+    "fullSuiteRerun": false,
+    "analyzeClean": true,
+    "formattedDartFiles": 14,
+    "formatClean": true
+  },
+  "readOnlyProof": {
+    "schemaVersion": 13,
+    "integrity": "ok",
+    "foreignKeyViolations": 0,
+    "all60TablesPreserved": true,
+    "schemaUnchanged": true
+  },
+  "review": {
+    "independentCodeReview": true,
+    "importAtExactStartBoundaryIssueFixed": true,
+    "syntheticSummaryImageInspected": true,
+    "syntheticNegativeMarginImageInspected": true,
+    "nativeObserved": [
+      "Stable bundle opened",
+      "Version 0.17.0",
+      "Reportes navigation entry"
+    ],
+    "nativeReportPageTraversalVerified": false,
+    "nativeLimitation": "Click returned element not available in cached app state; single refreshed recovery failed with FrameArrived timeout. Further UI input stopped.",
+    "applicationLeftOpenForOwner": true
+  },
+  "behavior": {
+    "bogotaInclusiveDays": true,
+    "openingAndClosingCoverageUnknownExplicit": true,
+    "receiptAndAbonoSeparated": true,
+    "creditPartOnly": true,
+    "historicalPriceNameFifoCost": true,
+    "currentCategoryDisclosed": true,
+    "transfersOnceWithTwoAccountLegs": true,
+    "inventoryPurchasesNotRepeatedAsProfitCost": true,
+    "eventActualCostOnceOnCreation": true,
+    "eventLifetimeResultThroughCutoff": true,
+    "negativeBarsAndResults": true,
+    "stableIdentityFilteringAndChartGrouping": true,
+    "exactBigIntTotalsAndOverflowRejection": true,
+    "unlimitedPeriodMovementRead": true
+  },
+  "delivery": {
+    "version": "0.17.0+24",
+    "files": 17,
+    "archiveBytes": 14985868,
+    "archiveSha256": "0411A28F7EF06C0F0D6D7853F408C9C34A0557664A18A3903ADE46C5E53E5E49",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
+    "privateDataExcluded": true,
+    "pending": false,
+    "liveConservation": {
+      "tables": 60,
+      "allPriorRowsPreserved": true,
+      "schemaUnchanged": true,
+      "schemaVersion": 13,
+      "integrity": "ok",
+      "foreignKeyViolations": 0
+    },
+    "closedManualBackupSaved": true
+  },
+  "build": {
+    "seconds": 70.3198485,
+    "executableVersion": "0.17.0+24",
+    "appSha256": "DC449A7A85CE2C15AAEB7AEB0B082A380A1AA009C7AF67753836EFA05990E227",
+    "sanctumOverrides": false
+  }
+}

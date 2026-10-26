@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'features/events/data/sqlite_events_store.dart';
 import 'features/debtors/data/sqlite_debtors_store.dart';
+import 'features/reports/data/sqlite_reports_store.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'app/sanctum_app.dart';
@@ -43,6 +44,7 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
 ''');
       return WorkspaceSession(
         store: SqliteWorkspaceStore(database),
+        reportsStore: SqliteReportsStore(database),
         debtorsStore: SqliteDebtorsStore(
           database,
           synthetic: config.environment == AppEnvironment.test,

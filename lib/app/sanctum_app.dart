@@ -9,6 +9,8 @@ import '../features/inventory/presentation/catalog_page.dart';
 import '../features/inventory/presentation/purchases_page.dart';
 import '../features/debtors/application/debtors_controller.dart';
 import '../features/debtors/presentation/debtors_page.dart';
+import '../features/reports/application/reports_controller.dart';
+import '../features/reports/presentation/reports_page.dart';
 import '../features/supplier_payments/application/supplier_payments_controller.dart';
 import '../features/supplier_payments/presentation/supplier_payments_page.dart';
 import '../features/quick_sales/application/quick_sales_controller.dart';
@@ -29,6 +31,7 @@ const _destinations = [
   (Icons.people_outline, 'Deudores'),
   (Icons.account_balance_outlined, 'Tesorería'),
   (Icons.event_outlined, 'Eventos'),
+  (Icons.bar_chart_outlined, 'Reportes'),
   (Icons.settings_outlined, 'Sistema'),
 ];
 
@@ -70,6 +73,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   int _section = 0;
   InventoryController? _inventory;
   DebtorsController? _debtors;
+  ReportsController? _reports;
   SupplierPaymentsController? _supplierPayments;
   QuickSalesController? _quickSales;
   StockIntakeController? _stockIntake;
@@ -108,6 +112,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     if (index == 3) unawaited(_quickSales?.load());
     if (index == 4) unawaited(_debtors?.load());
     if (index == 6) unawaited(_events?.load());
+    if (index == 7) unawaited(_reports?.load());
     if (index == 5) {
       unawaited(_treasury?.load());
       unawaited(_treasuryOperations?.load());
@@ -127,6 +132,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     _exitListener.dispose();
     _inventory?.dispose();
     _debtors?.dispose();
+    _reports?.dispose();
     _supplierPayments?.removeListener(_supplierPaymentsChanged);
     _supplierPayments?.dispose();
     _quickSales?.dispose();
@@ -190,6 +196,13 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
         unawaited(_quickSales!.load());
       }
       final debtorsStore = controller.debtorsStore;
+      final reportsStore = controller.reportsStore;
+      if (!identical(_reports?.store, reportsStore)) {
+        _reports?.dispose();
+        _reports = reportsStore == null
+            ? null
+            : ReportsController(store: reportsStore);
+      }
       if (!identical(_debtors?.store, debtorsStore)) {
         _debtors?.dispose();
         _debtors = debtorsStore == null
@@ -408,6 +421,18 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                 wide,
                               ),
                               _scrollPage(
+                                controller.profile == null
+                                    ? const _ConfigureFirst()
+                                    : _reports == null
+                                    ? const _ModuleUnavailable()
+                                    : ReportsPage(
+                                        key: ObjectKey(_reports),
+                                        controller: _reports!,
+                                        profile: controller.profile!,
+                                      ),
+                                wide,
+                              ),
+                              _scrollPage(
                                 _System(controller: controller),
                                 wide,
                               ),
@@ -473,7 +498,7 @@ class _ConfigureFirst extends StatelessWidget {
     child: Padding(
       padding: EdgeInsets.all(28),
       child: Text(
-        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras, ventas, cobros y tesorería.',
+        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras, ventas, deudores, tesorería, eventos y reportes.',
       ),
     ),
   );
@@ -629,7 +654,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.16.0',
+                    'Versión 0.17.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -771,8 +796,8 @@ class _Home extends StatelessWidget {
                   (
                     Icons.insights_outlined,
                     'Reportes y análisis',
-                    'Indicadores sustentados en operaciones.',
-                    'Pendiente',
+                    'Saldos, ventas, deudas, costos y gráficas por período.',
+                    'Disponible',
                   ),
                 ])
                   SizedBox(
