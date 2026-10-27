@@ -147,6 +147,9 @@ Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.
 Registra pagos y abonos a proveedores con saldo disponible, incluso por varios medios.
 Las solicitudes de pago guardadas se recuperan al reabrir sin duplicarse.
 En Reportes elige la fecha inicial y, al aceptar, la hora en formato AM/PM.
+El resultado se presenta como comprobante compacto con saldos, ventas y egresos.
+Los egresos suman salidas registradas de Caja y Nequi; no incluyen transferencias
+internas, Caja mayor ni ajustes de deuda. Los totales se muestran por separado.
 Repite con el final y pulsa Generar reporte para consultar los saldos iniciales
 y finales de Caja y Nequi. Los momentos corresponden al horario de Bogotá.
 Los saldos sin respaldo histórico se muestran Sin información.

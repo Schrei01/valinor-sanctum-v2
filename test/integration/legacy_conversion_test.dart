@@ -73,6 +73,26 @@ void main() {
           'paymentMethod': i == 1 ? 'Caja' : 'Transferencia',
         });
       }
+      for (final row in [
+        [100, 'egreso', 'Caja', 7, '2026-10-18T11:00:00'],
+        [101, 'egreso', 'Nequi', 11, '2026-10-18T11:00:00'],
+        [102, 'ingreso', 'Caja', 99, '2026-10-18T11:00:00'],
+        [103, 'transferencia', 'Caja', 99, '2026-10-18T11:00:00'],
+        [104, 'egreso', 'Caja mayor', 13, '2026-10-18T11:00:00'],
+        [105, 'egreso', 'Deudas', 17, '2026-10-18T11:00:00'],
+        [106, 'egreso', 'Caja', 5, '2026-10-18T10:59:59.999999'],
+        [107, 'egreso', 'Nequi', 3, '2026-10-18T11:01:00'],
+        [108, 'egreso', 'Caja', 'invalid', '2026-10-18T11:00:00'],
+      ]) {
+        await old.insert('movimientos', {
+          'id': row[0],
+          'tipo': row[1],
+          'cuenta': row[2],
+          'monto': row[3],
+          'fecha': row[4],
+          'motivo': 'Movimiento sintético',
+        });
+      }
       for (final r in [
         {'id': 1, 'total': 0.0, 'fecha': null},
         {'id': 2, 'total': 100.0, 'fecha': '2026-10-18T10:00:00.000000'},
@@ -360,6 +380,29 @@ void main() {
       expect(minute.saleTotals.unpricedSales, 1);
       expect(minute.saleTotals.estimatedCashMinor, 300);
       expect(await nativeRows(), beforeReads);
+    },
+  );
+  test(
+    'historical outflows use Caja and Nequi within the exact minute; missing amount stays partial',
+    () async {
+      await importLegacyHistory(target: app, sourcePath: source);
+      final before = await nativeRows();
+      final data = await day(18);
+      expect(data.outflowTotals.cashMinor, 12);
+      expect(data.outflowTotals.transferMinor, 14);
+      expect(data.outflowTotals.knownTotalMinor, 26);
+      expect(data.outflowTotals.totalMinor, isNull);
+      expect(data.outflowTotals.unpricedCashRecords, 1);
+      final minute = await SqliteReportsStore(app).load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 18, 11),
+          end: DateTime.utc(2026, 10, 18, 11),
+        ),
+      );
+      expect(minute.outflowTotals.cashMinor, 7);
+      expect(minute.outflowTotals.transferMinor, 11);
+      expect((await day(21)).outflowTotals.totalMinor, 0);
+      expect(await nativeRows(), before);
     },
   );
   test(

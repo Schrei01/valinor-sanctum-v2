@@ -114,9 +114,16 @@ void main() {
       expect(value(tester, 'report-sales-transfer'), 'COP 200,00');
       expect(value(tester, 'report-sales-credit'), 'COP 40,00');
       expect(value(tester, 'report-sales-total'), 'COP 300,00');
+      expect(value(tester, 'report-outflows-cash'), 'COP 70,00');
+      expect(value(tester, 'report-outflows-transfer'), 'COP 0,00');
+      expect(value(tester, 'report-outflows-total'), 'COP 70,00');
+      expect(
+        tester.getBottomRight(find.byKey(const Key('report-receipt'))).dy,
+        lessThan(850),
+      );
       expect(find.byKey(const Key('report-sales-other')), findsNothing);
-      expect(find.text('26/10/2026 · 12:00 AM'), findsNWidgets(2));
-      expect(find.text('26/10/2026 · 11:59 PM'), findsNWidgets(2));
+      expect(find.textContaining('26/10/2026 · 12:00 AM'), findsNWidgets(2));
+      expect(find.textContaining('26/10/2026 · 11:59 PM'), findsNWidgets(2));
       for (final label in [
         'Gráfica de barras',
         'Productos vendidos',
@@ -142,8 +149,8 @@ void main() {
       final p = store.queries.last;
       expect(p.startUtc, DateTime.utc(2026, 10, 25, 5));
       expect(p.endExclusiveUtc, DateTime.utc(2026, 10, 26, 17, 1));
-      expect(find.text('25/10/2026 · 12:00 AM'), findsNWidgets(2));
-      expect(find.text('26/10/2026 · 12:00 PM'), findsNWidgets(2));
+      expect(find.textContaining('25/10/2026 · 12:00 AM'), findsNWidgets(2));
+      expect(find.textContaining('26/10/2026 · 12:00 PM'), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     },
   );
@@ -157,7 +164,7 @@ void main() {
       expect(find.byType(TimePickerDialog), findsNothing);
       await dateThenTime(tester, 'report-end', 25);
       await tap(tester, find.text('Cancelar'));
-      expect(find.text('26/10/2026 · 11:59 PM'), findsNWidgets(2));
+      expect(find.textContaining('26/10/2026 · 11:59 PM'), findsNWidgets(2));
       await tap(tester, find.byKey(const Key('report-generate')));
       expect(store.queries.last.endExclusiveUtc, DateTime.utc(2026, 10, 27, 5));
       expect(tester.takeException(), isNull);
@@ -190,7 +197,8 @@ void main() {
       await open(tester, size: const Size(620, 1000));
       expect(find.text('Sin información'), findsNWidgets(4));
       expect(find.textContaining('historial disponible'), findsOneWidget);
-      expect(find.text('COP 0,00'), findsNothing);
+      expect(value(tester, 'report-opening-cash'), 'Sin información');
+      expect(value(tester, 'report-closing-nequi'), 'Sin información');
       expect(tester.takeException(), isNull);
     },
   );
@@ -205,7 +213,6 @@ void main() {
       expect(value(tester, 'report-sales-credit'), 'COP 40,00');
       expect(value(tester, 'report-sales-total'), 'COP 300,00');
       expect(find.text('Total vendido (parcial)'), findsOneWidget);
-      expect(find.text('Sin información: 2 registro(s).'), findsNWidgets(2));
       expect(
         find.textContaining('Hay 2 registro(s) de ventas antiguas'),
         findsOneWidget,
@@ -225,7 +232,7 @@ void main() {
       expect(value(tester, 'report-sales-cash'), 'COP 180,00');
       expect(value(tester, 'report-sales-total'), 'COP 420,00');
       expect(find.textContaining('Incluye 3 registro(s)'), findsOneWidget);
-      expect(find.text('Incluye estimado: COP 120,00'), findsNWidgets(2));
+      expect(find.textContaining('· COP 120,00'), findsOneWidget);
       expect(find.text('Total vendido (parcial)'), findsNothing);
       expect(tester.takeException(), isNull);
     },
@@ -243,7 +250,7 @@ void main() {
       );
       expect(value(tester, 'report-closing-nequi'), 'COP 800,00');
       expect(value(tester, 'report-sales-total'), 'COP 300,00');
-      expect(find.text('26/10/2026 · 11:59 PM'), findsNWidgets(2));
+      expect(find.textContaining('26/10/2026 · 11:59 PM'), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     },
   );

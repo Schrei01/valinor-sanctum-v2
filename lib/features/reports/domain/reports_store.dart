@@ -256,8 +256,11 @@ class ReportsSnapshot {
     this.closingBalancesKnown = true,
     this.usesHistoricalBalances = false,
     ReportSalesTotals? saleTotals,
+    ReportOutflowTotals? outflowTotals,
     required List<String> warnings,
   }) : saleTotals = saleTotals ?? ReportSalesTotals.fromNative(sales),
+       outflowTotals =
+           outflowTotals ?? ReportOutflowTotals.fromNative(movements, accounts),
        accounts = List.unmodifiable(accounts),
        movements = List.unmodifiable(movements),
        sales = List.unmodifiable(sales),
@@ -281,6 +284,7 @@ class ReportsSnapshot {
   final bool usesHistoricalBalances;
   final List<String> warnings;
   final ReportSalesTotals saleTotals;
+  final ReportOutflowTotals outflowTotals;
   int get salesMinor => reportSum(sales.map((s) => s.salesMinor));
   int get creditSalesMinor => reportSum(sales.map((s) => s.creditMinor));
   int get costOfGoodsMinor =>
@@ -325,6 +329,7 @@ class ReportsSnapshot {
   /// final balances can fit in SQLite's range, gross movement totals may not.
   void validate() {
     saleTotals.validate();
+    outflowTotals.validate();
     salesMinor;
     creditSalesMinor;
     costOfGoodsMinor;
@@ -434,6 +439,7 @@ class ReportSalesTotals {
       otherMinor: other,
     );
   }
+
   /// Exact native revenue. Archived estimates remain separate below.
   final int cashMinor, transferMinor, creditMinor, otherMinor;
   final int estimatedCashMinor,
@@ -495,6 +501,60 @@ class ReportSalesTotals {
           'El desglose de ventas contiene valores negativos.',
         );
       }
+    }
+    knownTotalMinor;
+  }
+}
+
+/// Registered money leaving Caja/Nequi; transfers and openings are excluded.
+class ReportOutflowTotals {
+  const ReportOutflowTotals({
+    required this.cashMinor,
+    required this.transferMinor,
+    this.unpricedCashRecords = 0,
+    this.unpricedTransferRecords = 0,
+  });
+  factory ReportOutflowTotals.fromNative(
+    Iterable<ReportMovement> movements,
+    Iterable<ReportAccount> accounts,
+  ) {
+    final roles = {for (final account in accounts) account.id: account.role};
+    var cash = BigInt.zero, transfer = BigInt.zero;
+    for (final m in movements) {
+      if (m.amountMinor >= 0 ||
+          m.kind == ReportMovementKind.transfer ||
+          m.kind == ReportMovementKind.opening) {
+        continue;
+      }
+      final amount = BigInt.from(m.amountMinor).abs();
+      if (roles[m.accountId] == ReportAccountRole.cash) cash += amount;
+      if (roles[m.accountId] == ReportAccountRole.transfer) transfer += amount;
+    }
+    return ReportOutflowTotals(
+      cashMinor: reportMinor(cash),
+      transferMinor: reportMinor(transfer),
+    );
+  }
+  final int cashMinor,
+      transferMinor,
+      unpricedCashRecords,
+      unpricedTransferRecords;
+  int get unpricedRecords => unpricedCashRecords + unpricedTransferRecords;
+  int get knownTotalMinor => reportSum([cashMinor, transferMinor]);
+  int? get cashTotalMinor => unpricedCashRecords == 0 ? cashMinor : null;
+  int? get transferTotalMinor =>
+      unpricedTransferRecords == 0 ? transferMinor : null;
+  int? get totalMinor => unpricedRecords == 0 ? knownTotalMinor : null;
+  void validate() {
+    if ([
+      cashMinor,
+      transferMinor,
+      unpricedCashRecords,
+      unpricedTransferRecords,
+    ].any((v) => v < 0)) {
+      throw const ReportsValidationException(
+        'El desglose de egresos contiene valores negativos.',
+      );
     }
     knownTotalMinor;
   }

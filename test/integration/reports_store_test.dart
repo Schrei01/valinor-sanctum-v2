@@ -295,6 +295,7 @@ void main() {
         hasLength(2),
       );
       expect(data.outflowsMinor, 0);
+      expect(data.outflowTotals.totalMinor, 0);
       expect(data.saleReceiptsMinor, 0);
       expect(data.operatingResultMinor, 0);
       expect(data.saleTotals.cashTotalMinor, 0);
@@ -410,6 +411,8 @@ void main() {
       expect(current.events.single.resultMinor, 27999);
       final creation = await reports.load(period(DateTime.utc(2026, 10, 19)));
       expect(creation.eventCostsMinor, 2001);
+      expect(creation.outflowTotals.totalMinor, 1000);
+      expect(current.outflowTotals.totalMinor, 0);
       expect(creation.operatingResultMinor, -2001);
       expect(creation.events.single.resultMinor, -2001);
     },
@@ -470,6 +473,9 @@ void main() {
       await operations.confirmPrepared('expense');
       final data = await reports.load(period());
       expect(data.outflowsMinor, 4000);
+      expect(data.outflowTotals.cashMinor, 4000);
+      expect(data.outflowTotals.transferMinor, 0);
+      expect(data.outflowTotals.totalMinor, 4000);
       expect(data.saleTotals.cashTotalMinor, 10000);
       expect(data.saleTotals.totalMinor, 10000);
       expect(

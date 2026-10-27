@@ -1,0 +1,61 @@
+{
+  "version": "0.20.0+31",
+  "dateBogota": "2026-10-27",
+  "schemaVersion": 14,
+  "schemaMigration": false,
+  "report": {
+    "compactReceiptLayout": true,
+    "alignedOpeningAndClosingBalances": true,
+    "sideBySideSalesAndOutflows": true,
+    "responsiveStackOnNarrowScreens": true,
+    "highlightedTotals": true,
+    "outflowAccounts": [
+      "Caja",
+      "Nequi"
+    ],
+    "outflowSources": [
+      "native posted cash outflows",
+      "archived explicit egreso movements"
+    ],
+    "excludesInternalTransfersOpeningsReserveAndDebtAdjustments": true,
+    "excludesInventoryOnlyEventCost": true,
+    "salesEstimatesAndPartialQualityRetained": true,
+    "dateThenAmPmTimeRetained": true,
+    "newPersistentTablesOrViews": false
+  },
+  "verification": {
+    "initialPassed": 36,
+    "initialLoadErrors": 4,
+    "stateStructureCorrected": true,
+    "uiRepairPassed": 11,
+    "finalPassed": 47,
+    "finalApplicationCases": 46,
+    "syntheticRenderCases": 1,
+    "fullFinancialSuiteRepeated": false,
+    "analyze": "No issues found",
+    "syntheticWideAndNarrowInspected": true,
+    "baseReceiptFits1000x850": true,
+    "realSnapshotRangesIndependentlyReconciled": 7,
+    "historicalCajaNequiOutflowsAudited": 236,
+    "snapshotTablesRowsAndSchemaPreserved": 63,
+    "nativeUiTraversal": false,
+    "activeTablesRowsAndSchemaUnchanged": 63,
+    "integrity": "ok",
+    "foreignKeyViolations": 0,
+    "schemaVersion": 14,
+    "activeMoneyScale": 0,
+    "consistentBackupVerified": true
+  },
+  "delivery": {
+    "releaseBuild": true,
+    "published": true,
+    "privateDataExcluded": true,
+    "sanctumOverrides": false,
+    "files": 17,
+    "archiveBytes": 15021613,
+    "archiveSha256": "02D18CC840AA5685FDDBC0600E43E1AB31FD832DA4D6CD3BC910D96ADC8766BD",
+    "stableVersionedArchiveMatch": true,
+    "oldDistributionsRemoved": true,
+    "appLeftOpen": false
+  }
+}

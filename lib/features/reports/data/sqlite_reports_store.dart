@@ -362,10 +362,73 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
       where: "status='complete'",
     );
     final nativeSaleTotals = ReportSalesTotals.fromNative(sales);
+    final nativeOutflows = ReportOutflowTotals.fromNative(movements, [
+      for (final account in accounts)
+        ReportAccount(
+          id: account['id'] as String,
+          name: account['name'] as String,
+          role: roles[account['id']] ?? ReportAccountRole.other,
+          openingMinor: null,
+          closingMinor: null,
+        ),
+    ]);
+    final historicalOutflows = [BigInt.zero, BigInt.zero];
+    final unpricedOutflows = [0, 0];
     final unpriced = [0, 0, 0, 0];
     final estimated = [BigInt.zero, BigInt.zero, BigInt.zero, BigInt.zero];
     var estimatedSales = 0;
     if (converted.isNotEmpty) {
+      final oldMovements = await txn.query(
+        'legacy_source_rows',
+        columns: ['row_json'],
+        where: "source_table='movimientos'",
+      );
+      for (final row in oldMovements) {
+        final movement =
+            jsonDecode(row['row_json'] as String) as Map<String, dynamic>;
+        if ((movement['tipo'] as String? ?? '').trim().toLowerCase() !=
+            'egreso') {
+          continue;
+        }
+        final account = (movement['cuenta'] as String? ?? '')
+            .trim()
+            .toLowerCase();
+        final group = switch (account) {
+          'caja' || 'efectivo' || 'cash' => 0,
+          'nequi' || 'transferencia' || 'transfer' => 1,
+          _ => -1,
+        };
+        // Caja mayor and decreases of debt are outside Caja/Nequi outflows.
+        if (group < 0) continue;
+        DateTime? date;
+        try {
+          date = parseLegacyDate(movement['fecha']);
+        } on FormatException {
+          throw const ReportsValidationException(
+            'Un egreso antiguo tiene una fecha inválida.',
+          );
+        }
+        if (date == null) {
+          throw const ReportsValidationException(
+            'Un egreso antiguo no tiene fecha.',
+          );
+        }
+        if (!period.contains(date)) continue;
+        int? amount;
+        try {
+          amount = legacyTreasuryAmountToMinor(
+            '${movement['monto']}',
+            moneyScale: profile.single['money_scale'] as int,
+          );
+        } on LegacyTreasuryFormatException {
+          /* Preserve unknown amounts. */
+        }
+        if (amount == null || amount < 0) {
+          unpricedOutflows[group]++;
+        } else {
+          historicalOutflows[group] += BigInt.from(amount);
+        }
+      }
       final legacySales = await txn.rawQuery('''
 SELECT sale.row_json, product.row_json product_json
 FROM legacy_source_rows sale
@@ -526,6 +589,16 @@ WHERE sale.source_table='sales' ''');
       closingBalancesKnown: closingKnown,
       usesHistoricalBalances: historyUsed,
       saleTotals: saleTotals,
+      outflowTotals: ReportOutflowTotals(
+        cashMinor: reportMinor(
+          BigInt.from(nativeOutflows.cashMinor) + historicalOutflows[0],
+        ),
+        transferMinor: reportMinor(
+          BigInt.from(nativeOutflows.transferMinor) + historicalOutflows[1],
+        ),
+        unpricedCashRecords: unpricedOutflows[0],
+        unpricedTransferRecords: unpricedOutflows[1],
+      ),
       warnings: warnings,
     );
     result.validate();
