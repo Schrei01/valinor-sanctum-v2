@@ -147,6 +147,36 @@ void main() {
   }
 
   testWidgets(
+    'grouped quantity autosaves canonical digits and survives refresh',
+    (tester) async {
+      await open(tester);
+      await tap(tester, find.byKey(const Key('quick-new-account')));
+      await select(tester, 0, 'Agua sintética');
+      await enter(tester, keyed('quick-quantity-').first, '1000');
+      expect(
+        tester
+            .widget<TextField>(keyed('quick-quantity-').first)
+            .controller!
+            .text,
+        '1.000',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(store.accounts.single.lines.single.quantityText, '1000');
+      await tap(tester, find.byKey(const Key('quick-refresh')));
+      expect(
+        tester
+            .widget<TextField>(keyed('quick-quantity-').first)
+            .controller!
+            .text,
+        '1.000',
+      );
+      expect(controller.accounts.single.lines.single.quantityText, '1000');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'several accounts and payment rows register in one click while keeping other cards',
     (tester) async {
       await open(tester);

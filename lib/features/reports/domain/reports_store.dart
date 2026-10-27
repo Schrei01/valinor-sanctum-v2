@@ -153,6 +153,40 @@ class ReportSaleLine {
       reportMinor(BigInt.from(salesMinor) - BigInt.from(costMinor));
 }
 
+class ReportItem {
+  const ReportItem({
+    required this.id,
+    required this.productName,
+    required this.occurredAtUtc,
+    required this.quantity,
+    required this.amountMinor,
+    required this.paymentMethod,
+    this.isEstimated = false,
+  });
+  factory ReportItem.fromSale(ReportSaleLine sale) => ReportItem(
+    id: sale.id,
+    productName: sale.productName,
+    occurredAtUtc: sale.occurredAtUtc,
+    quantity: sale.quantity,
+    amountMinor: sale.salesMinor,
+    paymentMethod: [
+      if (sale.cashMinor > 0) 'Efectivo',
+      if (sale.transferMinor > 0) 'Transferencia',
+      if (sale.creditMinor > 0) 'Deudas',
+      if (BigInt.from(sale.salesMinor) >
+          BigInt.from(sale.cashMinor) +
+              BigInt.from(sale.transferMinor) +
+              BigInt.from(sale.creditMinor))
+        'Otro',
+      if (sale.salesMinor == 0) 'Sin cobro',
+    ].join(' / '),
+  );
+  final String id, productName, paymentMethod;
+  final DateTime occurredAtUtc;
+  final int? quantity, amountMinor;
+  final bool isEstimated;
+}
+
 class ReportProduct {
   const ReportProduct({
     required this.productId,
@@ -266,6 +300,7 @@ class ReportsSnapshot {
     required List<ReportAccount> accounts,
     required List<ReportMovement> movements,
     required List<ReportSaleLine> sales,
+    List<ReportItem>? items,
     required List<ReportTransfer> transfers,
     required List<ReportExpense> expenses,
     required List<ReportDebtChange> debtChanges,
@@ -283,6 +318,13 @@ class ReportsSnapshot {
   }) : saleTotals = saleTotals ?? ReportSalesTotals.fromNative(sales),
        outflowTotals =
            outflowTotals ?? ReportOutflowTotals.fromNative(movements, accounts),
+       items = List.unmodifiable(
+         (items ?? sales.map(ReportItem.fromSale).toList()).toList()
+           ..sort((a, b) {
+             final date = b.occurredAtUtc.compareTo(a.occurredAtUtc);
+             return date == 0 ? a.id.compareTo(b.id) : date;
+           }),
+       ),
        accounts = List.unmodifiable(accounts),
        movements = List.unmodifiable(movements),
        sales = List.unmodifiable(sales),
@@ -295,6 +337,7 @@ class ReportsSnapshot {
   final List<ReportAccount> accounts;
   final List<ReportMovement> movements;
   final List<ReportSaleLine> sales;
+  final List<ReportItem> items;
   final List<ReportTransfer> transfers;
   final List<ReportExpense> expenses;
   final List<ReportDebtChange> debtChanges;

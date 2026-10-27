@@ -1,3 +1,4 @@
+import '../../../core/presentation/grouped_number_formatter.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/domain/money.dart';
@@ -128,10 +129,14 @@ class _PurchasesPageState extends State<PurchasesPage> {
 
   BigInt? get _total {
     try {
-      final quantity = BigInt.tryParse(_quantity.text.trim());
+      final quantity = BigInt.tryParse(
+        _quantity.text.trim().replaceAll('.', ''),
+      );
       if (quantity == null ||
           quantity <= BigInt.zero ||
-          !RegExp(r'^[0-9]+$').hasMatch(_quantity.text.trim())) {
+          !RegExp(
+            r'^[0-9]+$',
+          ).hasMatch(_quantity.text.trim().replaceAll('.', ''))) {
         return null;
       }
       final cost = Money.parseEsCo(
@@ -150,7 +155,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
 
   int? get _suggestedPvp {
     final total = _total;
-    final quantity = BigInt.tryParse(_quantity.text.trim());
+    final quantity = BigInt.tryParse(_quantity.text.trim().replaceAll('.', ''));
     if (total == null ||
         total > Money.maxMinorUnits ||
         quantity == null ||
@@ -311,6 +316,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                           TextFormField(
                             key: const Key('intake-cost'),
                             controller: _cost,
+                            inputFormatters: [const GroupedNumberFormatter()],
                             enabled: !locked,
                             decoration: InputDecoration(
                               labelText:
@@ -322,6 +328,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                           TextFormField(
                             key: const Key('intake-pvp'),
                             controller: _pvp,
+                            inputFormatters: [const GroupedNumberFormatter()],
                             enabled: !locked,
                             decoration: InputDecoration(
                               labelText:
@@ -334,6 +341,9 @@ class _PurchasesPageState extends State<PurchasesPage> {
                           TextFormField(
                             key: const Key('intake-quantity'),
                             controller: _quantity,
+                            inputFormatters: [
+                              const GroupedNumberFormatter(integerOnly: true),
+                            ],
                             enabled: !locked,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
@@ -664,7 +674,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
   }
 
   String? _quantityError(String? value) {
-    final text = value?.trim() ?? '';
+    final text = value?.trim().replaceAll('.', '') ?? '';
     final quantity = BigInt.tryParse(text);
     return !RegExp(r'^[0-9]+$').hasMatch(text) ||
             quantity == null ||
@@ -695,7 +705,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
         currency: widget.profile.currencyCode,
         scale: widget.profile.moneyScale,
       ).minorUnits,
-      quantity: BigInt.parse(_quantity.text.trim()).toInt(),
+      quantity: BigInt.parse(_quantity.text.trim().replaceAll('.', '')).toInt(),
       paymentOptionId: payment.id,
     );
   }
@@ -935,6 +945,7 @@ class _OpeningDialogState extends State<_OpeningDialog> {
                 TextFormField(
                   key: const Key('opening-amount'),
                   controller: _amount,
+                  inputFormatters: [const GroupedNumberFormatter()],
                   enabled:
                       !widget.controller.busy &&
                       widget.controller.pendingOpening == null,

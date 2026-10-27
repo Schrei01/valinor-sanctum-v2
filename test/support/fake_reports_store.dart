@@ -9,6 +9,7 @@ class FakeReportsStore implements ReportsStore {
   bool convertedHistory = false;
   bool noTransfers = false;
   List<ReportTransfer>? transferRows;
+  List<ReportItem>? itemRows;
   int unpricedTransferRecords = 0;
   int unpricedCashSales = 0;
   int estimatedCashMinor = 0, estimatedSales = 0;
@@ -26,6 +27,7 @@ class FakeReportsStore implements ReportsStore {
           convertedHistory: convertedHistory,
           noTransfers: noTransfers,
           transferRows: transferRows,
+          itemRows: itemRows,
           unpricedTransferRecords: unpricedTransferRecords,
           unpricedCashSales: unpricedCashSales,
           estimatedCashMinor: estimatedCashMinor,
@@ -41,6 +43,7 @@ ReportsSnapshot reportFixture(
   bool convertedHistory = false,
   bool noTransfers = false,
   List<ReportTransfer>? transferRows,
+  List<ReportItem>? itemRows,
   int unpricedTransferRecords = 0,
   int unpricedCashSales = 0,
   int estimatedCashMinor = 0,
@@ -67,6 +70,7 @@ ReportsSnapshot reportFixture(
   );
   return ReportsSnapshot(
     period: period,
+    items: itemRows,
     unpricedTransferRecords: unpricedTransferRecords,
     saleTotals: ReportSalesTotals(
       cashMinor: 6000,

@@ -1,3 +1,4 @@
+import '../../../core/presentation/grouped_number_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -618,6 +619,7 @@ class _SupplierPaymentsPageState extends State<SupplierPaymentsPage> {
                     child: TextFormField(
                       key: ValueKey('supplier-payment-amount-${part.id}'),
                       controller: part.amount,
+                      inputFormatters: [const GroupedNumberFormatter()],
                       enabled: !locked,
                       decoration: InputDecoration(
                         labelText: 'Importe (${widget.profile.currencyCode})',

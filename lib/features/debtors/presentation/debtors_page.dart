@@ -1,3 +1,4 @@
+import '../../../core/presentation/grouped_number_formatter.dart';
 import 'package:flutter/material.dart';
 import '../../../core/domain/money.dart';
 import '../../inventory/domain/inventory_store.dart';
@@ -400,6 +401,7 @@ class _DebtorsPageState extends State<DebtorsPage> {
                         child: TextFormField(
                           key: const Key('debtor-payment-amount'),
                           controller: _amount,
+                          inputFormatters: [const GroupedNumberFormatter()],
                           enabled: !_locked && person.balanceMinor > 0,
                           decoration: const InputDecoration(
                             labelText: 'Valor del abono',
@@ -636,6 +638,7 @@ class _DebtorsPageState extends State<DebtorsPage> {
                       TextFormField(
                         key: const Key('debtor-initial-amount'),
                         controller: initial,
+                        inputFormatters: [const GroupedNumberFormatter()],
                         enabled: !busy,
                         decoration: InputDecoration(
                           labelText: 'Deuda anterior',

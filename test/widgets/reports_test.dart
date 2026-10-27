@@ -22,10 +22,13 @@ void main() {
   Future<void> open(
     WidgetTester tester, {
     Size size = const Size(1000, 850),
+    bool generated = true,
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await controller.load();
+    if (generated) {
+      await controller.generate(start: controller.today, end: controller.today);
+    }
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(useMaterial3: true),
@@ -89,6 +92,85 @@ void main() {
 
   String value(WidgetTester tester, String key) =>
       tester.widget<Text>(find.byKey(Key(key))).data!;
+
+  testWidgets(
+    'initial date is empty, end is current Bogotá minute, and no query runs until start is chosen',
+    (tester) async {
+      await open(tester, generated: false);
+      expect(store.queries, isEmpty);
+      expect(find.text('Sin seleccionar'), findsOneWidget);
+      expect(find.text('26/10/2026 · 1:00 PM'), findsOneWidget);
+      expect(find.byKey(const Key('report-receipt')), findsNothing);
+      await tap(tester, find.byKey(const Key('report-generate')));
+      expect(find.text('Elige una fecha y hora inicial.'), findsOneWidget);
+      expect(store.queries, isEmpty);
+      await dateThenTime(tester, 'report-start', 25);
+      await acceptTime(tester, '10', '00', 'AM');
+      await tap(tester, find.byKey(const Key('report-generate')));
+      expect(store.queries.single.startUtc, DateTime.utc(2026, 10, 25, 15));
+      expect(
+        store.queries.single.endExclusiveUtc,
+        DateTime.utc(2026, 10, 26, 18, 1),
+      );
+      await tap(tester, find.byKey(const Key('report-clear-start')));
+      expect(find.text('Sin seleccionar'), findsOneWidget);
+      await tap(tester, find.byKey(const Key('report-generate')));
+      expect(store.queries, hasLength(1));
+    },
+  );
+
+  testWidgets(
+    'sold items show ten records per page, including unknown and estimated prices, and reset after a new report',
+    (tester) async {
+      store.itemRows = [
+        for (var i = 0; i < 21; i++)
+          ReportItem(
+            id: 'row-$i',
+            productName: 'Producto $i',
+            occurredAtUtc: DateTime.utc(2026, 10, 26, 15, i),
+            quantity: i == 20 ? 1000 : 1,
+            amountMinor: i == 0 ? null : 1000,
+            paymentMethod: 'Efectivo',
+            isEstimated: i == 1,
+          ),
+      ];
+      await open(tester);
+      DataTable table() =>
+          tester.widget<DataTable>(find.byType(DataTable).last);
+      expect(table().rows, hasLength(10));
+      expect(find.text('Producto 20'), findsOneWidget);
+      expect(find.text('Producto 10'), findsNothing);
+      expect(find.text('1.000'), findsOneWidget);
+      await tap(tester, find.byKey(const Key('report-items-next')));
+      expect(table().rows, hasLength(10));
+      expect(find.text('Producto 10'), findsOneWidget);
+      expect(find.text('Producto 20'), findsNothing);
+      expect(find.text('COP 10,00 *'), findsOneWidget);
+      await tap(tester, find.byKey(const Key('report-items-next')));
+      expect(table().rows, hasLength(1));
+      expect(find.text('Producto 0'), findsOneWidget);
+      expect(find.text('Sin información'), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('report-items-next')))
+            .onPressed,
+        isNull,
+      );
+      await tap(tester, find.byKey(const Key('report-items-previous')));
+      expect(table().rows, hasLength(10));
+      await controller.generate(start: controller.today, end: controller.today);
+      await tester.pumpAndSettle();
+      expect(table().rows, hasLength(10));
+      expect(find.text('Producto 20'), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('report-items-previous')))
+            .onPressed,
+        isNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'converted historical balances remain identified with sales totals',

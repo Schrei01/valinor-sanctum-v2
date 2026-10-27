@@ -366,6 +366,13 @@ void main() {
       expect(old.saleTotals.knownTotalMinor, 300);
       expect(old.saleTotals.estimatedCashMinor, 300);
       expect(old.saleTotals.estimatedSales, 1);
+      expect(old.items, hasLength(2));
+      expect(old.items.where((i) => i.isEstimated).single.amountMinor, 300);
+      expect(
+        old.items.where((i) => i.amountMinor == null).single.productName,
+        contains('Producto eliminado'),
+      );
+      expect(old.items.map((i) => i.quantity), everyElement(isNotNull));
       final inventory = SqliteInventoryStore(app, synthetic: true);
       final product = (await inventory.load()).products.single;
       await inventory.saveProduct(
@@ -396,6 +403,7 @@ void main() {
           end: DateTime.utc(2026, 10, 18, 11),
         ),
       );
+      expect(minute.items, hasLength(2));
       expect(minute.saleTotals.unpricedSales, 1);
       expect(minute.saleTotals.estimatedCashMinor, 300);
       expect(await nativeRows(), beforeReads);

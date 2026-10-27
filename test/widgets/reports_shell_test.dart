@@ -33,7 +33,7 @@ class _ReportsSpy implements ReportsStore {
 
 void main() {
   testWidgets(
-    'Reportes loads on section entry and refreshes without Inicio or Sistema entries',
+    'Reportes waits for initial date on section entry without Inicio or Sistema entries',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(1280, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -62,7 +62,7 @@ void main() {
       await tester.ensureVisible(find.text('Reportes'));
       await tester.tap(find.text('Reportes'));
       await tester.pumpAndSettle();
-      expect(reports.loads, 1);
+      expect(reports.loads, 0);
       expect(find.text('Reportes'), findsNWidgets(2));
       await tester.ensureVisible(find.text('Catálogo'));
       await tester.tap(find.text('Catálogo'));
@@ -70,7 +70,7 @@ void main() {
       await tester.ensureVisible(find.text('Reportes'));
       await tester.tap(find.text('Reportes'));
       await tester.pumpAndSettle();
-      expect(reports.loads, 2);
+      expect(reports.loads, 0);
       await tester.ensureVisible(find.text('Catálogo'));
       await tester.tap(find.text('Catálogo'));
       await tester.pumpAndSettle();

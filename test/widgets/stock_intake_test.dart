@@ -121,18 +121,20 @@ void main() {
     await tap(tester, find.text(text).last);
   }
 
+  String value(WidgetTester tester, String key) =>
+      tester.widget<TextFormField>(find.byKey(Key(key))).controller!.text;
   Future<void> fill(WidgetTester tester) async {
     await enter(tester, 'intake-name', 'Agua sintética');
     await enter(tester, 'intake-sku', 'SYN-AGUA');
     await category(tester, 'Comestible');
     await enter(tester, 'intake-supplier', 'Proveedor sintético');
-    await enter(tester, 'intake-cost', '1.234,50');
-    await enter(tester, 'intake-pvp', '2.500,00');
+    await enter(tester, 'intake-cost', '1234,50');
+    expect(value(tester, 'intake-cost'), '1.234,50');
+    await enter(tester, 'intake-pvp', '2500,00');
+    expect(value(tester, 'intake-pvp'), '2.500,00');
     await enter(tester, 'intake-quantity', '3');
   }
 
-  String value(WidgetTester tester, String key) =>
-      tester.widget<TextFormField>(find.byKey(Key(key))).controller!.text;
   Future<void> capture(WidgetTester tester) async {
     if (!const bool.fromEnvironment('SANCTUM_CAPTURE_STOCK_INTAKE_PREVIEW')) {
       return;
@@ -158,6 +160,20 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets('grouped quantity and money submit exact ungrouped values', (
+    tester,
+  ) async {
+    await open(tester);
+    await fill(tester);
+    await enter(tester, 'intake-quantity', '1000');
+    expect(value(tester, 'intake-quantity'), '1.000');
+    await tap(tester, find.byKey(const Key('intake-submit')));
+    expect(store.preparedCommands.single.quantity, 1000);
+    expect(store.preparedCommands.single.totalPurchasePriceMinor, 123450);
+    expect(store.preparedCommands.single.listPriceMinor, 250000);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'one form creates product supplier stock and full payment with no credit fields',
@@ -500,7 +516,8 @@ void main() {
       await category(tester, 'Comestible');
       await enter(tester, 'intake-supplier', 'Proveedor sintético');
       await enter(tester, 'intake-quantity', '10');
-      await enter(tester, 'intake-cost', '25.000');
+      await enter(tester, 'intake-cost', '25000');
+      expect(value(tester, 'intake-cost'), '25.000');
       expect(value(tester, 'intake-pvp'), '3.846');
       expect(find.text('PVP sugerido: COP 3.846'), findsOneWidget);
       await enter(tester, 'intake-pvp', '3.500');

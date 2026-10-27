@@ -1,3 +1,4 @@
+import '../../../core/presentation/grouped_number_formatter.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/domain/money.dart';
@@ -56,13 +57,18 @@ class _EventsPageState extends State<EventsPage> {
   CreateEvent _command() => CreateEvent(
     commandId: InventoryIds.next(),
     name: _name.text.trim().isEmpty ? 'Evento' : _name.text.trim(),
-    minimumPeople: int.parse(_minimum.text),
+    minimumPeople: int.parse(_minimum.text.replaceAll('.', '')),
     fixedCostMinor: _amount(_fixed.text),
     pvpMinor: _pvp.text.trim().isEmpty ? 1 : _amount(_pvp.text),
     sourceAccountId: _account,
     occurredAtUtc: DateTime.now().toUtc(),
     products: _products
-        .map((p) => EventProductInput(p.id!, int.parse(p.quantity.text)))
+        .map(
+          (p) => EventProductInput(
+            p.id!,
+            int.parse(p.quantity.text.replaceAll('.', '')),
+          ),
+        )
         .toList(),
   );
   void _changed() {
@@ -283,6 +289,9 @@ class _EventsPageState extends State<EventsPage> {
                             child: TextFormField(
                               key: const Key('event-minimum'),
                               controller: _minimum,
+                              inputFormatters: [
+                                const GroupedNumberFormatter(integerOnly: true),
+                              ],
                               enabled: !locked,
                               decoration: const InputDecoration(
                                 labelText: 'Mínimo de personas',
@@ -290,7 +299,9 @@ class _EventsPageState extends State<EventsPage> {
                               keyboardType: TextInputType.number,
                               onChanged: (_) => _changed(),
                               validator: (v) {
-                                final n = BigInt.tryParse(v ?? '');
+                                final n = BigInt.tryParse(
+                                  (v ?? '').replaceAll('.', ''),
+                                );
                                 if (n == null ||
                                     n < BigInt.zero ||
                                     n > Money.maxMinorUnits) {
@@ -310,6 +321,7 @@ class _EventsPageState extends State<EventsPage> {
                             child: TextFormField(
                               key: const Key('event-fixed-cost'),
                               controller: _fixed,
+                              inputFormatters: [const GroupedNumberFormatter()],
                               enabled: !locked,
                               decoration: const InputDecoration(
                                 labelText: 'Costo fijo',
@@ -401,6 +413,7 @@ class _EventsPageState extends State<EventsPage> {
                         child: TextFormField(
                           key: const Key('event-pvp'),
                           controller: _pvp,
+                          inputFormatters: [const GroupedNumberFormatter()],
                           enabled: !locked,
                           decoration: const InputDecoration(
                             labelText: 'PVP / inscripción',
@@ -547,12 +560,15 @@ class _EventsPageState extends State<EventsPage> {
               child: TextFormField(
                 key: ValueKey('event-quantity-$index'),
                 controller: row.quantity,
+                inputFormatters: [
+                  const GroupedNumberFormatter(integerOnly: true),
+                ],
                 enabled: !locked,
                 decoration: const InputDecoration(labelText: 'Cantidad'),
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _changed(),
                 validator: (v) {
-                  final n = BigInt.tryParse(v ?? '');
+                  final n = BigInt.tryParse((v ?? '').replaceAll('.', ''));
                   return n == null ||
                           n <= BigInt.zero ||
                           n > Money.maxMinorUnits

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/presentation/grouped_number_formatter.dart';
 
 import '../../inventory/presentation/inventory_widgets.dart';
 import '../../workspace/domain/business_profile.dart';
@@ -19,11 +20,14 @@ class ReportsPage extends StatefulWidget {
 }
 
 class _ReportsPageState extends State<ReportsPage> {
-  late DateTime _start =
-      widget.controller.snapshot?.period.startLocal ?? widget.controller.today;
-  late DateTime _end =
+  late DateTime? _start = widget.controller.snapshot?.period.startLocal;
+  DateTime? _chosenEnd;
+  DateTime get _end =>
+      _chosenEnd ??
       widget.controller.snapshot?.period.endLocal ??
-      widget.controller.today.add(const Duration(hours: 23, minutes: 59));
+      widget.controller.nowLocal;
+  int _page = 0;
+  ReportsSnapshot? _pagedSnapshot;
   String? _rangeError;
 
   String _moment(DateTime value) {
@@ -34,7 +38,7 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<void> _pick(bool start) async {
-    final initial = start ? _start : _end;
+    final initial = start ? (_start ?? widget.controller.nowLocal) : _end;
     final date = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -70,14 +74,18 @@ class _ReportsPageState extends State<ReportsPage> {
       if (start) {
         _start = selected;
       } else {
-        _end = selected;
+        _chosenEnd = selected;
       }
       _rangeError = null;
     });
   }
 
   Future<void> _generate() async {
-    if (_end.isBefore(_start)) {
+    if (_start == null) {
+      setState(() => _rangeError = 'Elige una fecha y hora inicial.');
+      return;
+    }
+    if (_end.isBefore(_start!)) {
       setState(
         () => _rangeError =
             'La fecha y hora final deben ser iguales o posteriores a las iniciales.',
@@ -85,7 +93,9 @@ class _ReportsPageState extends State<ReportsPage> {
       return;
     }
     setState(() => _rangeError = null);
-    await widget.controller.generate(start: _start, end: _end, timed: true);
+    final end = _end;
+    setState(() => _chosenEnd = end);
+    await widget.controller.generate(start: _start!, end: end, timed: true);
   }
 
   @override
@@ -94,6 +104,10 @@ class _ReportsPageState extends State<ReportsPage> {
     builder: (context, _) {
       final c = widget.controller;
       final data = c.snapshot;
+      if (!identical(_pagedSnapshot, data)) {
+        _pagedSnapshot = data;
+        _page = 0;
+      }
       return Align(
         alignment: Alignment.topLeft,
         child: ConstrainedBox(
@@ -110,7 +124,7 @@ class _ReportsPageState extends State<ReportsPage> {
                     ),
                   ),
                   TextButton.icon(
-                    onPressed: c.busy ? null : c.load,
+                    onPressed: c.busy || data == null ? null : c.load,
                     icon: const Icon(Icons.refresh, size: 18),
                     label: const Text('Actualizar'),
                   ),
@@ -123,6 +137,18 @@ class _ReportsPageState extends State<ReportsPage> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _selector(true, 'Fecha y hora inicial', _start, c.busy),
+                  if (_start != null)
+                    IconButton(
+                      key: const Key('report-clear-start'),
+                      tooltip: 'Quitar fecha inicial',
+                      onPressed: c.busy
+                          ? null
+                          : () => setState(() {
+                              _start = null;
+                              _rangeError = null;
+                            }),
+                      icon: const Icon(Icons.clear, size: 18),
+                    ),
                   _selector(false, 'Fecha y hora final', _end, c.busy),
                   FilledButton.icon(
                     key: const Key('report-generate'),
@@ -152,6 +178,7 @@ class _ReportsPageState extends State<ReportsPage> {
               if (data == null && !c.busy)
                 const Text('Elige las fechas y horas y genera el reporte.'),
               if (data != null) _receipt(data),
+              if (data != null) ...[const SizedBox(height: 16), _items(data)],
             ],
           ),
         ),
@@ -164,7 +191,7 @@ class _ReportsPageState extends State<ReportsPage> {
     height: 1.4,
     color: Theme.of(context).colorScheme.onSurfaceVariant,
   );
-  Widget _selector(bool start, String label, DateTime moment, bool busy) =>
+  Widget _selector(bool start, String label, DateTime? moment, bool busy) =>
       SizedBox(
         width: 258,
         child: OutlinedButton.icon(
@@ -180,11 +207,116 @@ class _ReportsPageState extends State<ReportsPage> {
             children: [
               Text(label, style: const TextStyle(fontSize: 12)),
               const SizedBox(height: 2),
-              Text(_moment(moment)),
+              Text(moment == null ? 'Sin seleccionar' : _moment(moment)),
             ],
           ),
         ),
       );
+
+  Widget _items(ReportsSnapshot data) {
+    final rows = data.items;
+    final pages = (rows.length / 10).ceil();
+    final first = _page * 10;
+    final last = (first + 10).clamp(0, rows.length);
+    return Card(
+      key: const Key('report-items'),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionTitle('Ítems vendidos'),
+            const SizedBox(height: 8),
+            if (rows.isEmpty)
+              const Text('No hay ítems vendidos en este rango.')
+            else ...[
+              const Text(
+                'Más recientes primero · * Importe histórico estimado.',
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columnSpacing: 20,
+                  columns: const [
+                    DataColumn(label: Text('Fecha y hora')),
+                    DataColumn(label: Text('Producto')),
+                    DataColumn(label: Text('Cantidad'), numeric: true),
+                    DataColumn(label: Text('Pago')),
+                    DataColumn(label: Text('Importe'), numeric: true),
+                  ],
+                  rows: [
+                    for (final item in rows.skip(first).take(10))
+                      DataRow(
+                        key: ValueKey('report-item-${item.id}'),
+                        cells: [
+                          DataCell(
+                            Text(
+                              _moment(
+                                item.occurredAtUtc.subtract(
+                                  const Duration(hours: 5),
+                                ),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            SizedBox(width: 220, child: Text(item.productName)),
+                          ),
+                          DataCell(
+                            Text(
+                              item.quantity == null
+                                  ? 'Sin información'
+                                  : GroupedNumberFormatter.format(
+                                      '${item.quantity}',
+                                    ),
+                            ),
+                          ),
+                          DataCell(Text(item.paymentMethod)),
+                          DataCell(
+                            Text(
+                              item.amountMinor == null
+                                  ? 'Sin información'
+                                  : '${inventoryMoney(item.amountMinor!, widget.profile)}${item.isEstimated ? ' *' : ''}',
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${first + 1}–$last de ${rows.length} · Página ${_page + 1} de $pages',
+                      key: const Key('report-items-page'),
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('report-items-previous'),
+                    tooltip: 'Página anterior',
+                    onPressed: _page == 0
+                        ? null
+                        : () => setState(() => _page--),
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  IconButton(
+                    key: const Key('report-items-next'),
+                    tooltip: 'Página siguiente',
+                    onPressed: _page + 1 >= pages
+                        ? null
+                        : () => setState(() => _page++),
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _receipt(ReportsSnapshot data) {
     final sales = data.saleTotals;

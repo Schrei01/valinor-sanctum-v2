@@ -1,3 +1,4 @@
+import '../../../core/presentation/grouped_number_formatter.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -390,6 +391,7 @@ class _OperationDialogState extends State<_OperationDialog> {
                   TextFormField(
                     key: const Key('treasury-operation-amount'),
                     controller: _amount,
+                    inputFormatters: [const GroupedNumberFormatter()],
                     enabled: !locked,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,

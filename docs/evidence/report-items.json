@@ -1,0 +1,89 @@
+{
+  "version": "0.22.0+34",
+  "date": "2026-10-27",
+  "timezone": "America/Bogota",
+  "schemaVersion": 15,
+  "requirements": {
+    "initialDateUnset": true,
+    "waitForInitialSelection": true,
+    "endDefaultsToCurrentBogotaMinute": true,
+    "dateThenAmPmTime": true,
+    "invoicePreserved": true,
+    "soldItemsBelowReport": true,
+    "pageSize": 10,
+    "nativeAndArchivedSales": true,
+    "unpricedItemsPreserved": true,
+    "estimatedItemsIdentified": true,
+    "thousandsSeparator": ".",
+    "decimalSeparator": ",",
+    "numericInputsAcrossApp": true,
+    "canonicalQuickSaleDraftQuantities": true
+  },
+  "validation": {
+    "fullSuite": {
+      "passed": 722,
+      "skipped": 3,
+      "skipReason": "Windows host does not permit the symlinks required by these existing tests"
+    },
+    "focusedNumeric": {
+      "passed": 23
+    },
+    "analysis": "No issues found",
+    "syntheticWidgetRenders": 2,
+    "imagesInspected": true,
+    "nativeGuiTraversal": false,
+    "reportAudit": {
+      "nativeRows": 0,
+      "archivedRows": 4305,
+      "allItems": 4305,
+      "unpricedRows": 152,
+      "estimatedRows": 4153,
+      "rowCountReconciled": true,
+      "amountsReconciled": true,
+      "qualityReconciled": true,
+      "latestFirst": true,
+      "minuteBoundaryChecked": true,
+      "privateCopyOnly": true
+    },
+    "resolvedDuringDevelopment": [
+      "Preserve invalid fractional quantity for form validation instead of silently retaining the prior valid value",
+      "Move the local test helper before its first use and resolve style lints"
+    ]
+  },
+  "data": {
+    "schemaVersion": 15,
+    "tables": 64,
+    "allRowsAndSchemaPreserved": true,
+    "integrity": "ok",
+    "foreignKeys": 0,
+    "backupVerified": true,
+    "backupDirectory": "backups/report-items-20261027",
+    "migrationRequired": false,
+    "syntheticBusinessOperationsOnActiveDatabase": false,
+    "originalRepositoryAndSourceDatabaseUntouched": true
+  },
+  "distribution": {
+    "version": "0.22.0+34",
+    "files": 17,
+    "archiveBytes": 15041783,
+    "archiveSha256": "A62EFCCEA3385E05CB6BB12712405A8291EE7E6D67840DC66A45E7F5F37BBFB5",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
+    "privateDataExcluded": true,
+    "published": true,
+    "executableProductVersion": "0.22.0+34",
+    "stableLauncher": "Iniciar Valinor Sanctum.cmd",
+    "obsoleteVersionsCleaned": true,
+    "remainingArtifacts": [
+      "dist/0.22.0",
+      "dist/ValinorSanctum2",
+      "dist/valinor-sanctum-2-0.22.0-windows-x64.zip"
+    ]
+  },
+  "limitations": [
+    "Item details describe confirmed sale lines, including event registrations, rather than purchase receipts",
+    "Historical amounts remain estimates from archived PVP; absent products/prices remain unknown",
+    "No charts, exports or a price-history browsing screen added"
+  ],
+  "applicationStateAtVerification": "CLOSED"
+}

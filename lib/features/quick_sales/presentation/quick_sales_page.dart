@@ -1,5 +1,5 @@
+import '../../../core/presentation/grouped_number_formatter.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../inventory/domain/inventory_store.dart';
 import '../../inventory/presentation/inventory_widgets.dart';
@@ -515,7 +515,9 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
   late final _product = TextEditingController(
     text: _productFor(widget.line.productId)?.name ?? '',
   );
-  late final _quantity = TextEditingController(text: widget.line.quantityText);
+  late final _quantity = TextEditingController(
+    text: GroupedNumberFormatter.format(widget.line.quantityText),
+  );
   final _productFocus = FocusNode();
   final _quantityFocus = FocusNode();
 
@@ -530,8 +532,9 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
       _product.text = _productFor(widget.line.productId)?.name ?? '';
     }
     if (!_quantityFocus.hasFocus &&
-        _quantity.text != widget.line.quantityText) {
-      _quantity.text = widget.line.quantityText;
+        _quantity.text !=
+            GroupedNumberFormatter.format(widget.line.quantityText)) {
+      _quantity.text = GroupedNumberFormatter.format(widget.line.quantityText);
     }
   }
 
@@ -663,8 +666,7 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
       enabled: !widget.locked,
       keyboardType: TextInputType.number,
       inputFormatters: [
-        FilteringTextInputFormatter.digitsOnly,
-        LengthLimitingTextInputFormatter(10),
+        const GroupedNumberFormatter(integerOnly: true, maxDigits: 10),
       ],
       decoration: const InputDecoration(
         labelText: 'Cant.',
@@ -676,7 +678,7 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
         QuickSaleLine(
           id: line.id,
           productId: line.productId,
-          quantityText: value,
+          quantityText: value.replaceAll('.', ''),
           unitPriceMinor: line.unitPriceMinor,
           paymentOptionId: line.paymentOptionId,
         ),

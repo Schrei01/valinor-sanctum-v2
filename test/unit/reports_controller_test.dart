@@ -45,7 +45,25 @@ ReportSaleLine sale(
   isEvent: false,
 );
 
+Future<void> loadFixture(ReportsController c) =>
+    c.snapshot == null ? c.generate(start: c.today, end: c.today) : c.load();
+
 void main() {
+  test(
+    'unselected start waits without querying and current time uses Bogotá',
+    () async {
+      final store = FakeReportsStore();
+      final c = ReportsController(
+        store: store,
+        now: () => DateTime.utc(2026, 10, 26, 2, 34, 59),
+      );
+      addTearDown(c.dispose);
+      await c.load();
+      expect(store.queries, isEmpty);
+      expect(c.snapshot, isNull);
+      expect(c.nowLocal, DateTime.utc(2026, 10, 25, 21, 34));
+    },
+  );
   test(
     'timed report retains Bogotá minute boundaries when refreshed',
     () async {
@@ -57,7 +75,7 @@ void main() {
         end: DateTime.utc(2026, 10, 21, 0, 15),
         timed: true,
       );
-      await c.load();
+      await loadFixture(c);
       for (final p in store.queries) {
         expect(p.startUtc, DateTime.utc(2026, 10, 21, 4, 45));
         expect(p.endExclusiveUtc, DateTime.utc(2026, 10, 21, 5, 16));
@@ -85,7 +103,7 @@ void main() {
         now: () => DateTime.utc(2026, 10, 26, 2),
       );
       addTearDown(c.dispose);
-      await c.load();
+      await loadFixture(c);
       final p = store.queries.single;
       expect(p.startDate, DateTime.utc(2026, 10, 25));
       expect(
@@ -106,7 +124,7 @@ void main() {
       final store = FakeReportsStore();
       final controller = ReportsController(store: store);
       addTearDown(controller.dispose);
-      await controller.load();
+      await loadFixture(controller);
       final old = controller.snapshot;
       await controller.generate(
         start: DateTime.utc(2026, 10, 27),
@@ -116,7 +134,7 @@ void main() {
       expect(controller.snapshot, same(old));
       expect(controller.error, isNotNull);
       store.failure = StateError('No se pudo leer');
-      await controller.load();
+      await loadFixture(controller);
       expect(controller.snapshot, same(old));
       expect(controller.error, contains('No se pudo leer'));
     },
@@ -126,7 +144,7 @@ void main() {
     () async {
       final c = ReportsController(store: FakeReportsStore());
       addTearDown(c.dispose);
-      await c.load();
+      await loadFixture(c);
       c.selectCategory('food');
       expect(c.products.single.productId, 'p1');
       expect(c.snapshot!.salesMinor, 30000);
@@ -159,7 +177,7 @@ void main() {
         };
       final c = ReportsController(store: store);
       addTearDown(c.dispose);
-      await c.load();
+      await loadFixture(c);
       c.selectGrouping(ReportGrouping.product);
       expect(c.chartGroups, hasLength(2));
       expect(c.chartGroups.singleWhere((g) => g.id == 'product:p1').value, 200);
@@ -173,7 +191,7 @@ void main() {
     final store = FakeReportsStore();
     final controller = ReportsController(store: store);
     addTearDown(controller.dispose);
-    await controller.load();
+    await loadFixture(controller);
     final old = controller.snapshot;
     store.build = (period) => withSales(reportFixture(period), [
       sale(
@@ -190,7 +208,7 @@ void main() {
         product: 'p2',
       ),
     ]);
-    await controller.load();
+    await loadFixture(controller);
     expect(controller.snapshot, same(old));
     expect(controller.error, contains('rango monetario'));
   });
@@ -200,7 +218,7 @@ void main() {
       final store = FakeReportsStore()..gate = Completer<void>();
       final c = ReportsController(store: store);
       addTearDown(c.dispose);
-      final pending = c.load();
+      final pending = loadFixture(c);
       await c.generate(
         start: DateTime.utc(2026, 10, 1),
         end: DateTime.utc(2026, 10, 2),

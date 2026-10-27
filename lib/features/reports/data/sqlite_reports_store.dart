@@ -376,6 +376,7 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
     final unpricedOutflows = [0, 0];
     final unpriced = [0, 0, 0, 0];
     final estimated = [BigInt.zero, BigInt.zero, BigInt.zero, BigInt.zero];
+    final items = <ReportItem>[];
     var estimatedSales = 0;
     var unpricedTransferRecords = 0;
     if (converted.isNotEmpty) {
@@ -486,7 +487,7 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
         }
       }
       final legacySales = await txn.rawQuery('''
-SELECT sale.row_json, product.row_json product_json
+SELECT sale.source_id, sale.row_json, product.row_json product_json
 FROM legacy_source_rows sale
 LEFT JOIN legacy_source_rows product ON product.source_table='products'
   AND product.source_id=json_extract(sale.row_json, '\$.productId')
@@ -539,6 +540,31 @@ WHERE sale.source_table='sales' ''');
           estimated[group] += BigInt.from(price) * BigInt.from(quantity as int);
           estimatedSales++;
         }
+        final archivedProduct = productJson == null
+            ? null
+            : jsonDecode(productJson) as Map<String, dynamic>;
+        items.add(
+          ReportItem(
+            id: 'legacy-sale:${row['source_id']}',
+            productName:
+                archivedProduct?['name'] as String? ??
+                'Producto eliminado (${archived['productId']})',
+            occurredAtUtc: date,
+            quantity: quantity is int && quantity >= 0 ? quantity : null,
+            amountMinor: price == null || price < 0
+                ? null
+                : reportMinor(
+                    BigInt.from(price) * BigInt.from(quantity as int),
+                  ),
+            paymentMethod: switch (group) {
+              0 => 'Efectivo',
+              1 => 'Transferencia',
+              2 => 'Deudas',
+              _ => 'Otro',
+            },
+            isEstimated: price != null && price >= 0,
+          ),
+        );
       }
     }
     final saleTotals = ReportSalesTotals(
@@ -638,6 +664,7 @@ WHERE sale.source_table='sales' ''');
       accounts: resolvedAccounts,
       movements: movements,
       sales: sales,
+      items: [...sales.map(ReportItem.fromSale), ...items],
       transfers: transfers,
       unpricedTransferRecords: unpricedTransferRecords,
       expenses: expenses,

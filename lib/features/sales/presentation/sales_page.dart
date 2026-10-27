@@ -1,3 +1,4 @@
+import '../../../core/presentation/grouped_number_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -540,13 +541,20 @@ class _SalesPageState extends State<SalesPage> {
                   child: TextFormField(
                     key: ValueKey('sale-quantity-${line.id}'),
                     controller: line.quantity,
+                    inputFormatters: [
+                      const GroupedNumberFormatter(integerOnly: true),
+                    ],
                     enabled: !locked,
                     decoration: const InputDecoration(labelText: 'Unidades'),
                     validator: (value) {
-                      if (!RegExp(r'^[0-9]+$').hasMatch(value?.trim() ?? '')) {
+                      if (!RegExp(
+                        r'^[0-9]+$',
+                      ).hasMatch(value?.trim().replaceAll('.', '') ?? '')) {
                         return 'Solo enteros positivos.';
                       }
-                      final amount = BigInt.tryParse(value!.trim());
+                      final amount = BigInt.tryParse(
+                        value!.trim().replaceAll('.', ''),
+                      );
                       return amount == null ||
                               amount <= BigInt.zero ||
                               amount > Money.maxMinorUnits
@@ -561,6 +569,7 @@ class _SalesPageState extends State<SalesPage> {
                   child: TextFormField(
                     key: ValueKey('sale-price-${line.id}'),
                     controller: line.price,
+                    inputFormatters: [const GroupedNumberFormatter()],
                     enabled: !locked,
                     decoration: InputDecoration(
                       labelText:
@@ -583,7 +592,9 @@ class _SalesPageState extends State<SalesPage> {
   BigInt? _total() {
     var total = BigInt.zero;
     for (final line in _lines) {
-      final quantity = BigInt.tryParse(line.quantity.text.trim());
+      final quantity = BigInt.tryParse(
+        line.quantity.text.trim().replaceAll('.', ''),
+      );
       if (quantity == null ||
           quantity <= BigInt.zero ||
           inventoryAmountError(line.price.text, widget.profile) != null) {
@@ -621,7 +632,9 @@ class _SalesPageState extends State<SalesPage> {
           for (final line in _lines)
             SaleDraftLine(
               productId: line.productId!,
-              quantity: BigInt.parse(line.quantity.text.trim()).toInt(),
+              quantity: BigInt.parse(
+                line.quantity.text.trim().replaceAll('.', ''),
+              ).toInt(),
               unitPriceMinor: Money.parseEsCo(
                 line.price.text,
                 currency: widget.profile.currencyCode,

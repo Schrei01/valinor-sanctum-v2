@@ -34,16 +34,28 @@ class ReportsController extends ChangeNotifier {
   List<ReportChartGroup> _chartGroups = const [];
   List<ReportChartGroup> get chartGroups => _chartGroups;
 
+  DateTime get nowLocal {
+    final n = _now().toUtc().subtract(const Duration(hours: 5));
+    return DateTime.utc(n.year, n.month, n.day, n.hour, n.minute);
+  }
+
   DateTime get today {
     final n = _now().toUtc().subtract(const Duration(hours: 5));
     return DateTime.utc(n.year, n.month, n.day);
   }
 
-  Future<void> load() => generate(
-    start: snapshot?.period.startLocal ?? today,
-    end: snapshot?.period.endLocal ?? today,
-    timed: snapshot != null,
-  );
+  Future<void> load() async {
+    final current = snapshot;
+    if (current == null) {
+      _emit();
+      return;
+    }
+    await generate(
+      start: current.period.startLocal,
+      end: current.period.endLocal,
+      timed: true,
+    );
+  }
 
   Future<void> generate({
     required DateTime start,
