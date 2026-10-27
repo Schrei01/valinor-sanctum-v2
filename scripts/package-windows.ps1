@@ -143,15 +143,10 @@ Las confirmaciones pendientes se recuperan al reabrir para reintentar sin duplic
 Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.
 Registra pagos y abonos a proveedores con saldo disponible, incluso por varios medios.
 Las solicitudes de pago guardadas se recuperan al reabrir sin duplicarse.
-En Reportes elige fechas inicial y final de Bogotá y pulsa Generar.
-Consulta saldos iniciales/finales, cobros de ventas, abonos, nuevo fiado, egresos
-y transferencias. Abre los totales para revisar su detalle.
-Filtra productos vendidos por categoría y producto; sus precios y costos son históricos.
-Reportes permite fecha y hora de inicio/final en Bogotá; 00:00–23:59 cubre el día.
-Categoría usa la clasificación actual del catálogo. Cambia la métrica y agrupación
-de las barras; los saldos sin respaldo histórico se muestran Sin dato.
-El margen físico, resultado operativo y resultado acumulado por evento se muestran
-por separado para no repetir costos ni confundir abonos o transferencias con ventas.
+En Reportes elige la fecha inicial y, al aceptar, la hora en formato AM/PM.
+Repite con el final y pulsa Generar reporte para consultar los saldos iniciales
+y finales de Caja y Nequi. Los momentos corresponden al horario de Bogotá.
+Los saldos sin respaldo histórico se muestran Sin información.
 Caja/arqueo y ajustes de inventario siguen pendientes.
 El paquete no contiene datos privados ni está habilitado para producción.
 El almacenamiento de desarrollo permanece limitado al repositorio autorizado

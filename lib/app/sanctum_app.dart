@@ -654,7 +654,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.17.1',
+                    'Versión 0.17.2',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -795,8 +795,8 @@ class _Home extends StatelessWidget {
                   ),
                   (
                     Icons.insights_outlined,
-                    'Reportes y análisis',
-                    'Saldos, ventas, deudas, costos y gráficas por período.',
+                    'Saldos de Caja y Nequi',
+                    'Saldos iniciales y finales de Caja y Nequi.',
                     'Disponible',
                   ),
                 ])

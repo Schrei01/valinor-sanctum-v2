@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:valinor_sanctum_2/features/reports/application/reports_controller.dart';
-import 'package:valinor_sanctum_2/features/reports/presentation/report_bar_chart.dart';
 import 'package:valinor_sanctum_2/features/reports/presentation/reports_page.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
 import '../support/fake_reports_store.dart';
@@ -19,7 +18,7 @@ void main() {
   tearDown(() => controller.dispose());
   Future<void> open(
     WidgetTester tester, {
-    Size size = const Size(1120, 1050),
+    Size size = const Size(1000, 850),
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -27,6 +26,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(useMaterial3: true),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        ),
         home: Scaffold(
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
@@ -55,164 +58,135 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> enter(WidgetTester tester, String key, String value) async {
-    final finder = find.byKey(Key(key));
-    await tester.ensureVisible(finder);
-    await tester.enterText(finder, value);
-    await tester.pumpAndSettle();
+  Future<void> dateThenTime(WidgetTester tester, String key, int day) async {
+    await tap(tester, find.byKey(Key(key)));
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    expect(find.byType(TimePickerDialog), findsNothing);
+    await tap(tester, find.text('$day').last);
+    await tap(tester, find.text('Aceptar'));
+    expect(find.byType(DatePickerDialog), findsNothing);
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+    expect(find.text('AM'), findsOneWidget);
+    expect(find.text('PM'), findsOneWidget);
   }
 
-  Finder keyed(String prefix) => find.byWidgetPredicate(
-    (widget) =>
-        widget.key is ValueKey<String> &&
-        (widget.key! as ValueKey<String>).value.startsWith(prefix),
+  Future<void> acceptTime(
+    WidgetTester tester,
+    String hour,
+    String minute,
+    String period,
+  ) async {
+    await tap(tester, find.byIcon(Icons.keyboard_outlined));
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), hour);
+    await tester.enterText(fields.at(1), minute);
+    await tap(tester, find.text(period));
+    await tap(tester, find.text('Aceptar'));
+  }
+
+  String value(WidgetTester tester, String key) =>
+      tester.widget<Text>(find.byKey(Key(key))).data!;
+
+  testWidgets(
+    'only four Caja and Nequi balances are shown at their generated cutoffs',
+    (tester) async {
+      await open(tester);
+      expect(value(tester, 'report-opening-cash'), 'COP 1.000,00');
+      expect(value(tester, 'report-opening-nequi'), 'COP 500,00');
+      expect(value(tester, 'report-closing-cash'), 'COP 940,00');
+      expect(value(tester, 'report-closing-nequi'), 'COP 800,00');
+      expect(find.text('26/10/2026 · 12:00 AM'), findsNWidgets(2));
+      expect(find.text('26/10/2026 · 11:59 PM'), findsNWidgets(2));
+      for (final label in [
+        'Gráfica de barras',
+        'Productos vendidos',
+        'Resumen del período',
+        'Caja mayor',
+        'Resultado acumulado por evento',
+      ]) {
+        expect(find.text(label), findsNothing);
+      }
+      expect(tester.takeException(), isNull);
+    },
   );
 
   testWidgets(
-    'invalid calendar date and inverted range do not read or replace report',
+    'date is followed by AM PM time and midnight/noon retain their correct instants',
     (tester) async {
       await open(tester);
-      await enter(tester, 'report-start-date', '31/02/2026');
-      await tap(tester, find.byKey(const Key('report-generate')));
-      expect(find.text('Usa dd/mm/aaaa.'), findsOneWidget);
-      expect(store.queries, hasLength(1));
-      await enter(tester, 'report-start-date', '27/10/2026');
-      await tap(tester, find.byKey(const Key('report-generate')));
-      expect(
-        find.text('Debe ser igual o posterior al inicio.'),
-        findsOneWidget,
-      );
-      expect(store.queries, hasLength(1));
-      await enter(tester, 'report-start-date', '25/10/2026');
-      await tap(tester, find.byKey(const Key('report-generate')));
-      expect(store.queries, hasLength(2));
-      expect(
-        find.text('Reporte del 25/10/2026 00:00 al 26/10/2026 23:59'),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'hour inputs validate a same-day interval and include its final minute',
-    (tester) async {
-      await open(tester);
-      expect(
-        tester
-            .widget<TextFormField>(find.byKey(const Key('report-start-time')))
-            .controller!
-            .text,
-        '00:00',
-      );
-      expect(
-        tester
-            .widget<TextFormField>(find.byKey(const Key('report-end-time')))
-            .controller!
-            .text,
-        '23:59',
-      );
-      await enter(tester, 'report-start-time', '25:00');
-      await tap(tester, find.byKey(const Key('report-generate')));
-      expect(find.text('Usa HH:mm (00–23).'), findsOneWidget);
-      expect(store.queries, hasLength(1));
-      await enter(tester, 'report-start-time', '14:30');
-      await enter(tester, 'report-end-time', '14:29');
-      await tap(tester, find.byKey(const Key('report-generate')));
-      expect(
-        find.text('Debe ser igual o posterior al inicio.'),
-        findsOneWidget,
-      );
-      expect(store.queries, hasLength(1));
-      await enter(tester, 'report-end-time', '14:30');
+      await dateThenTime(tester, 'report-start', 25);
+      await acceptTime(tester, '12', '00', 'AM');
+      await dateThenTime(tester, 'report-end', 26);
+      await acceptTime(tester, '12', '00', 'PM');
       await tap(tester, find.byKey(const Key('report-generate')));
       final p = store.queries.last;
-      expect(p.startUtc, DateTime.utc(2026, 10, 26, 19, 30));
-      expect(p.endExclusiveUtc, DateTime.utc(2026, 10, 26, 19, 31));
+      expect(p.startUtc, DateTime.utc(2026, 10, 25, 5));
+      expect(p.endExclusiveUtc, DateTime.utc(2026, 10, 26, 17, 1));
+      expect(find.text('25/10/2026 · 12:00 AM'), findsNWidgets(2));
+      expect(find.text('26/10/2026 · 12:00 PM'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'canceling either dialog leaves the whole previous selection unchanged',
+    (tester) async {
+      await open(tester);
+      await tap(tester, find.byKey(const Key('report-start')));
+      await tap(tester, find.text('Cancelar'));
+      expect(find.byType(TimePickerDialog), findsNothing);
+      await dateThenTime(tester, 'report-end', 25);
+      await tap(tester, find.text('Cancelar'));
+      expect(find.text('26/10/2026 · 11:59 PM'), findsNWidgets(2));
+      await tap(tester, find.byKey(const Key('report-generate')));
+      expect(store.queries.last.endExclusiveUtc, DateTime.utc(2026, 10, 27, 5));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'inverted selection preserves the previous report and never reads',
+    (tester) async {
+      await open(tester);
+      await dateThenTime(tester, 'report-start', 27);
+      await acceptTime(tester, '1', '30', 'PM');
+      await tap(tester, find.byKey(const Key('report-generate')));
       expect(
-        find.text('Reporte del 26/10/2026 14:30 al 26/10/2026 14:30'),
+        find.text(
+          'La fecha y hora final deben ser iguales o posteriores a las iniciales.',
+        ),
         findsOneWidget,
       );
-      await tap(tester, find.byTooltip('Elegir Hora inicial'));
-      expect(find.byType(TimePickerDialog), findsOneWidget);
-      await tap(tester, find.text('Cancelar'));
-      expect(
-        tester
-            .widget<TextFormField>(find.byKey(const Key('report-start-time')))
-            .controller!
-            .text,
-        '14:30',
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'uncategorized sold products can be selected separately from all categories',
-    (tester) async {
-      store.uncategorized = true;
-      await open(tester);
-      expect(tester.takeException(), isNull);
-      await tap(tester, keyed('report-category-'));
-      await tap(tester, find.text('Sin categoría').last);
-      expect(controller.categoryId, '');
-      expect(controller.products.single.productId, 'p1');
-      expect(controller.snapshot!.salesMinor, 30000);
-      await tap(tester, keyed('report-category-'));
-      await tap(tester, find.text('Todas las categorías').last);
-      expect(controller.categoryId, isNull);
-      expect(controller.products, hasLength(2));
       expect(store.queries, hasLength(1));
+      expect(value(tester, 'report-opening-cash'), 'COP 1.000,00');
       expect(tester.takeException(), isNull);
     },
   );
+
   testWidgets(
-    'negative margin bars remain visible and open their underlying sale detail',
-    (tester) async {
-      await open(tester);
-      await tap(tester, find.byKey(const Key('report-chart-metric')));
-      await tap(tester, find.text('Margen de productos físicos').last);
-      expect(controller.metric, ReportMetric.margin);
-      final chart = tester.widget<ReportBarChart>(find.byType(ReportBarChart));
-      expect(chart.data.single.value, -2000);
-      await tap(
-        tester,
-        find.byKey(ValueKey('report-bar-${chart.data.single.id}')),
-      );
-      expect(find.textContaining('Producto con pérdida'), findsWidgets);
-      expect(find.text('Total de las partidas: COP -20,00'), findsOneWidget);
-      await tap(tester, find.text('Cerrar'));
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'narrow view preserves unknown balances and shows actual event result separately',
+    'narrow screen preserves missing balances without showing invented zero',
     (tester) async {
       store.unknownBalances = true;
       await open(tester, size: const Size(620, 1000));
       expect(find.text('Sin información'), findsNWidgets(4));
-      expect(find.text('Inicial: Sin información'), findsOneWidget);
-      expect(find.text('Final: Sin información'), findsOneWidget);
-      await tester.ensureVisible(find.text('Resultado acumulado por evento'));
-      await tester.pumpAndSettle();
-      expect(find.text('COP 180,00'), findsWidgets);
-      expect(find.text('Costo real'), findsOneWidget);
+      expect(find.textContaining('historial disponible'), findsOneWidget);
+      expect(find.text('COP 0,00'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
+
   testWidgets(
-    'summary drilldown separates abonos from sales and preserves last report on read failure',
+    'failed refresh retains the four balances and their last generated timestamps',
     (tester) async {
       await open(tester);
-      await tap(tester, find.text('Abonos de deudores').first);
-      expect(find.textContaining('Abono anterior'), findsOneWidget);
-      expect(find.text('Total de las partidas: COP 50,00'), findsOneWidget);
-      await tap(tester, find.text('Cerrar'));
-      store.failure = StateError('Lectura sintética fallida');
+      store.failure = StateError('Fallo sintético');
       await tap(tester, find.byKey(const Key('report-generate')));
       expect(
         find.textContaining('Se conserva el último reporte generado.'),
         findsOneWidget,
       );
-      expect(controller.snapshot!.salesMinor, 30000);
+      expect(value(tester, 'report-closing-nequi'), 'COP 800,00');
+      expect(find.text('26/10/2026 · 11:59 PM'), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     },
   );

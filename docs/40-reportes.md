@@ -1,5 +1,7 @@
 # Reportes — versión 0.17.0 (horarios ampliados en 0.17.1)
 
+**Alcance visual vigente desde 0.17.2:** la pantalla muestra únicamente los saldos iniciales y finales de Caja y Nequi, con selección encadenada fecha → hora AM/PM. Ver [Reportes básicos](42-reportes-basicos.md). Las funciones descritas a continuación corresponden a las entregas anteriores y ya no se muestran en la pantalla actual.
+
 El propietario autorizó construir el módulo con el alcance discutido: fechas inicial y final, saldos de dinero, ingresos y egresos, ventas a Deudas, transferencias entre cuentas, productos vendidos, filtros y barras con resultados. Esta entrega consulta las operaciones confirmadas de Sanctum 2.0; no reimporta el historial original ni modifica los hechos comerciales.
 
 ## Criterios

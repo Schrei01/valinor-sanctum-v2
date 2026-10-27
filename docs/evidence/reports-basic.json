@@ -1,0 +1,41 @@
+{
+  "version": "0.17.2+26",
+  "dateBogota": "2026-10-26",
+  "schemaVersion": 13,
+  "schemaMigration": false,
+  "visibleScope": "Caja and Nequi opening and closing balances only",
+  "selection": "date accepted then time accepted; 12-hour AM/PM; cancel preserves prior complete selection",
+  "tests": {
+    "applicationPassed": 30,
+    "integration": 16,
+    "controller": 7,
+    "widgets": 6,
+    "shell": 1,
+    "syntheticRenderPassed": 1,
+    "fullSuiteRepeated": false,
+    "analyze": "No issues found",
+    "formatDartFiles": 3,
+    "formatChanged": 0
+  },
+  "readOnlyVerification": {
+    "copyIntradayRanges": 2,
+    "copySchemaAndAllRowsUnchanged": true,
+    "activeProfileSchemaAndAllRowsUnchangedAfterPublication": true,
+    "tables": 60,
+    "integrity": "ok",
+    "foreignKeyViolations": 0,
+    "businessOperationsCreated": false
+  },
+  "delivery": {
+    "releaseBuild": true,
+    "sanctumOverrides": false,
+    "stablePublished": true,
+    "versionedMatchesArchiveAndStable": true,
+    "files": 17,
+    "archiveBytes": 15007892,
+    "archiveSha256": "9E9DA263915611BD413AEA35EA0A87D91D84DE363F2DB81195248ECE570CB0BD",
+    "privateDataExcluded": true,
+    "nativeUiTraversal": false,
+    "appLeftOpen": false
+  }
+}

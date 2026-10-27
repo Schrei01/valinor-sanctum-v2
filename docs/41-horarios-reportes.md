@@ -1,5 +1,7 @@
 # Horarios de Reportes — 0.17.1
 
+Desde 0.17.2, la interfaz usa AM/PM y el flujo fecha → hora, con solo Caja/Nequi iniciales y finales. Ver [alcance vigente](42-reportes-basicos.md). Esta página documenta la entrega anterior de 24 horas.
+
 El propietario pidió ejemplos de fechas y poder determinar la hora de cada extremo, como en el repositorio base. Se leyó su selector de fecha/hora como referencia, sin ejecutar ni modificar el sistema original.
 
 Reportes incorpora Hora inicial y Hora final con escritura manual HH:mm y selector de 24 horas. Conserva las fechas manuales y el calendario. Los valores iniciales 00:00–23:59 cubren días completos; se pueden elegir turnos en un mismo día o cruzando medianoche. El encabezado identifica las horas realmente consultadas. Actualizar conserva el rango generado.
