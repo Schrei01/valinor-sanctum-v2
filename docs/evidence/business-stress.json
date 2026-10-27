@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-27",
+  "versionUnderTest": "0.26.1+41",
+  "schemaVersion": 16,
+  "configuration": {"currency": "COP", "moneyScale": 0},
+  "isolation": {
+    "syntheticDataOnly": true,
+    "activeDatabaseUsedForOperations": false,
+    "fileBackedDays": true,
+    "navigationUsesRealSqlite": true
+  },
+  "businessDays": {
+    "seeds": [17, 83, 2026],
+    "accountsPerDay": 20,
+    "totalAccounts": 60,
+    "firstFiveAccountsPaidInOrder": [2, 4],
+    "sixthAccountCreatedAfterFirstTwoPayments": true,
+    "remainingOrderVariesBySeed": true,
+    "cashTransferCreditAndMixedPayments": true,
+    "checksAfterEachSale": ["cash", "nequi", "individualDebts", "stock", "openAccountIds", "saleCount", "balancedJournalEntries"],
+    "reopenPersistedDrafts": true,
+    "reopenPreparedSale": true,
+    "duplicateConfirmationsChecked": ["sale", "transfer", "debtorPayment"],
+    "eventsVisibleInCatalogAndSales": true,
+    "eventPrizesDeducted": true,
+    "eventRegistrationsSold": true,
+    "reportsReconciled": true,
+    "sqliteIntegrityOk": true,
+    "foreignKeyViolations": 0,
+    "syntheticFinalAmountsPerDay": {
+      "sales": 75000,
+      "creditSales": 20000,
+      "openingReceivables": 10000,
+      "debtorPayments": 400,
+      "closingReceivables": 29600,
+      "cash": 34700,
+      "nequi": 20100,
+      "internalTransfer": 200,
+      "monetaryOutflows": 600,
+      "openingStockUnits": 310,
+      "prizeUnits": 2,
+      "soldProductUnits": 60,
+      "closingStockUnits": 248,
+      "closingStockFifoCost": 248000
+    }
+  },
+  "navigation": {
+    "cycles": 3,
+    "tabs": ["Ventas", "Catálogo", "Compras", "Deudores", "Tesorería", "Eventos", "Reportes"],
+    "saleConfirmationUsesWidgetButtons": true,
+    "draftIdsDebtorAndQuantitiesPreserved": true,
+    "widgetReconstructionChecked": true
+  },
+  "validation": {
+    "fullSuitePassed": 755,
+    "fullSuiteSkipped": 3,
+    "skipReason": "Host cannot create symbolic links for three storage path tests",
+    "fullSuiteFailed": 0,
+    "focusedFinalPassed": 4,
+    "focusedFinalReason": "Repeat new tests after adding two flow-control braces requested by the analyzer",
+    "formattedDartFiles": 192,
+    "formatChangesRequired": 0,
+    "analysis": "No issues found"
+  },
+  "delivery": {
+    "applicationSourceChanged": false,
+    "newExecutablePublished": false
+  },
+  "limits": ["Automated SQLite and Flutter widget tests", "Orderly database reopen, no physical disk or power failure simulation", "Not a multi-device performance benchmark"]
+}

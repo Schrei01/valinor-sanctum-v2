@@ -91,6 +91,7 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 56. [Inicio automático y logo de Valinor 0.25.0](docs/56-inicio-valinor-identidad.md).
 57. [Personas de Deudores en las cuentas de Ventas 0.26.0](docs/57-ventas-cuentas-deudores.md).
 58. [Existencias en el selector de Ventas 0.26.1](docs/58-ventas-existencias.md).
+59. [Pruebas de jornada comercial: cuentas, pagos, deudas y navegación](docs/59-pruebas-jornada-comercial.md).
 
 ## Decisiones aprobadas
 

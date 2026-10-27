@@ -611,13 +611,13 @@ void main() {
   );
 }
 
-Future<void> fixture(AppDatabase app) async {
+Future<void> fixture(AppDatabase app, {int moneyScale = 2}) async {
   await SqliteWorkspaceStore(app).createProfile(
     BusinessProfile(
       profileId: 'quick-test',
       businessName: 'Ludoteca sintética',
       currencyCode: 'COP',
-      moneyScale: 2,
+      moneyScale: moneyScale,
       timezone: 'America/Bogota',
       createdAtUtc: DateTime.utc(2026, 10, 19),
     ),
