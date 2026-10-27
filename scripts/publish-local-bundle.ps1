@@ -51,6 +51,7 @@ try {
     }
 }
 finally { $zip.Dispose() }
+$archiveSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
 Expand-Archive -LiteralPath $archive -DestinationPath $stagingRoot
 Assert-BundleTree $stagedBundle
@@ -92,9 +93,24 @@ catch {
     }
     throw
 }
+# The previous bundle is kept only until the replacement succeeds, for rollback.
+if ($preservedPrevious) {
+    Assert-BundleTree $previousBundle
+    foreach ($file in Get-ChildItem -LiteralPath $previousBundle -File -Recurse -Force) {
+        $relative = $file.FullName.Substring($previousBundle.Length + 1)
+        if ($relative -match '\.(db|sqlite|sqlite3)(-|$)' -or $relative -match '^data[\\/](development|test)([\\/]|$)' -or $file.Name -in @('active-workspace.json','legacy-treasury.json','reference-inventory.json')) { throw 'La entrega anterior contiene datos privados; se conserva para revisión.' }
+    }
+    Assert-ProjectPath $previousBundle
+    Remove-Item -LiteralPath $previousBundle -Recurse -Force
+}
+Assert-BundleTree $stagingRoot
+Assert-ProjectPath $stagingRoot
+Remove-Item -LiteralPath $stagingRoot -Recurse -Force
+$cleanup = & (Join-Path $PSScriptRoot 'clean-old-distributions.ps1') -Version ($bundleVersionText.Split('+')[0]) | ConvertFrom-Json
 [pscustomobject]@{
     executable = $currentExecutable
     version = $bundleVersionText
-    previousBundle = $(if ($preservedPrevious) { $previousBundle } else { $null })
-    archiveSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+    previousBundle = $null
+    obsoleteArtifactsRemoved = $cleanup.artifacts
+    archiveSha256 = $archiveSha256
 } | ConvertTo-Json

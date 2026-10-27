@@ -67,6 +67,7 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 40. [Reportes: saldos, ventas, costos y gráficas 0.17.0](docs/40-reportes.md).
 41. [Fecha y hora de Reportes 0.17.1](docs/41-horarios-reportes.md).
 42. [Reportes básicos: Caja y Nequi, fecha y hora AM/PM 0.17.2](docs/42-reportes-basicos.md).
+43. [Limpieza automática de entregas anteriores](docs/43-retencion-entregas.md).
 
 ## Decisiones aprobadas
 
@@ -100,7 +101,7 @@ El SDK portable y sus cachés están en .tooling, ignorados por Git. Los scripts
 ./scripts/package-windows.ps1
 ~~~
 
-El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.17.2-windows-x64.zip`. Conserva el bundle previo bajo tmp y rechaza versiones anteriores al proyecto o a la entrega vigente. Hay que cerrar todas las copias de la aplicación de este proyecto antes de actualizarla.
+El empaquetador también publica la entrega en la ruta estable. Para publicar un ZIP ya generado: `./scripts/publish-local-bundle.ps1 -ArchivePath dist/valinor-sanctum-2-0.17.2-windows-x64.zip`. Tras publicar correctamente elimina el bundle anterior y las carpetas/ZIP de versiones inferiores de `dist`; conserva la versión vigente. Durante el reemplazo conserva temporalmente la anterior para rollback si falla. Rechaza retrocesos de versión y protege bases/perfiles. Hay que cerrar todas las copias de la aplicación de este proyecto antes de actualizarla. Para revisar la limpieza sin borrar: `./scripts/clean-old-distributions.ps1 -DryRun`.
 
 Resultados 0.11.0: 500 pruebas aprobadas y tres omitidas por permisos de enlaces del host. Incluyen apertura financiera, reintentos, precisión, historial y conservación de registros; análisis limpio y formato de 121 Dart sin cambios. Esquema v9 aditivo con respaldo previo y migraciones v1–v8 intactas.
 

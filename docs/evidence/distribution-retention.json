@@ -1,0 +1,21 @@
+{
+  "dateBogota": "2026-10-26",
+  "currentVersion": "0.17.2+26",
+  "removedVersionDirectories": 24,
+  "removedArchives": 25,
+  "removedBytes": 1174539302,
+  "currentFilesHashesUnchanged": true,
+  "scriptChecksPassed": 5,
+  "publisherExercisedInSyntheticProject": true,
+  "activeDatabaseTablesUnchanged": 60,
+  "integrity": "ok",
+  "databaseWrites": false,
+  "schemaMigration": false,
+  "recompiled": false,
+  "flutterTestsRepeated": false,
+  "currentAppObservedOpenInitially": true,
+  "currentAppObservedOpenAtEnd": false,
+  "appClosedByAgent": false,
+  "reportSourceConfigurationVerified": true,
+  "activeProfileChanged": false
+}

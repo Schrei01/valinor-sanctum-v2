@@ -158,6 +158,8 @@ Assert-ProjectPath $zipPath
 if (Test-Path -LiteralPath $zipPath) { throw 'El ZIP ya existe; usa otra versión o conserva la entrega previa.' }
 Compress-Archive -LiteralPath $bundleDirectory -DestinationPath $zipPath -CompressionLevel Optimal
 & (Join-Path $PSScriptRoot 'publish-local-bundle.ps1') -ArchivePath $zipPath | Out-Null
+Assert-ProjectPath $stagingDirectory
+Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
 [pscustomobject]@{
     archive = $zipPath
     files = $copiedFiles + 1
