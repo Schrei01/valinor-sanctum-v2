@@ -92,10 +92,12 @@ Conserva las DLL y la carpeta data junto al ejecutable.
 La app abre en Ventas. El menú contiene Catálogo, Compras, Ventas, Deudores,
 Tesorería, Eventos y Reportes. Si el espacio es nuevo, indica solo su nombre:
 COP con 0 decimales y hora de Bogotá quedan fijos, sin selector de precisión.
-En Compras ingresa nombre, costo unitario, PVP, proveedor,
-categoría Comestible o Artículo, SKU opcional y cantidad. Puedes crear el producto o reponer uno existente.
-Al elegir un producto se completan SKU, categoría, PVP, proveedor y último costo
-conocido. Puedes modificarlos antes de ingresar la compra; completa la cantidad.
+En Compras ingresa nombre, costo total de las unidades, cantidad, PVP, proveedor,
+categoría Comestible o Artículo y SKU opcional. Puedes crear el producto o reponer uno existente.
+Al elegir un producto se completan SKU, categoría, PVP y proveedor y se muestra
+el PVP anterior. Ingresa lo pagado por todas las unidades: se sugiere un PVP
+con total/cantidad/0,65. Puedes escribir un precio menor; la sugerencia no limita.
+El PVP elegido aplica a todas las existencias y sus cambios quedan en historial.
 Elige Efectivo o Nequi para pagar: el ingreso y la salida de dinero se guardan juntos.
 Registra el saldo inicial real antes del primer movimiento de cada cuenta si corresponde.
 Consulta el Historial de ingresos desde la misma sección Compras.

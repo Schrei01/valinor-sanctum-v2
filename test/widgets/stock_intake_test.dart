@@ -53,6 +53,7 @@ void main() {
   Future<void> open(
     WidgetTester tester, {
     Size size = const Size(1120, 1100),
+    int moneyScale = 2,
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -84,7 +85,7 @@ void main() {
                   profileId: 'test',
                   businessName: 'Ludoteca sintética',
                   currencyCode: 'COP',
-                  moneyScale: 2,
+                  moneyScale: moneyScale,
                   timezone: 'America/Bogota',
                   createdAtUtc: DateTime.utc(2026, 10, 19),
                 ),
@@ -167,7 +168,7 @@ void main() {
       expect(find.textContaining('Vencimiento'), findsNothing);
       expect(find.textContaining('crédito'), findsNothing);
       await fill(tester);
-      expect(find.text('Total de compra: COP 3.703,50'), findsOneWidget);
+      expect(find.text('Total de compra: COP 1.234,50'), findsOneWidget);
       await tap(tester, keyed('intake-payment-'));
       await tap(tester, find.text('Nequi').last);
       expect(find.text('Saldo disponible: COP 5.000,00'), findsOneWidget);
@@ -175,8 +176,9 @@ void main() {
       await tap(tester, find.byKey(const Key('intake-submit')));
       expect(store.preparedCommands, hasLength(1));
       expect(store.preparedCommands.single.paymentOptionId, 'nequi');
-      expect(store.preparedCommands.single.unitPurchasePriceMinor, 123450);
-      expect(store.entries.single.totalCostMinor, 370350);
+      expect(store.preparedCommands.single.totalPurchasePriceMinor, 123450);
+      expect(store.preparedCommands.single.unitPurchasePriceMinor, isNull);
+      expect(store.entries.single.totalCostMinor, 123450);
       expect(store.stock.single.quantity, 3);
       expect(store.products.single.listPriceMinor, 250000);
       expect(find.text('Agua sintética · 3 unidades'), findsOneWidget);
@@ -220,7 +222,8 @@ void main() {
       await tap(tester, find.text('Agua sintética').last);
       expect(value(tester, 'intake-sku'), 'WATER');
       expect(value(tester, 'intake-pvp'), '2.500,00');
-      expect(value(tester, 'intake-cost'), '1.000,00');
+      expect(value(tester, 'intake-cost'), isEmpty);
+      expect(find.text('PVP anterior: COP 2.500,00'), findsOneWidget);
       expect(value(tester, 'intake-supplier'), 'Proveedor sintético');
       expect(
         tester
@@ -240,7 +243,7 @@ void main() {
       expect(store.preparedCommands.single.productId, 'water');
       expect(store.preparedCommands.single.expectedProduct!.sku, 'WATER');
       expect(store.preparedCommands.single.supplierId, 'supplier');
-      expect(store.preparedCommands.single.unitPurchasePriceMinor, 110000);
+      expect(store.preparedCommands.single.totalPurchasePriceMinor, 110000);
       expect(store.preparedCommands.single.listPriceMinor, 260000);
       expect(store.stock.single.quantity, 4);
       expect(store.products, hasLength(1));
@@ -280,7 +283,7 @@ void main() {
       await tap(tester, find.text('Nequi').last);
       await enter(tester, 'intake-name', 'KNOWN');
       await tap(tester, find.text('Artículo conocido').last);
-      expect(value(tester, 'intake-cost'), '0,00');
+      expect(value(tester, 'intake-cost'), isEmpty);
       expect(value(tester, 'intake-supplier'), 'Proveedor sintético');
       expect(value(tester, 'intake-quantity'), '7');
       expect(
@@ -408,7 +411,7 @@ void main() {
       await open(tester);
       expect(value(tester, 'intake-name'), 'Agua sintética');
       expect(value(tester, 'intake-quantity'), '2');
-      expect(value(tester, 'intake-cost'), '1.000,00');
+      expect(value(tester, 'intake-cost'), '2.000,00');
       expect(value(tester, 'intake-supplier'), 'Proveedor sintético');
       expect(
         tester
@@ -437,6 +440,7 @@ void main() {
       await open(tester);
       await fill(tester);
       await enter(tester, 'intake-quantity', '10');
+      await enter(tester, 'intake-cost', '20.000');
       expect(find.byKey(const Key('intake-insufficient')), findsOneWidget);
       await tap(tester, find.byKey(const Key('intake-submit')));
       expect(store.preparedCommands, isEmpty);
@@ -483,6 +487,37 @@ void main() {
           matching: find.text('Efectivo'),
         ),
         findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'total 25000 for ten suggests 3846, manual lower PVP survives input changes and pays Nequi exactly',
+    (tester) async {
+      await open(tester, moneyScale: 0);
+      await enter(tester, 'intake-name', 'Coca cola sintética');
+      await category(tester, 'Comestible');
+      await enter(tester, 'intake-supplier', 'Proveedor sintético');
+      await enter(tester, 'intake-quantity', '10');
+      await enter(tester, 'intake-cost', '25.000');
+      expect(value(tester, 'intake-pvp'), '3.846');
+      expect(find.text('PVP sugerido: COP 3.846'), findsOneWidget);
+      await enter(tester, 'intake-pvp', '3.500');
+      await enter(tester, 'intake-cost', '26.000');
+      expect(value(tester, 'intake-pvp'), '3.500');
+      await enter(tester, 'intake-cost', '25.000');
+      await tap(tester, keyed('intake-payment-'));
+      await tap(tester, find.text('Nequi').last);
+      await tap(tester, find.byKey(const Key('intake-submit')));
+      expect(store.preparedCommands.single.totalPurchasePriceMinor, 25000);
+      expect(store.preparedCommands.single.listPriceMinor, 3500);
+      expect(store.entries.single.totalCostMinor, 25000);
+      expect(
+        store.paymentOptions
+            .singleWhere((o) => o.label == 'Nequi')
+            .balanceMinor,
+        475000,
       );
       expect(tester.takeException(), isNull);
     },

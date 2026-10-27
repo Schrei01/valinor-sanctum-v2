@@ -57,7 +57,8 @@ class StockIntakeController extends ChangeNotifier {
     required String categoryId,
     String? supplierId,
     required String supplierName,
-    required int unitPurchasePriceMinor,
+    int? unitPurchasePriceMinor,
+    int? totalPurchasePriceMinor,
     required int listPriceMinor,
     required int quantity,
     required String paymentOptionId,
@@ -75,6 +76,7 @@ class StockIntakeController extends ChangeNotifier {
         categoryId,
         supplierName,
         unitPurchasePriceMinor,
+        totalPurchasePriceMinor,
         listPriceMinor,
         quantity,
         paymentOptionId,
@@ -92,6 +94,7 @@ class StockIntakeController extends ChangeNotifier {
         supplierId: supplierId,
         supplierName: supplierName.trim(),
         unitPurchasePriceMinor: unitPurchasePriceMinor,
+        totalPurchasePriceMinor: totalPurchasePriceMinor,
         listPriceMinor: listPriceMinor,
         quantity: quantity,
         paymentOptionId: paymentOptionId,
@@ -257,7 +260,8 @@ class StockIntakeController extends ChangeNotifier {
     String? sku,
     String categoryId,
     String supplierName,
-    int unitPurchasePriceMinor,
+    int? unitPurchasePriceMinor,
+    int? totalPurchasePriceMinor,
     int listPriceMinor,
     int quantity,
     String paymentOptionId,
@@ -280,11 +284,14 @@ class StockIntakeController extends ChangeNotifier {
     )) {
       throw ArgumentError('Selecciona una categoría activa.');
     }
-    final total = BigInt.from(unitPurchasePriceMinor) * BigInt.from(quantity);
+    final total = totalPurchasePriceMinor != null
+        ? BigInt.from(totalPurchasePriceMinor)
+        : BigInt.from(unitPurchasePriceMinor ?? 0) * BigInt.from(quantity);
     final retailTotal = BigInt.from(listPriceMinor) * BigInt.from(quantity);
     if (quantity <= 0 ||
         BigInt.from(quantity) > Money.maxMinorUnits ||
-        unitPurchasePriceMinor <= 0 ||
+        (unitPurchasePriceMinor == null) == (totalPurchasePriceMinor == null) ||
+        total <= BigInt.zero ||
         listPriceMinor < 0 ||
         total > Money.maxMinorUnits ||
         retailTotal > Money.maxMinorUnits) {

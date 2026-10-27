@@ -1,0 +1,63 @@
+{
+  "version": "0.21.0+33",
+  "dateBogota": "2026-10-27",
+  "schemaVersion": 15,
+  "previousSchemaVersion": 14,
+  "schemaMigration": true,
+  "behavior": {
+    "input": "total cost for received quantity",
+    "suggestion": "total/quantity/0.65",
+    "rounding": "nearest minor unit, half up",
+    "example": {
+      "total": 25000,
+      "quantity": 10,
+      "suggestedPvp": 3846
+    },
+    "lowerOrZeroPvpAllowed": true,
+    "manualPvpPreserved": true,
+    "previousPvpVisible": true,
+    "currentPvpAppliesToAllStock": true,
+    "immutablePriceHistory": true,
+    "cashAndNequiExactOutflow": true,
+    "historicalCostsAndSalesPricesPreserved": true,
+    "legacyUnitRequestReplaySupported": true
+  },
+  "verification": {
+    "initialCompatibilityPassed": 30,
+    "focusedPassed": 58,
+    "fullPassed": 713,
+    "fullSkipped": 3,
+    "fullSuiteRepeated": true,
+    "analyze": "No issues found",
+    "syntheticExampleRenderPassed": 1,
+    "syntheticExampleInspected": true,
+    "narrowWidgetPassed": true,
+    "candidateOldTablesRowsPreserved": 63,
+    "candidatePriorMigrationRowsAndChecksumsPreserved": 14,
+    "candidatePriceBaselines": 173,
+    "newTableCount": 64,
+    "baselineEffectiveHistoricalDateUnknown": true,
+    "nativeUiTraversal": false,
+    "activeOldTableRowsPreserved": 63,
+    "activePriorMigrationRowsAndChecksumsPreserved": 14,
+    "activePriceBaselines": 173,
+    "activeTableCount": 64,
+    "integrity": "ok",
+    "foreignKeyViolations": 0,
+    "activeMoneyScale": 0,
+    "consistentClosedBackupVerified": true
+  },
+  "delivery": {
+    "releaseBuild": true,
+    "published": true,
+    "privateDataExcluded": true,
+    "sanctumOverrides": false,
+    "activeMigrated": true,
+    "files": 17,
+    "archiveBytes": 15031699,
+    "archiveSha256": "F1E0873600795FDC54C7F77E2EB1B2D0E04C38661BCCEC17D29D0C15AEE75333",
+    "stableVersionedArchiveMatch": true,
+    "oldDistributionsRemoved": true,
+    "appLeftOpen": false
+  }
+}

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/domain/money.dart';
 import '../../stock_intake/application/stock_intake_controller.dart';
 import '../../stock_intake/domain/stock_intake_store.dart';
+import '../../stock_intake/domain/purchase_pricing.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../application/inventory_controller.dart';
 import '../domain/inventory_store.dart';
@@ -38,6 +39,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
   int _formVersion = 0;
   int _confirmedVersion = 0;
   int _historyPage = 0;
+  bool _pvpManual = false;
 
   @override
   void initState() {
@@ -68,6 +70,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
       _pvp.clear();
       _quantity.text = '1';
       _existing = null;
+      _pvpManual = false;
       _hydratedCommand = null;
       _formVersion++;
       _historyPage = 0;
@@ -91,8 +94,9 @@ class _PurchasesPageState extends State<PurchasesPage> {
     _categoryId = command.categoryId;
     _paymentOptionId = command.paymentOptionId;
     _quantity.text = '${command.quantity}';
-    _cost.text = _amount(command.unitPurchasePriceMinor);
+    _cost.text = _amount(command.totalCostMinor);
     _pvp.text = _amount(command.listPriceMinor);
+    _pvpManual = true;
     _formVersion++;
   }
 
@@ -136,12 +140,37 @@ class _PurchasesPageState extends State<PurchasesPage> {
         scale: widget.profile.moneyScale,
       );
       if (cost.minorUnits <= 0) return null;
-      return cost.asBigInt * quantity;
+      return cost.asBigInt;
     } on FormatException {
       return null;
     } on RangeError {
       return null;
     }
+  }
+
+  int? get _suggestedPvp {
+    final total = _total;
+    final quantity = BigInt.tryParse(_quantity.text.trim());
+    if (total == null ||
+        total > Money.maxMinorUnits ||
+        quantity == null ||
+        quantity <= BigInt.zero ||
+        quantity > Money.maxMinorUnits) {
+      return null;
+    }
+    try {
+      return suggestedRetailPriceMinor(
+        totalCostMinor: total.toInt(),
+        quantity: quantity.toInt(),
+      );
+    } on RangeError {
+      return null;
+    }
+  }
+
+  void _suggest() {
+    final price = _suggestedPvp;
+    if (!_pvpManual && price != null) _pvp.text = _amount(price);
   }
 
   @override
@@ -285,10 +314,10 @@ class _PurchasesPageState extends State<PurchasesPage> {
                             enabled: !locked,
                             decoration: InputDecoration(
                               labelText:
-                                  'Precio de compra unitario (${widget.profile.currencyCode})',
+                                  'Costo total de las unidades (${widget.profile.currencyCode})',
                             ),
                             validator: (value) => _positiveAmountError(value),
-                            onChanged: (_) => setState(() {}),
+                            onChanged: (_) => setState(_suggest),
                           ),
                           TextFormField(
                             key: const Key('intake-pvp'),
@@ -300,7 +329,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                             ),
                             validator: (value) =>
                                 inventoryAmountError(value, widget.profile),
-                            onChanged: (_) => setState(() {}),
+                            onChanged: (_) => setState(() => _pvpManual = true),
                           ),
                           TextFormField(
                             key: const Key('intake-quantity'),
@@ -311,9 +340,40 @@ class _PurchasesPageState extends State<PurchasesPage> {
                               labelText: 'Cantidad',
                             ),
                             validator: _quantityError,
-                            onChanged: (_) => setState(() {}),
+                            onChanged: (_) => setState(_suggest),
                           ),
                         ]),
+                        const SizedBox(height: 8),
+                        if (_existing != null)
+                          Text(
+                            'PVP anterior: ${inventoryMoney(_existing!.listPriceMinor, widget.profile)}',
+                            key: const Key('intake-previous-pvp'),
+                          ),
+                        Wrap(
+                          spacing: 12,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              _suggestedPvp == null
+                                  ? 'PVP sugerido: completa costo total y cantidad'
+                                  : 'PVP sugerido: ${inventoryMoney(_suggestedPvp!, widget.profile)}',
+                              key: const Key('intake-suggested-pvp'),
+                            ),
+                            if (_suggestedPvp != null)
+                              TextButton(
+                                onPressed: locked
+                                    ? null
+                                    : () => setState(() {
+                                        _pvpManual = false;
+                                        _suggest();
+                                      }),
+                                child: const Text('Usar sugerido'),
+                              ),
+                          ],
+                        ),
+                        const Text(
+                          'Sugerencia = costo total ÷ cantidad ÷ 0,65. Puedes elegir un PVP menor. El PVP elegido aplica a todas las existencias y sus cambios quedan guardados.',
+                        ),
                         const SizedBox(height: 20),
                         _fields([
                           DropdownButtonFormField<String>(
@@ -354,7 +414,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                         const SizedBox(height: 16),
                         Text(
                           _total == null
-                              ? 'Total de compra: completa precio y cantidad'
+                              ? 'Total de compra: completa costo total y cantidad'
                               : _total! > Money.maxMinorUnits
                               ? 'Total de compra: supera el límite permitido'
                               : 'Total de compra: ${inventoryMoney(_total!.toInt(), widget.profile)}',
@@ -479,9 +539,9 @@ class _PurchasesPageState extends State<PurchasesPage> {
               ? product.categoryId
               : null;
           _pvp.text = _amount(product.listPriceMinor);
+          _pvpManual = false;
           final defaults = data.productDefaults[product.id];
-          final cost = defaults?.unitPurchasePriceMinor;
-          _cost.text = cost == null ? '' : _amount(cost);
+          _cost.clear();
           _supplier.text = defaults?.supplierName ?? '';
           _supplierId = defaults?.supplierId;
           _formVersion++;
@@ -504,6 +564,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                 _existing = null;
                 _sku.clear();
                 _pvp.clear();
+                _pvpManual = false;
                 _cost.clear();
                 _supplier.clear();
                 _supplierId = null;
@@ -624,7 +685,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
       categoryId: _categoryId!,
       supplierId: _supplierId,
       supplierName: _supplier.text,
-      unitPurchasePriceMinor: Money.parseEsCo(
+      totalPurchasePriceMinor: Money.parseEsCo(
         _cost.text,
         currency: widget.profile.currencyCode,
         scale: widget.profile.moneyScale,
@@ -769,7 +830,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Compra unitaria: ${inventoryMoney(entry.unitPurchasePriceMinor, widget.profile)} · PVP: ${inventoryMoney(entry.listPriceMinor, widget.profile)}',
+                    'Costo total: ${inventoryMoney(entry.totalCostMinor, widget.profile)} · PVP unitario: ${inventoryMoney(entry.listPriceMinor, widget.profile)}',
                   ),
                   const SizedBox(height: 6),
                   Text(

@@ -1,4 +1,5 @@
 import '../../inventory/domain/inventory_store.dart';
+import '../../../core/domain/money.dart';
 
 class IntakePaymentOption {
   const IntakePaymentOption({
@@ -31,7 +32,8 @@ class StockIntakeCommand {
     required this.categoryId,
     this.supplierId,
     required this.supplierName,
-    required this.unitPurchasePriceMinor,
+    this.unitPurchasePriceMinor,
+    this.totalPurchasePriceMinor,
     required this.listPriceMinor,
     required this.quantity,
     required this.paymentOptionId,
@@ -47,7 +49,28 @@ class StockIntakeCommand {
   final String categoryId;
   final String? supplierId;
   final String supplierName;
-  final int unitPurchasePriceMinor;
+  final int? unitPurchasePriceMinor;
+  final int? totalPurchasePriceMinor;
+  int get totalCostMinor {
+    if ((unitPurchasePriceMinor == null) == (totalPurchasePriceMinor == null) ||
+        quantity <= 0) {
+      throw const StockIntakeValidationException(
+        'Indica un costo total y una cantidad positiva.',
+      );
+    }
+    final total = totalPurchasePriceMinor == null
+        ? BigInt.from(unitPurchasePriceMinor!) * BigInt.from(quantity)
+        : BigInt.from(totalPurchasePriceMinor!);
+    if (total <= BigInt.zero || total > Money.maxMinorUnits) {
+      throw const StockIntakeValidationException(
+        'El costo total debe ser positivo y estar dentro del límite.',
+      );
+    }
+    return total.toInt();
+  }
+
+  int? get exactUnitCostMinor =>
+      totalCostMinor % quantity == 0 ? totalCostMinor ~/ quantity : null;
   final int listPriceMinor;
   final int quantity;
   final String paymentOptionId;
@@ -104,7 +127,7 @@ class StockIntakeEntry {
   final String categoryName;
   final String supplierName;
   final int quantity;
-  final int unitPurchasePriceMinor;
+  final int? unitPurchasePriceMinor;
   final int listPriceMinor;
   final int totalCostMinor;
   final String paymentLabel;

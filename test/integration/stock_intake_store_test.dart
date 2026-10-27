@@ -13,6 +13,10 @@ import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart
 import 'package:valinor_sanctum_2/features/inventory/domain/reference_inventory.dart';
 import 'package:valinor_sanctum_2/features/stock_intake/data/sqlite_stock_intake_store.dart';
 import 'package:valinor_sanctum_2/features/stock_intake/domain/stock_intake_store.dart';
+import 'package:valinor_sanctum_2/features/quick_sales/data/sqlite_quick_sales_store.dart';
+import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
+import 'package:valinor_sanctum_2/features/reports/data/sqlite_reports_store.dart';
+import 'package:valinor_sanctum_2/features/reports/domain/reports_store.dart';
 import 'package:valinor_sanctum_2/features/supplier_payments/data/sqlite_supplier_payments_store.dart';
 import 'package:valinor_sanctum_2/features/supplier_payments/domain/supplier_payments_store.dart';
 import 'package:valinor_sanctum_2/features/workspace/data/sqlite_workspace_store.dart';
@@ -53,6 +57,7 @@ void main() {
     String supplier = 'Proveedor sintético',
     int quantity = 5,
     int cost = 1000,
+    int? totalCost,
     int pvp = 1500,
     String option = 'EFECTIVO',
     DateTime? occurredAt,
@@ -65,7 +70,8 @@ void main() {
     categoryId: category,
     supplierId: supplierId,
     supplierName: supplier,
-    unitPurchasePriceMinor: cost,
+    unitPurchasePriceMinor: totalCost == null ? cost : null,
+    totalPurchasePriceMinor: totalCost,
     listPriceMinor: pvp,
     quantity: quantity,
     paymentOptionId: 'quick-default:$option',
@@ -73,6 +79,127 @@ void main() {
   );
   Future<int> count(String table) async =>
       (await app.database.query(table)).length;
+
+  test(
+    'total cost remains exact while the new PVP applies to all old and new stock with immutable price history',
+    () async {
+      await opening();
+      await store.prepare(input('old'));
+      await store.confirmPrepared('old');
+      final old = (await store.load()).products.single;
+      await store.prepare(
+        input(
+          'total',
+          expected: old,
+          totalCost: 25001,
+          quantity: 10,
+          pvp: 3500,
+          occurredAt: DateTime.utc(2026, 10, 19, 11),
+        ),
+      );
+      await store.confirmPrepared('total');
+      await store.confirmPrepared('total');
+      final current = await store.load();
+      expect(current.products.single.listPriceMinor, 3500);
+      expect(current.stock.single.quantity, 15);
+      expect(current.stock.single.totalCostMinor, 30001);
+      expect(
+        current.paymentOptions
+            .singleWhere((o) => o.label == 'Efectivo')
+            .balanceMinor,
+        69999,
+      );
+      final entry = current.entries.singleWhere((e) => e.commandId == 'total');
+      expect(entry.totalCostMinor, 25001);
+      expect(entry.unitPurchasePriceMinor, isNull);
+      final history = await app.database.query(
+        'product_price_history',
+        orderBy: 'id',
+      );
+      expect(history.map((h) => h['price_minor']), [1500, 3500]);
+      expect(history.last['previous_price_minor'], 1500);
+      expect(history.last['request_id'], 'total');
+      expect(
+        history.last['operation_at_utc'],
+        DateTime.utc(2026, 10, 19, 11).toIso8601String(),
+      );
+      await expectLater(
+        app.database.update('product_price_history', {'price_minor': 1}),
+        throwsA(isA<DatabaseException>()),
+      );
+      await expectLater(
+        app.database.delete('product_price_history'),
+        throwsA(isA<DatabaseException>()),
+      );
+    },
+  );
+
+  test(
+    'a fractional minor-unit average conserves the whole purchase cost through FIFO sale',
+    () async {
+      await opening(amount: 100);
+      await store.prepare(input('fraction', totalCost: 1, quantity: 3, pvp: 1));
+      await store.confirmPrepared('fraction');
+      final quick = SqliteQuickSalesStore(app, synthetic: true);
+      await quick.saveAccount(
+        SaveQuickSaleAccount(
+          id: 'sell',
+          label: 'Cuenta',
+          expectedRevision: 0,
+          lines: const [
+            QuickSaleLine(
+              id: 'line',
+              productId: 'product',
+              quantityText: '3',
+              unitPriceMinor: 1,
+              paymentOptionId: 'quick-default:EFECTIVO',
+            ),
+          ],
+        ),
+      );
+      await quick.prepareSale(
+        commandId: 'sale',
+        accountId: 'sell',
+        expectedRevision: 1,
+        occurredAtUtc: DateTime.utc(2026, 10, 19, 12),
+      );
+      await quick.confirmPrepared('sale');
+      expect(
+        (await app.database.query('sale_lines')).single['total_cost_minor'],
+        1,
+      );
+      expect((await store.load()).stock.single.quantity, 0);
+      expect((await store.load()).entries.single.totalCostMinor, 1);
+    },
+  );
+
+  test(
+    'total purchase from Nequi permits PVP zero and is reported as the exact outflow',
+    () async {
+      await opening(option: 'NEQUI', amount: 50000);
+      await store.prepare(
+        input('bank', option: 'NEQUI', totalCost: 25000, quantity: 10, pvp: 0),
+      );
+      await store.confirmPrepared('bank');
+      final state = await store.load();
+      expect(
+        state.paymentOptions
+            .singleWhere((o) => o.label == 'Nequi')
+            .balanceMinor,
+        25000,
+      );
+      expect(state.products.single.listPriceMinor, 0);
+      final report = await SqliteReportsStore(app).load(
+        ReportPeriod(
+          start: DateTime.utc(2026, 10, 19),
+          end: DateTime.utc(2026, 10, 19),
+        ),
+      );
+      expect(report.outflowTotals.cashMinor, 0);
+      expect(report.outflowTotals.transferMinor, 25000);
+      expect(report.saleTotals.totalMinor, 0);
+    },
+  );
 
   Future<InventoryOpeningResult> initialInventory() =>
       SqliteInventoryOpeningStore(app, synthetic: true).open(
@@ -430,7 +557,7 @@ void main() {
     'failure after both child documents rolls back catalog supplier inventory money and retry recovers',
     () async {
       await opening();
-      await store.prepare(input('first'));
+      await store.prepare(input('first', totalCost: 501));
       final before = await app.database.query('journal_lines');
       await app.database.execute(
         "CREATE TEMP TRIGGER fail_intake_fact BEFORE INSERT ON paid_purchase_entries BEGIN SELECT RAISE(ABORT,'Synthetic storage failure'); END",
@@ -442,6 +569,7 @@ void main() {
       expect(await count('catalog_items'), 0);
       expect(await count('counterparties'), 0);
       expect(await count('purchases'), 0);
+      expect(await count('product_price_history'), 0);
       expect(await count('supplier_payment_requests'), 0);
       expect(await count('supplier_payments'), 0);
       expect(await app.database.query('journal_lines'), before);
@@ -449,6 +577,7 @@ void main() {
       await app.database.execute('DROP TRIGGER fail_intake_fact');
       await store.confirmPrepared('first');
       expect(await count('purchases'), 1);
+      expect(await count('product_price_history'), 1);
       expect(await count('supplier_payments'), 1);
     },
   );

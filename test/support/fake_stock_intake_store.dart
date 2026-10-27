@@ -122,7 +122,7 @@ class FakeStockIntakeStore implements StockIntakeStore {
       (item) => item.id == command.paymentOptionId,
     );
     final option = paymentOptions[optionIndex];
-    final total = command.quantity * command.unitPurchasePriceMinor;
+    final total = command.totalCostMinor;
     final result = StockIntakeResult(
       commandId: commandId,
       productId: command.productId,
@@ -165,7 +165,7 @@ class FakeStockIntakeStore implements StockIntakeStore {
           .firstWhere((item) => item.name == command.supplierName)
           .id,
       supplierName: command.supplierName,
-      unitPurchasePriceMinor: command.unitPurchasePriceMinor,
+      unitPurchasePriceMinor: command.exactUnitCostMinor,
     );
     paymentOptions[optionIndex] = _option(
       option,
@@ -184,7 +184,7 @@ class FakeStockIntakeStore implements StockIntakeStore {
             .name,
         supplierName: command.supplierName,
         quantity: command.quantity,
-        unitPurchasePriceMinor: command.unitPurchasePriceMinor,
+        unitPurchasePriceMinor: command.exactUnitCostMinor,
         listPriceMinor: command.listPriceMinor,
         totalCostMinor: total,
         paymentLabel: option.label,

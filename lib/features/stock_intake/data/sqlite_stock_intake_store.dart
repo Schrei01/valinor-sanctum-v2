@@ -147,7 +147,7 @@ ORDER BY r.occurred_at_utc DESC,e.request_id
                 categoryName: r['category_name_snapshot'] as String,
                 supplierName: r['supplier_name_snapshot'] as String,
                 quantity: r['quantity'] as int,
-                unitPurchasePriceMinor: r['unit_purchase_price_minor'] as int,
+                unitPurchasePriceMinor: r['unit_purchase_price_minor'] as int?,
                 listPriceMinor: r['list_price_minor'] as int,
                 totalCostMinor: r['total_cost_minor'] as int,
                 paymentLabel: r['payment_option_label_snapshot'] as String,
@@ -276,8 +276,7 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
           : supplier.first['id'] as String;
       final option = await _option(txn, command.paymentOptionId);
       final total = _nonnegative(
-        BigInt.from(command.unitPurchasePriceMinor) *
-            BigInt.from(command.quantity),
+        BigInt.from(command.totalCostMinor),
         'Costo total',
       );
       await _funds(txn, option, total, command.occurredAtUtc);
@@ -285,7 +284,7 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
       final row = <String, Object?>{
         'command_id': command.commandId,
         'canonical_payload': jsonEncode({
-          'version': 1,
+          'version': command.totalPurchasePriceMinor == null ? 1 : 2,
           'profileId': profile.profileId,
           'currency': profile.currencyCode,
           'scale': profile.moneyScale,
@@ -301,7 +300,7 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
               ? supplierName
               : supplier.first['name'],
           'existingSupplier': supplier.isNotEmpty,
-          'unitPurchasePriceMinor': command.unitPurchasePriceMinor,
+          'unitPurchasePriceMinor': command.exactUnitCostMinor,
           'listPriceMinor': command.listPriceMinor,
           'quantity': command.quantity,
           'totalCostMinor': total,
@@ -367,7 +366,8 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
     final prepared = _prepared(row);
     final command = prepared.command;
     final profile = await _profile(txn);
-    if (payload['version'] != 1 ||
+    if (payload['version'] !=
+            (command.totalPurchasePriceMinor == null ? 1 : 2) ||
         payload['profileId'] != profile.profileId ||
         payload['currency'] != profile.currencyCode ||
         payload['scale'] != profile.moneyScale ||
@@ -402,8 +402,7 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
       }
     }
     final total = _nonnegative(
-      BigInt.from(command.quantity) *
-          BigInt.from(command.unitPurchasePriceMinor),
+      BigInt.from(command.totalCostMinor),
       'Costo total',
     );
     if (total != payload['totalCostMinor']) {
@@ -566,7 +565,7 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
       'supplier_id': payload['supplierId'],
       'supplier_name_snapshot': payload['supplierName'],
       'quantity': command.quantity,
-      'unit_purchase_price_minor': command.unitPurchasePriceMinor,
+      'unit_purchase_price_minor': command.exactUnitCostMinor,
       'list_price_minor': command.listPriceMinor,
       'total_cost_minor': total,
       'payment_option_id': command.paymentOptionId,
@@ -739,19 +738,16 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
     }
     _businessDate(c.occurredAtUtc);
     if (c.quantity <= 0 ||
-        c.unitPurchasePriceMinor <= 0 ||
+        ((c.unitPurchasePriceMinor == null) ==
+            (c.totalPurchasePriceMinor == null)) ||
         c.listPriceMinor < 0) {
       throw const StockIntakeValidationException(
         'Cantidad y precio de compra deben ser positivos; el PVP no puede ser negativo.',
       );
     }
     _nonnegative(BigInt.from(c.quantity), 'Cantidad');
-    _nonnegative(BigInt.from(c.unitPurchasePriceMinor), 'Precio de compra');
     _nonnegative(BigInt.from(c.listPriceMinor), 'PVP');
-    _nonnegative(
-      BigInt.from(c.quantity) * BigInt.from(c.unitPurchasePriceMinor),
-      'Costo total',
-    );
+    _nonnegative(BigInt.from(c.totalCostMinor), 'Costo total');
     _nonnegative(
       BigInt.from(c.quantity) * BigInt.from(c.listPriceMinor),
       'Valor al público total',
@@ -777,6 +773,8 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
       'supplierId': c.supplierId,
       'supplierName': _text(c.supplierName, 'Proveedor', 160),
       'unitPurchasePriceMinor': c.unitPurchasePriceMinor,
+      if (c.totalPurchasePriceMinor != null)
+        'totalPurchasePriceMinor': c.totalPurchasePriceMinor,
       'listPriceMinor': c.listPriceMinor,
       'quantity': c.quantity,
       'paymentOptionId': c.paymentOptionId,
@@ -808,7 +806,8 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
         categoryId: p['categoryId'] as String,
         supplierId: p['supplierId'] as String?,
         supplierName: p['supplierName'] as String,
-        unitPurchasePriceMinor: p['unitPurchasePriceMinor'] as int,
+        unitPurchasePriceMinor: p['unitPurchasePriceMinor'] as int?,
+        totalPurchasePriceMinor: p['totalPurchasePriceMinor'] as int?,
         listPriceMinor: p['listPriceMinor'] as int,
         quantity: p['quantity'] as int,
         paymentOptionId: p['paymentOptionId'] as String,
