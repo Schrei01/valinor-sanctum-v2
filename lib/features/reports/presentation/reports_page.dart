@@ -30,11 +30,24 @@ class _ReportsPageState extends State<ReportsPage> {
       widget.controller.snapshot?.period.endDate ?? widget.controller.today,
     ),
   );
+  late final _startTime = TextEditingController(
+    text: _time(
+      widget.controller.snapshot?.period.startLocal ?? widget.controller.today,
+    ),
+  );
+  late final _endTime = TextEditingController(
+    text: widget.controller.snapshot == null
+        ? '23:59'
+        : _time(widget.controller.snapshot!.period.endLocal),
+  );
   int _productsPage = 0;
   String _money(int n) => inventoryMoney(n, widget.profile);
   String _balance(int? n) => n == null ? 'Sin información' : _money(n);
   String _date(DateTime day) =>
       '${day.day.toString().padLeft(2, '0')}/${day.month.toString().padLeft(2, '0')}/${day.year.toString().padLeft(4, '0')}';
+  String _time(DateTime value) =>
+      '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+  String _localMoment(DateTime value) => '${_date(value)} ${_time(value)}';
   String _moment(DateTime utc) {
     final d = utc.subtract(const Duration(hours: 5));
     return '${_date(d)} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
@@ -58,6 +71,51 @@ class _ReportsPageState extends State<ReportsPage> {
         : null;
   }
 
+  TimeOfDay? _parseTime(String? text) {
+    final m = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(text?.trim() ?? '');
+    if (m == null) return null;
+    final hour = int.parse(m[1]!), minute = int.parse(m[2]!);
+    return hour < 24 && minute < 60
+        ? TimeOfDay(hour: hour, minute: minute)
+        : null;
+  }
+
+  DateTime? _selectedMoment(bool start) {
+    final date = _parseDate(start ? _start.text : _end.text);
+    final time = _parseTime(start ? _startTime.text : _endTime.text);
+    if (date == null || time == null) return null;
+    return DateTime.utc(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+  }
+
+  Future<void> _pickTime(TextEditingController field) async {
+    final selected = await showTimePicker(
+      context: context,
+      initialTime:
+          _parseTime(field.text) ?? const TimeOfDay(hour: 0, minute: 0),
+      helpText: field == _startTime ? 'Hora inicial' : 'Hora final',
+      cancelText: 'Cancelar',
+      confirmText: 'Elegir',
+      hourLabelText: 'Hora',
+      minuteLabelText: 'Minuto',
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(
+        () => field.text =
+            '${selected.hour.toString().padLeft(2, '0')}:${selected.minute.toString().padLeft(2, '0')}',
+      );
+    }
+  }
+
   Future<void> _pick(TextEditingController field) async {
     final selected = await showDatePicker(
       context: context,
@@ -77,8 +135,9 @@ class _ReportsPageState extends State<ReportsPage> {
     if (!_form.currentState!.validate()) return;
     _productsPage = 0;
     await widget.controller.generate(
-      start: _parseDate(_start.text)!,
-      end: _parseDate(_end.text)!,
+      start: _selectedMoment(true)!,
+      end: _selectedMoment(false)!,
+      timed: true,
     );
   }
 
@@ -86,6 +145,8 @@ class _ReportsPageState extends State<ReportsPage> {
   void dispose() {
     _start.dispose();
     _end.dispose();
+    _startTime.dispose();
+    _endTime.dispose();
     super.dispose();
   }
 
@@ -125,7 +186,14 @@ class _ReportsPageState extends State<ReportsPage> {
                   _start,
                   c.busy,
                 ),
+                _timeField(
+                  'report-start-time',
+                  'Hora inicial',
+                  _startTime,
+                  c.busy,
+                ),
                 _dateField('report-end-date', 'Fecha final', _end, c.busy),
+                _timeField('report-end-time', 'Hora final', _endTime, c.busy),
                 FilledButton.icon(
                   key: const Key('report-generate'),
                   onPressed: c.busy ? null : _generate,
@@ -136,7 +204,9 @@ class _ReportsPageState extends State<ReportsPage> {
             ),
           ),
           const SizedBox(height: 12),
-          const Text('Se incluyen ambos días completos, en horario de Bogotá.'),
+          const Text(
+            'Horario de Bogotá · formato de 24 horas. Se incluye todo el minuto final. Para días completos usa 00:00–23:59.',
+          ),
           const SizedBox(height: 20),
           if (c.busy)
             const Padding(
@@ -154,10 +224,20 @@ class _ReportsPageState extends State<ReportsPage> {
             const Text('Elige las fechas y genera el reporte.'),
           if (data != null) ...[
             Text(
-              'Reporte del ${_date(data.period.startDate)} al ${_date(data.period.endDate)}',
+              'Reporte del ${_localMoment(data.period.startLocal)} al ${_localMoment(data.period.endLocal)}',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
+            if (data.movements.isEmpty &&
+                data.sales.isEmpty &&
+                data.debtChanges.isEmpty &&
+                data.expenses.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'No hay operaciones confirmadas en este rango. Prueba otras fechas. Los saldos pueden incluir movimientos anteriores; las ventas sin confirmar no aparecen.',
+                ),
+              ),
             for (final warning in data.warnings)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
@@ -270,12 +350,36 @@ class _ReportsPageState extends State<ReportsPage> {
       validator: (v) {
         if (_parseDate(v) == null) return 'Usa dd/mm/aaaa.';
         if (field == _end &&
-            _parseDate(_start.text) != null &&
-            _parseDate(v)!.isBefore(_parseDate(_start.text)!)) {
+            _selectedMoment(true) != null &&
+            _selectedMoment(false) != null &&
+            _selectedMoment(false)!.isBefore(_selectedMoment(true)!)) {
           return 'Debe ser igual o posterior al inicio.';
         }
         return null;
       },
+    ),
+  );
+  Widget _timeField(
+    String key,
+    String label,
+    TextEditingController field,
+    bool busy,
+  ) => SizedBox(
+    width: 155,
+    child: TextFormField(
+      key: Key(key),
+      controller: field,
+      enabled: !busy,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: 'HH:mm',
+        suffixIcon: IconButton(
+          tooltip: 'Elegir $label',
+          onPressed: busy ? null : () => _pickTime(field),
+          icon: const Icon(Icons.schedule),
+        ),
+      ),
+      validator: (v) => _parseTime(v) == null ? 'Usa HH:mm (00–23).' : null,
     ),
   );
   Widget _panel(String title, List<Widget> children) => Card(

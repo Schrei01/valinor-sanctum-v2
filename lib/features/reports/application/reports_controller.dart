@@ -40,18 +40,22 @@ class ReportsController extends ChangeNotifier {
   }
 
   Future<void> load() => generate(
-    start: snapshot?.period.startDate ?? today,
-    end: snapshot?.period.endDate ?? today,
+    start: snapshot?.period.startLocal ?? today,
+    end: snapshot?.period.endLocal ?? today,
+    timed: snapshot != null,
   );
 
   Future<void> generate({
     required DateTime start,
     required DateTime end,
+    bool timed = false,
   }) async {
     if (busy || _disposed) return;
     ReportPeriod period;
     try {
-      period = ReportPeriod(start: start, end: end);
+      period = timed
+          ? ReportPeriod.timed(start: start, end: end)
+          : ReportPeriod(start: start, end: end);
     } catch (e) {
       error = e.toString();
       _emit();

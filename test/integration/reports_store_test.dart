@@ -172,6 +172,32 @@ void main() {
     },
   );
   test(
+    'intraday range reconciles balances and selects both minute edges without writing',
+    () async {
+      await money();
+      await sell('before', date: DateTime.utc(2026, 10, 20, 14, 0, 59));
+      await sell('first', date: DateTime.utc(2026, 10, 20, 14, 1));
+      await sell('last', date: DateTime.utc(2026, 10, 20, 14, 1, 59, 999, 999));
+      await sell('after', date: DateTime.utc(2026, 10, 20, 14, 2));
+      final before = await rows();
+      final data = await reports.load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 20, 9, 1),
+          end: DateTime.utc(2026, 10, 20, 9, 1),
+        ),
+      );
+      expect(data.sales, hasLength(2));
+      expect(data.salesMinor, 20000);
+      expect(data.saleReceiptsMinor, 20000);
+      final cash = data.accounts.singleWhere(
+        (a) => a.role == ReportAccountRole.cash,
+      );
+      expect(cash.openingMinor, 110000);
+      expect(cash.closingMinor, 130000);
+      expect(await rows(), before);
+    },
+  );
+  test(
     'import exactly at the first Bogotá midnight does not invent the preceding opening balance',
     () async {
       await money(date: DateTime.utc(2026, 10, 20, 5));

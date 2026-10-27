@@ -1,10 +1,10 @@
-# Reportes — versión 0.17.0
+# Reportes — versión 0.17.0 (horarios ampliados en 0.17.1)
 
 El propietario autorizó construir el módulo con el alcance discutido: fechas inicial y final, saldos de dinero, ingresos y egresos, ventas a Deudas, transferencias entre cuentas, productos vendidos, filtros y barras con resultados. Esta entrega consulta las operaciones confirmadas de Sanctum 2.0; no reimporta el historial original ni modifica los hechos comerciales.
 
 ## Criterios
 
-- El rango incluye ambos días completos en Bogotá. El saldo inicial se toma justo antes del comienzo y el final al terminar el último día. Las aperturas importadas o declaradas se identifican aparte de ventas e ingresos comerciales. Si un saldo anterior a la apertura importada no puede reconstruirse, se muestra sin dato, no cero.
+- Desde 0.17.1 se eligen fecha y hora inicial/final en Bogotá, en formato de 24 horas. El minuto inicial y todo el minuto final están incluidos. Los valores predeterminados 00:00–23:59 conservan días completos. El saldo inicial se toma justo antes del comienzo y el final al terminar el minuto final. Las aperturas importadas o declaradas se identifican aparte de ventas e ingresos comerciales. Si un saldo anterior a la apertura importada no puede reconstruirse, se muestra sin dato, no cero.
 - El dinero recibido se separa en cobro de ventas de mostrador y abonos posteriores de deudores, por Efectivo/Caja y Transferencia/Nequi. Ventas totales incluye lo fiado al confirmar la entrega. Los abonos no vuelven a sumar ventas ni costo de inventario.
 - Deudas iniciales/finales, nuevo fiado y declaraciones adicionales de deuda anterior se distinguen. Identificar una parte de la cartera importada conserva el total; no se trata como nueva venta ni nueva cartera.
 - Los egresos monetarios se desglosan en compras, gastos y costos fijos de eventos. Las transferencias presentan origen y destino una sola vez, con sus dos movimientos para conciliar cada cuenta, incluyendo Caja mayor.
@@ -29,4 +29,6 @@ Windows mostró inicio, Versión 0.17.0 y la entrada Reportes. El clic por acces
 
 ## Uso
 
-Abre **Reportes**, elige **Fecha inicial** y **Fecha final** y pulsa **Generar reporte**. Consulta los saldos y pulsa los totales para ver su composición. En **Productos vendidos** filtra por Categoría o Producto; en **Gráfica de barras** cambia Mostrar y Agrupar por. Pulsa una barra o su fila para ver los movimientos que la componen. El resultado acumulado de cada evento presenta inscripciones, valor vendido, costo real y resultado; no ofrece el detalle de inscripciones fuera del período.
+Abre **Reportes**, elige **Fecha inicial**, **Hora inicial**, **Fecha final** y **Hora final** y pulsa **Generar reporte**. Para un día completo usa 00:00–23:59; para un turno usa sus horas. Consulta los saldos y pulsa los totales para ver su composición. En **Productos vendidos** filtra por Categoría o Producto; en **Gráfica de barras** cambia Mostrar y Agrupar por. Pulsa una barra o su fila para ver los movimientos que la componen. El resultado acumulado de cada evento presenta inscripciones, valor vendido, costo real y resultado; no ofrece el detalle de inscripciones fuera del período.
+
+Si no hay operaciones confirmadas en el rango, aparece un aviso. No se incluyen borradores ni ventas del sistema anterior: solo se importaron inventario y saldos iniciales. Ver [horarios 0.17.1](41-horarios-reportes.md).

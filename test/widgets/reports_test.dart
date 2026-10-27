@@ -86,7 +86,62 @@ void main() {
       await enter(tester, 'report-start-date', '25/10/2026');
       await tap(tester, find.byKey(const Key('report-generate')));
       expect(store.queries, hasLength(2));
-      expect(find.text('Reporte del 25/10/2026 al 26/10/2026'), findsOneWidget);
+      expect(
+        find.text('Reporte del 25/10/2026 00:00 al 26/10/2026 23:59'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'hour inputs validate a same-day interval and include its final minute',
+    (tester) async {
+      await open(tester);
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('report-start-time')))
+            .controller!
+            .text,
+        '00:00',
+      );
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('report-end-time')))
+            .controller!
+            .text,
+        '23:59',
+      );
+      await enter(tester, 'report-start-time', '25:00');
+      await tap(tester, find.byKey(const Key('report-generate')));
+      expect(find.text('Usa HH:mm (00–23).'), findsOneWidget);
+      expect(store.queries, hasLength(1));
+      await enter(tester, 'report-start-time', '14:30');
+      await enter(tester, 'report-end-time', '14:29');
+      await tap(tester, find.byKey(const Key('report-generate')));
+      expect(
+        find.text('Debe ser igual o posterior al inicio.'),
+        findsOneWidget,
+      );
+      expect(store.queries, hasLength(1));
+      await enter(tester, 'report-end-time', '14:30');
+      await tap(tester, find.byKey(const Key('report-generate')));
+      final p = store.queries.last;
+      expect(p.startUtc, DateTime.utc(2026, 10, 26, 19, 30));
+      expect(p.endExclusiveUtc, DateTime.utc(2026, 10, 26, 19, 31));
+      expect(
+        find.text('Reporte del 26/10/2026 14:30 al 26/10/2026 14:30'),
+        findsOneWidget,
+      );
+      await tap(tester, find.byTooltip('Elegir Hora inicial'));
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+      await tap(tester, find.text('Cancelar'));
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('report-start-time')))
+            .controller!
+            .text,
+        '14:30',
+      );
       expect(tester.takeException(), isNull);
     },
   );

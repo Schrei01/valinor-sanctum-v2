@@ -147,6 +147,7 @@ En Reportes elige fechas inicial y final de Bogotá y pulsa Generar.
 Consulta saldos iniciales/finales, cobros de ventas, abonos, nuevo fiado, egresos
 y transferencias. Abre los totales para revisar su detalle.
 Filtra productos vendidos por categoría y producto; sus precios y costos son históricos.
+Reportes permite fecha y hora de inicio/final en Bogotá; 00:00–23:59 cubre el día.
 Categoría usa la clasificación actual del catálogo. Cambia la métrica y agrupación
 de las barras; los saldos sin respaldo histórico se muestran Sin dato.
 El margen físico, resultado operativo y resultado acumulado por evento se muestran

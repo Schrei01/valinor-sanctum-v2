@@ -15,7 +15,42 @@ int reportMinor(BigInt value) {
 class ReportPeriod {
   ReportPeriod({required DateTime start, required DateTime end})
     : startDate = DateTime.utc(start.year, start.month, start.day),
-      endDate = DateTime.utc(end.year, end.month, end.day) {
+      endDate = DateTime.utc(end.year, end.month, end.day),
+      endExclusiveUtc = DateTime.utc(
+        end.year,
+        end.month,
+        end.day,
+      ).add(const Duration(days: 1, hours: 5)) {
+    _validate();
+  }
+
+  /// Wall-clock minutes in Bogotá, including the entire selected final minute.
+  ReportPeriod.timed({required DateTime start, required DateTime end})
+    : startDate = DateTime.utc(
+        start.year,
+        start.month,
+        start.day,
+        start.hour,
+        start.minute,
+      ),
+      endDate = DateTime.utc(
+        end.year,
+        end.month,
+        end.day,
+        end.hour,
+        end.minute,
+      ),
+      endExclusiveUtc = DateTime.utc(
+        end.year,
+        end.month,
+        end.day,
+        end.hour,
+        end.minute,
+      ).add(const Duration(hours: 5, minutes: 1)) {
+    _validate();
+  }
+
+  void _validate() {
     if (startDate.isAfter(endDate) ||
         startDate.year < 1 ||
         endDate.year > 9998) {
@@ -24,10 +59,13 @@ class ReportPeriod {
       );
     }
   }
+
   final DateTime startDate, endDate;
   DateTime get startUtc => startDate.add(const Duration(hours: 5));
-  DateTime get endExclusiveUtc =>
-      endDate.add(const Duration(days: 1, hours: 5));
+  final DateTime endExclusiveUtc;
+  DateTime get startLocal => startDate;
+  DateTime get endLocal =>
+      endExclusiveUtc.subtract(const Duration(hours: 5, minutes: 1));
   bool contains(DateTime utc) =>
       !utc.isBefore(startUtc) && utc.isBefore(endExclusiveUtc);
 }

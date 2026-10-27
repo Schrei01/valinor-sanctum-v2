@@ -47,6 +47,36 @@ ReportSaleLine sale(
 
 void main() {
   test(
+    'timed report retains Bogotá minute boundaries when refreshed',
+    () async {
+      final store = FakeReportsStore();
+      final c = ReportsController(store: store);
+      addTearDown(c.dispose);
+      await c.generate(
+        start: DateTime.utc(2026, 10, 20, 23, 45),
+        end: DateTime.utc(2026, 10, 21, 0, 15),
+        timed: true,
+      );
+      await c.load();
+      for (final p in store.queries) {
+        expect(p.startUtc, DateTime.utc(2026, 10, 21, 4, 45));
+        expect(p.endExclusiveUtc, DateTime.utc(2026, 10, 21, 5, 16));
+        expect(
+          p.contains(DateTime.utc(2026, 10, 21, 5, 15, 59, 999, 999)),
+          isTrue,
+        );
+        expect(p.contains(DateTime.utc(2026, 10, 21, 5, 16)), isFalse);
+      }
+      await c.generate(
+        start: DateTime.utc(2026, 10, 21, 10),
+        end: DateTime.utc(2026, 10, 21, 9, 59),
+        timed: true,
+      );
+      expect(store.queries, hasLength(2));
+      expect(c.error, isNotNull);
+    },
+  );
+  test(
     'today uses Bogotá and inclusive days stop before next local midnight',
     () async {
       final store = FakeReportsStore();
