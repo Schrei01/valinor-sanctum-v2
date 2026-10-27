@@ -147,6 +147,8 @@ En Reportes elige la fecha inicial y, al aceptar, la hora en formato AM/PM.
 Repite con el final y pulsa Generar reporte para consultar los saldos iniciales
 y finales de Caja y Nequi. Los momentos corresponden al horario de Bogotá.
 Los saldos sin respaldo histórico se muestran Sin información.
+Si la base fue convertida, Reportes usa sus saldos históricos antes de la apertura,
+sin sumar de nuevo inventario ni dinero. Las fechas antiguas se interpretan en Bogotá.
 Caja/arqueo y ajustes de inventario siguen pendientes.
 El paquete no contiene datos privados ni está habilitado para producción.
 El almacenamiento de desarrollo permanece limitado al repositorio autorizado

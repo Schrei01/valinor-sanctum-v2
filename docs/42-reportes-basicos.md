@@ -1,5 +1,7 @@
 # Reportes básicos — 0.17.2
 
+Desde 0.18.0, una base convertida también ofrece los saldos anteriores a su apertura mediante el historial incorporado. Se mantiene esta misma pantalla básica y el flujo AM/PM. Ver [conversión de la base](44-conversion-base.md).
+
 El propietario acota Reportes a los saldos iniciales y finales de Caja y Nequi. La pantalla muestra dos selectores y dos tarjetas con esos cuatro valores. Las gráficas, listados y otros indicadores se retomarán después; los hechos históricos y el modelo de consulta se conservan.
 
 ## Uso

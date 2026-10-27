@@ -135,11 +135,18 @@ class _ReportsPageState extends State<ReportsPage> {
           if (data == null && !c.busy)
             const Text('Elige las fechas y horas y genera el reporte.'),
           if (data != null) ...[
+            if (data.usesHistoricalBalances)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: Text(
+                  'Los saldos anteriores a la apertura provienen del historial convertido de la copia. Las fechas corresponden a Bogotá.',
+                ),
+              ),
             if (!data.openingBalancesKnown || !data.closingBalancesKnown)
               const Padding(
                 padding: EdgeInsets.only(bottom: 16),
                 child: Text(
-                  'Sin información: el momento seleccionado es anterior al historial disponible de los saldos. Elige un momento posterior al saldo inicial importado.',
+                  'Sin información: el historial disponible no contiene un saldo anterior para alguna de las cuentas en el momento seleccionado.',
                 ),
               ),
             Wrap(

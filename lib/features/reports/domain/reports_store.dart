@@ -254,6 +254,7 @@ class ReportsSnapshot {
     required this.coverageStartUtc,
     required this.openingBalancesKnown,
     this.closingBalancesKnown = true,
+    this.usesHistoricalBalances = false,
     required List<String> warnings,
   }) : accounts = List.unmodifiable(accounts),
        movements = List.unmodifiable(movements),
@@ -275,6 +276,7 @@ class ReportsSnapshot {
   final DateTime? coverageStartUtc;
   final bool openingBalancesKnown;
   final bool closingBalancesKnown;
+  final bool usesHistoricalBalances;
   final List<String> warnings;
   int get salesMinor => reportSum(sales.map((s) => s.salesMinor));
   int get creditSalesMinor => reportSum(sales.map((s) => s.creditMinor));

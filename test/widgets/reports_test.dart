@@ -88,6 +88,20 @@ void main() {
       tester.widget<Text>(find.byKey(Key(key))).data!;
 
   testWidgets(
+    'converted historical balances are identified without changing the four-value scope',
+    (tester) async {
+      store.convertedHistory = true;
+      await open(tester);
+      expect(
+        find.textContaining('historial convertido de la copia'),
+        findsOneWidget,
+      );
+      expect(value(tester, 'report-opening-cash'), 'COP 1.000,00');
+      expect(find.text('Productos vendidos'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'only four Caja and Nequi balances are shown at their generated cutoffs',
     (tester) async {
       await open(tester);

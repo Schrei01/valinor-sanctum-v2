@@ -1,4 +1,5 @@
 import '../../../core/infrastructure/database/app_database.dart';
+import '../../legacy_conversion/domain/legacy_time.dart';
 import '../domain/reports_store.dart';
 
 /// Pure read model. A single SQLite transaction supplies every report section.
@@ -53,22 +54,13 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
     final coverage = importedDates.firstOrNull;
     // The opening balance is strictly before the start instant. An imported
     // snapshot at that same instant supplies no preceding balance.
-    final openingKnown = coverage == null || period.startUtc.isAfter(coverage);
-    final closingKnown =
+    var openingKnown = coverage == null || period.startUtc.isAfter(coverage);
+    var closingKnown =
         coverage == null || period.endExclusiveUtc.isAfter(coverage);
+    final nativeOpeningKnown = openingKnown, nativeClosingKnown = closingKnown;
     final warnings = <String>[
       'Categorías según clasificación actual. Precios, nombres y costos de venta conservan el valor registrado en cada operación.',
     ];
-    if (!openingKnown) {
-      warnings.add(
-        'El rango comienza antes o justo en el corte importado. Los saldos iniciales no tienen información suficiente; los movimientos mostrados corresponden solo a lo registrado en esta app.',
-      );
-    }
-    if (!closingKnown) {
-      warnings.add(
-        'El rango termina antes del saldo importado. Los saldos finales tampoco están disponibles.',
-      );
-    }
 
     final requests = await txn.query(
       'quick_sale_requests',
@@ -363,33 +355,98 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
         ),
       );
     }
+    final converted = await txn.query(
+      'legacy_conversions',
+      where: "status='complete'",
+    );
+    var historyUsed = false;
+    Future<int?> historical(String role, DateTime before) async {
+      if (converted.isEmpty) return null;
+      final rows = await txn.query(
+        'legacy_balance_history',
+        columns: ['amount_minor'],
+        where: 'role=? AND occurred_at_utc < ?',
+        whereArgs: [role, legacyUtcKey(before)],
+        orderBy: 'occurred_at_utc DESC, source_id DESC',
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      historyUsed = true;
+      return rows.single['amount_minor'] as int;
+    }
+
+    final resolvedAccounts = <ReportAccount>[];
+    for (final account in accounts) {
+      final role = roles[account['id']] ?? ReportAccountRole.other;
+      final legacyRole = switch (role) {
+        ReportAccountRole.cash => 'cash',
+        ReportAccountRole.transfer => 'nequi',
+        ReportAccountRole.reserve => 'reserve',
+        _ => '',
+      };
+      resolvedAccounts.add(
+        ReportAccount(
+          id: account['id'] as String,
+          name: accountNames[account['id']]!,
+          role: role,
+          openingMinor: nativeOpeningKnown
+              ? reportMinor(opening[account['id']] ?? BigInt.zero)
+              : await historical(legacyRole, period.startUtc),
+          closingMinor: nativeClosingKnown
+              ? reportMinor(closing[account['id']] ?? BigInt.zero)
+              : await historical(legacyRole, period.endExclusiveUtc),
+        ),
+      );
+    }
+    if (converted.isNotEmpty) {
+      final visible = resolvedAccounts
+          .where(
+            (a) =>
+                a.role == ReportAccountRole.cash ||
+                a.role == ReportAccountRole.transfer,
+          )
+          .toList();
+      openingKnown =
+          visible.length == 2 && visible.every((a) => a.openingMinor != null);
+      closingKnown =
+          visible.length == 2 && visible.every((a) => a.closingMinor != null);
+    }
+    final resolvedDebtOpening = nativeOpeningKnown
+        ? reportMinor(debtOpening)
+        : await historical('receivables', period.startUtc);
+    final resolvedDebtClosing = nativeClosingKnown
+        ? reportMinor(debtClosing)
+        : await historical('receivables', period.endExclusiveUtc);
+    if (!openingKnown) {
+      warnings.add(
+        'No hay información suficiente para todos los saldos iniciales.',
+      );
+    }
+    if (!closingKnown) {
+      warnings.add(
+        'No hay información suficiente para todos los saldos finales.',
+      );
+    }
+    if (historyUsed) {
+      warnings.add(
+        'Los saldos anteriores a la apertura usan el historial convertido, en hora de Bogotá.',
+      );
+    }
     final result = ReportsSnapshot(
       period: period,
-      accounts: [
-        for (final account in accounts)
-          ReportAccount(
-            id: account['id'] as String,
-            name: accountNames[account['id']]!,
-            role: roles[account['id']] ?? ReportAccountRole.other,
-            openingMinor: openingKnown
-                ? reportMinor(opening[account['id']] ?? BigInt.zero)
-                : null,
-            closingMinor: closingKnown
-                ? reportMinor(closing[account['id']] ?? BigInt.zero)
-                : null,
-          ),
-      ],
+      accounts: resolvedAccounts,
       movements: movements,
       sales: sales,
       transfers: transfers,
       expenses: expenses,
       debtChanges: debtChanges,
       events: eventResults,
-      debtOpeningMinor: openingKnown ? reportMinor(debtOpening) : null,
-      debtClosingMinor: closingKnown ? reportMinor(debtClosing) : null,
+      debtOpeningMinor: resolvedDebtOpening,
+      debtClosingMinor: resolvedDebtClosing,
       coverageStartUtc: coverage,
       openingBalancesKnown: openingKnown,
       closingBalancesKnown: closingKnown,
+      usesHistoricalBalances: historyUsed,
       warnings: warnings,
     );
     result.validate();

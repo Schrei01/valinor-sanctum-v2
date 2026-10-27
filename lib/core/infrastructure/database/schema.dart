@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'event_schema.dart';
 import 'debtor_schema.dart';
+import 'legacy_conversion_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 13;
+  static const int version = 14;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -68,6 +69,7 @@ abstract final class DatabaseSchema {
     11 => migration11Name,
     12 => 'events_and_service_sales_v12',
     13 => 'registered_debtors_and_person_payments_v13',
+    14 => 'converted_legacy_history_v14',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -85,8 +87,13 @@ abstract final class DatabaseSchema {
     11 => migration11Checksum,
     12 => checksum(migration12Statements.join('\n;\n')),
     13 => checksum(migration13Statements.join('\n;\n')),
+    14 => checksum(migration14Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
+
+  static final List<String> migration14Statements = List.unmodifiable(
+    LegacyConversionSchema.statements,
+  );
 
   static final List<String> migration12Statements = List.unmodifiable(
     EventSchema.build(

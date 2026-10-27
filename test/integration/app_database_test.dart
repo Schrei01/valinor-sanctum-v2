@@ -1096,7 +1096,7 @@ void main() {
     },
   );
 
-  for (final startingVersion in [9, 10, 11, 12]) {
+  for (final startingVersion in [9, 10, 11, 12, 13]) {
     test(
       'v$startingVersion migrates with prior records preserved and an unchanged verified backup',
       () async {
@@ -1113,6 +1113,7 @@ void main() {
           (10, DatabaseSchema.migration10Statements),
           (11, DatabaseSchema.migration11Statements),
           (12, DatabaseSchema.migration12Statements),
+          (13, DatabaseSchema.migration13Statements),
         ].where((migration) => migration.$1 <= startingVersion)) {
           for (final statement in migration.$2) {
             await old.execute(statement);

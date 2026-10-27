@@ -6,6 +6,7 @@ class FakeReportsStore implements ReportsStore {
   Object? failure;
   Completer<void>? gate;
   bool unknownBalances = false, uncategorized = false;
+  bool convertedHistory = false;
   ReportsSnapshot Function(ReportPeriod)? build;
   @override
   Future<ReportsSnapshot> load(ReportPeriod period) async {
@@ -17,6 +18,7 @@ class FakeReportsStore implements ReportsStore {
           period,
           unknownBalances: unknownBalances,
           uncategorized: uncategorized,
+          convertedHistory: convertedHistory,
         );
   }
 }
@@ -25,6 +27,7 @@ ReportsSnapshot reportFixture(
   ReportPeriod period, {
   bool unknownBalances = false,
   bool uncategorized = false,
+  bool convertedHistory = false,
 }) {
   final at = period.startUtc.add(const Duration(hours: 10));
   ReportMovement movement(
@@ -189,6 +192,7 @@ ReportsSnapshot reportFixture(
     debtClosingMinor: unknownBalances ? null : 29000,
     coverageStartUtc: unknownBalances ? at.add(const Duration(days: 1)) : null,
     openingBalancesKnown: !unknownBalances,
+    usesHistoricalBalances: convertedHistory,
     closingBalancesKnown: !unknownBalances,
     warnings: const ['Categorías según clasificación actual.'],
   );
