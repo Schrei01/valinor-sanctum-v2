@@ -622,7 +622,7 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           isDense: true,
           helperText: selected == null
               ? 'Selecciona un producto'
-              : 'Precio ${inventoryMoney(line.unitPriceMinor ?? 0, widget.profile)} · ${selected.isEvent ? 'Evento · Sin límite de inscripciones' : 'Stock $stock'}',
+              : 'Precio ${inventoryMoney(line.unitPriceMinor ?? 0, widget.profile)} · ${selected.isUnlimited ? 'Servicio · Disponibilidad ilimitada' : 'Stock $stock'}',
         ),
         onChanged: _productChanged,
         textInputAction: TextInputAction.done,

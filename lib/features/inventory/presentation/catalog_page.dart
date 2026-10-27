@@ -1,3 +1,5 @@
+import '../../../core/presentation/grouped_number_formatter.dart';
+import 'stock_adjustment_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -23,10 +25,11 @@ class CatalogPage extends StatefulWidget {
   final Future<void> Function(String)? onDeactivateEvent;
 
   @override
-  State<CatalogPage> createState() => _CatalogPageState();
+  State<CatalogPage> createState() => CatalogPageState();
 }
 
-class _CatalogPageState extends State<CatalogPage> {
+class CatalogPageState extends State<CatalogPage> {
+  bool _adjustmentOpen = false;
   final _search = TextEditingController();
   String _query = '';
   String? _categoryId;
@@ -104,6 +107,45 @@ class _CatalogPageState extends State<CatalogPage> {
     }
   }
 
+  Future<void> openStockAdjustment() async {
+    if (_adjustmentOpen || !mounted || widget.controller.busy) return;
+    if (_showReference ||
+        widget.controller.snapshot == null ||
+        widget.controller.adjustments == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Selecciona el catálogo operativo de esta app para descontar unidades.',
+          ),
+        ),
+      );
+      return;
+    }
+    _adjustmentOpen = true;
+    try {
+      final done = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => StockAdjustmentDialog(
+          controller: widget.controller,
+          store: widget.controller.adjustments!,
+        ),
+      );
+      await widget.controller.load();
+      if (done == true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unidades descontadas. No se registró una venta ni se movió dinero.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      _adjustmentOpen = false;
+    }
+  }
+
   Future<void> _refresh() async {
     await Future.wait([widget.controller.load(), _loadReference()]);
   }
@@ -137,7 +179,7 @@ class _CatalogPageState extends State<CatalogPage> {
             title: 'Catálogo',
             subtitle: showingReference
                 ? 'Consulta el inventario guardado en la copia.'
-                : 'Filtra productos por categoría o proveedor. Ingresa mercancía desde Compras y crea eventos desde Eventos.',
+                : 'Filtra por categoría o proveedor. Ctrl+D para descontar unidades. Ingresa mercancía desde Compras y crea eventos desde Eventos.',
             busy: controller.busy || _referenceLoading,
             onRefresh: _refresh,
           ),
@@ -196,27 +238,7 @@ class _CatalogPageState extends State<CatalogPage> {
                 const Center(child: CircularProgressIndicator())
               else
                 const Text('La información del catálogo no está disponible.')
-            else ...[
-              _filters(data),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: 320,
-                child: TextField(
-                  key: const Key('catalog-search'),
-                  controller: _search,
-                  decoration: const InputDecoration(
-                    labelText: 'Buscar por nombre o SKU',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onChanged: (value) => setState(() {
-                    _query = value.trim().toLowerCase();
-                    _page = 0;
-                  }),
-                ),
-              ),
-              const SizedBox(height: 20),
-              _products(data),
-            ],
+            else ...[_stockContent(data)],
           ],
         ],
       );
@@ -494,11 +516,96 @@ class _CatalogPageState extends State<CatalogPage> {
     );
   }
 
+  Widget _stockContent(InventorySnapshot data) {
+    final positions = {for (final p in data.stock) p.productId: p.quantity};
+    final total = data.products
+        .where((p) => !p.isUnlimited && (positions[p.id] ?? 0) > 0)
+        .fold(
+          BigInt.zero,
+          (sum, p) =>
+              sum +
+              BigInt.from(positions[p.id] ?? 0) * BigInt.from(p.listPriceMinor),
+        );
+    final scale = widget.profile.moneyScale,
+        factor = BigInt.from(10).pow(scale);
+    final amount =
+        '${widget.profile.currencyCode} ${GroupedNumberFormatter.format((total ~/ factor).toString())}${scale == 0 ? '' : ',${(total % factor).toString().padLeft(scale, '0')}'}';
+    final summary = Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Valor estimado del inventario',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              amount,
+              key: const Key('catalog-retail-value'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Unidades × PVP de todo el catálogo físico con existencias. No incluye servicios ni eventos; no cambia con los filtros ni la página.',
+            ),
+          ],
+        ),
+      ),
+    );
+    final controls = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _filters(data),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: 320,
+          child: TextField(
+            key: const Key('catalog-search'),
+            controller: _search,
+            decoration: const InputDecoration(
+              labelText: 'Buscar por nombre o SKU',
+              prefixIcon: Icon(Icons.search),
+            ),
+            onChanged: (value) => setState(() {
+              _query = value.trim().toLowerCase();
+              _page = 0;
+            }),
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) => constraints.maxWidth >= 900
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: controls),
+                    const SizedBox(width: 20),
+                    SizedBox(width: 240, child: summary),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [controls, summary],
+                ),
+        ),
+        const SizedBox(height: 20),
+        _products(data),
+      ],
+    );
+  }
+
   Widget _products(InventorySnapshot data) {
     final positions = {for (final stock in data.stock) stock.productId: stock};
     final available = data.products
         .where(
-          (item) => item.isEvent
+          (item) => item.isUnlimited
               ? item.isActive
               : (positions[item.id]?.quantity ?? 0) > 0,
         )
@@ -602,13 +709,13 @@ class _CatalogPageState extends State<CatalogPage> {
                       ),
                       DataCell(
                         Text(
-                          product.isEvent
-                              ? 'No aplica'
+                          product.isUnlimited
+                              ? 'Ilimitado'
                               : '${positions[product.id]?.quantity ?? 0}',
                         ),
                       ),
                       _supplierCell(
-                        product.isEvent
+                        product.isUnlimited
                             ? 'No aplica'
                             : supplierNames(product.id),
                       ),

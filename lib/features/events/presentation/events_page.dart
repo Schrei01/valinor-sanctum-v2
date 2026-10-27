@@ -137,7 +137,9 @@ class _EventsPageState extends State<EventsPage> {
       };
       final products =
           data?.inventory.products
-              .where((p) => p.isActive && !p.isEvent && (stock[p.id] ?? 0) > 0)
+              .where(
+                (p) => p.isActive && !p.isUnlimited && (stock[p.id] ?? 0) > 0,
+              )
               .toList() ??
           <CatalogProduct>[];
       return Column(

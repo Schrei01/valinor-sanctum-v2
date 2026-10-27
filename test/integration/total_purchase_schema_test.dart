@@ -10,6 +10,7 @@ import 'package:valinor_sanctum_2/features/stock_intake/data/sqlite_stock_intake
 import 'package:valinor_sanctum_2/features/stock_intake/domain/stock_intake_store.dart';
 import 'package:valinor_sanctum_2/features/workspace/data/sqlite_workspace_store.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
+import '../support/released_v15_fixture.dart';
 
 Future<Map<String, List<Map<String, Object?>>>> rows(
   DatabaseExecutor db,
@@ -68,6 +69,7 @@ Future<Database> releasedV14Fixture(String path) async {
   );
   await db.execute('PRAGMA foreign_keys=ON');
   await db.transaction((txn) async {
+    await restoreReleasedV15ForFixture(txn);
     await txn.execute('DROP TRIGGER catalog_price_history_created');
     await txn.execute('DROP TRIGGER catalog_price_history_changed');
     await txn.execute('DROP TABLE product_price_history');
@@ -150,7 +152,10 @@ void main() {
       await old.close();
       var app = await AppDatabase.open(path: path);
       try {
-        expect((await app.readHealth())['schemaVersion'], 15);
+        expect(
+          (await app.readHealth())['schemaVersion'],
+          AppDatabase.schemaVersion,
+        );
         final after = await rows(app.database);
         for (final table in before.keys) {
           expect(

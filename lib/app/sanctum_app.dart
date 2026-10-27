@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'dart:async';
 import '../features/events/application/events_controller.dart';
 import '../features/events/presentation/events_page.dart';
@@ -70,6 +71,7 @@ class _WorkspaceShell extends StatefulWidget {
 class _WorkspaceShellState extends State<_WorkspaceShell> {
   int _section = 2;
   InventoryController? _inventory;
+  GlobalKey<CatalogPageState> _catalogKey = GlobalKey<CatalogPageState>();
   DebtorsController? _debtors;
   ReportsController? _reports;
   SupplierPaymentsController? _supplierPayments;
@@ -84,6 +86,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleCatalogShortcut);
     _exitListener = AppLifecycleListener(
       onExitRequested: () async {
         final saved = await _quickSales?.flushAll() ?? true;
@@ -100,6 +103,26 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
         return AppExitResponse.cancel;
       },
     );
+  }
+
+  bool _handleCatalogShortcut(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    if (!mounted ||
+        _section != 0 ||
+        widget.controller.profile == null ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.keyD ||
+        !keyboard.isControlPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isShiftPressed) {
+      return false;
+    }
+    unawaited(
+      _catalogKey.currentState?.openStockAdjustment() ?? Future<void>.value(),
+    );
+    return true;
   }
 
   void _selectSection(int index) {
@@ -127,6 +150,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleCatalogShortcut);
     _exitListener.dispose();
     _inventory?.dispose();
     _debtors?.dispose();
@@ -157,6 +181,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
       if (!identical(_inventory?.store, store)) {
         _inventory?.dispose();
         _inventory = store == null ? null : InventoryController(store: store);
+        _catalogKey = GlobalKey<CatalogPageState>();
       }
       if (_inventory != null &&
           controller.profile != null &&
@@ -343,7 +368,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                 _inventory == null
                                     ? const _ModuleUnavailable()
                                     : CatalogPage(
-                                        key: ObjectKey(_inventory),
+                                        key: _catalogKey,
                                         controller: _inventory!,
                                         profile: controller.profile!,
                                         referenceStore:
@@ -624,7 +649,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.21.0',
+                    'Versión 0.23.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

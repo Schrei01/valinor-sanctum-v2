@@ -40,7 +40,7 @@ class SqliteSalesStore implements SalesStore {
       orderBy: 'prepared_at_utc, command_id',
     );
     final products = await txn.rawQuery('''
-SELECT c.*, EXISTS(SELECT 1 FROM events WHERE product_id=c.id) is_event FROM catalog_items c
+SELECT c.*, EXISTS(SELECT 1 FROM events WHERE product_id=c.id) is_event, EXISTS(SELECT 1 FROM catalog_services WHERE product_id=c.id) is_service FROM catalog_items c
 LEFT JOIN categories k ON k.id = c.category_id
 WHERE c.is_active = 1 AND (c.category_id IS NULL OR k.is_active = 1)
 ORDER BY c.name COLLATE NOCASE, c.id
@@ -115,6 +115,7 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
           .map(
             (row) => CatalogProduct(
               isEvent: row['is_event'] == 1,
+              isService: row['is_service'] == 1,
               id: row['id'] as String,
               name: row['name'] as String,
               sku: row['sku'] as String?,
@@ -495,6 +496,15 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
         where: 'product_id=?',
         whereArgs: [line.productId],
       );
+      final service = await txn.query(
+        'catalog_services',
+        where: 'product_id=?',
+        whereArgs: [line.productId],
+      );
+      if (service.isNotEmpty) {
+        planned.add(_PlannedLine(line, product['name'] as String, 0, []));
+        continue;
+      }
       if (event.isNotEmpty) {
         final origin = (await txn.query(
           'business_documents',
@@ -902,6 +912,12 @@ SELECT allocation.id, NULL, allocation.sequence, allocation.quantity, allocation
  coalesce(allocation.cost_layer_id,allocation.opening_item_id)
 FROM event_cost_allocations allocation JOIN event_products part ON part.id=allocation.event_product_id
 JOIN business_documents d ON d.id=part.event_id AND d.status='posted'
+JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
+UNION ALL SELECT allocation.id,NULL,allocation.sequence,allocation.quantity,allocation.cost_minor,
+CASE WHEN allocation.cost_layer_id IS NULL THEN 'opening' ELSE 'purchase' END,
+coalesce(allocation.cost_layer_id,allocation.opening_item_id)
+FROM stock_adjustment_allocations allocation JOIN stock_adjustments part ON part.id=allocation.adjustment_id
+JOIN business_documents d ON d.id=part.document_id AND d.status='posted'
 JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
 ''');
     final consumed = <(String, String), _Totals>{};

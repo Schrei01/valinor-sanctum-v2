@@ -1,5 +1,8 @@
 import 'dart:math';
 
+bool isDayPassName(String name) =>
+    name.trim().toLowerCase().replaceAll('í', 'i') == 'pasadia';
+
 /// Immutable catalog and receipt data. Monetary fields use the profile's minor
 /// unit; the adapter validates their range and profile before persisting.
 class InventoryCategory {
@@ -33,6 +36,7 @@ class CatalogProduct {
     required this.listPriceMinor,
     this.isActive = true,
     this.isEvent = false,
+    this.isService = false,
   });
   final String id;
   final String name;
@@ -41,6 +45,8 @@ class CatalogProduct {
   final int listPriceMinor;
   final bool isActive;
   final bool isEvent;
+  final bool isService;
+  bool get isUnlimited => isEvent || isService;
 }
 
 class StockPosition {

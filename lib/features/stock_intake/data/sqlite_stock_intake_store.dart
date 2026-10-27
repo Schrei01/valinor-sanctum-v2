@@ -132,7 +132,7 @@ ORDER BY r.occurred_at_utc DESC,e.request_id
             .where((c) => _allowedCategory(c.name))
             .toList(),
         suppliers: inventory.suppliers,
-        products: inventory.products.where((p) => !p.isEvent).toList(),
+        products: inventory.products.where((p) => !p.isUnlimited).toList(),
         stock: inventory.stock,
         productDefaults: await _productDefaults(txn),
         paymentOptions: paymentOptions,
@@ -244,6 +244,7 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
         txn,
         command.productId,
         input['expectedProduct'] as Map<String, Object?>?,
+        name: command.productName,
       );
       final category = await _category(txn, command.categoryId);
       await _checkSku(txn, input['sku'] as String?, command.productId);
@@ -379,7 +380,12 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
     }
     final expected = (payload['expectedProduct'] as Map?)
         ?.cast<String, Object?>();
-    await _checkProduct(txn, command.productId, expected);
+    await _checkProduct(
+      txn,
+      command.productId,
+      expected,
+      name: command.productName,
+    );
     await _checkSku(txn, command.sku, command.productId);
     final category = await _category(txn, command.categoryId);
     if (category['name'] != payload['categoryName']) {
@@ -667,8 +673,19 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
   static Future<void> _checkProduct(
     DatabaseExecutor txn,
     String id,
-    Map<String, Object?>? expected,
-  ) async {
+    Map<String, Object?>? expected, {
+    String? name,
+  }) async {
+    if (isDayPassName(name ?? '') ||
+        (await txn.query(
+          'catalog_services',
+          where: 'product_id=?',
+          whereArgs: [id],
+        )).isNotEmpty) {
+      throw const StockIntakeValidationException(
+        'Pasadía es un servicio ilimitado; se vende desde Ventas.',
+      );
+    }
     final rows = await txn.query(
       'catalog_items',
       where: 'id=?',

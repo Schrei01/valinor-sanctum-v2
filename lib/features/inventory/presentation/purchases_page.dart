@@ -569,7 +569,9 @@ class _PurchasesPageState extends State<PurchasesPage> {
             labelText: 'Nombre del producto',
             hintText: 'Nuevo producto o buscar por nombre / SKU',
           ),
-          validator: inventoryNameError,
+          validator: (value) => isDayPassName(value ?? '')
+              ? 'Pasadía es un servicio ilimitado; se vende desde Ventas.'
+              : inventoryNameError(value),
           onFieldSubmitted: (_) => submit(),
           onChanged: (value) {
             if (_existing != null && value != _existing!.name) {

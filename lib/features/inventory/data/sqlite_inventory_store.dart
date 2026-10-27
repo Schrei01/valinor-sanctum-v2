@@ -1,3 +1,5 @@
+import '../domain/stock_adjustment_store.dart';
+import 'sqlite_stock_adjustment_store.dart';
 import 'dart:convert';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -9,10 +11,25 @@ import '../../workspace/domain/business_profile.dart';
 import '../domain/inventory_store.dart';
 
 /// Catalog edits never rewrite the snapshots or immutable receipt facts.
-class SqliteInventoryStore implements InventoryStore {
+class SqliteInventoryStore implements InventoryStore, StockAdjustmentStore {
   SqliteInventoryStore(this._database, {this.synthetic = false});
   final AppDatabase _database;
   final bool synthetic;
+
+  StockAdjustmentStore get _adjustments =>
+      SqliteStockAdjustmentStore(_database, synthetic: synthetic);
+  @override
+  Future<List<StockAdjustmentCommand>> pendingAdjustments() =>
+      _adjustments.pendingAdjustments();
+  @override
+  Future<void> prepareAdjustment(StockAdjustmentCommand command) =>
+      _adjustments.prepareAdjustment(command);
+  @override
+  Future<void> confirmAdjustment(String id) =>
+      _adjustments.confirmAdjustment(id);
+  @override
+  Future<void> discardAdjustment(String id) =>
+      _adjustments.discardAdjustment(id);
 
   static const _operatorId = 'system:local-operator';
   static const _inventoryAccountId = 'system:inventory';
@@ -33,7 +50,7 @@ class SqliteInventoryStore implements InventoryStore {
       orderBy: 'name COLLATE NOCASE, id',
     );
     final products = await txn.rawQuery(
-      'SELECT product.*, EXISTS(SELECT 1 FROM events WHERE product_id=product.id) is_event FROM catalog_items product ORDER BY name COLLATE NOCASE,id',
+      'SELECT product.*, EXISTS(SELECT 1 FROM events WHERE product_id=product.id) is_event, EXISTS(SELECT 1 FROM catalog_services WHERE product_id=product.id) is_service FROM catalog_items product ORDER BY name COLLATE NOCASE,id',
     );
     final stock = await _stock(txn);
     final supplierLinks = await txn.rawQuery('''
@@ -118,6 +135,7 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
           .map(
             (r) => CatalogProduct(
               isEvent: r['is_event'] == 1,
+              isService: r['is_service'] == 1,
               id: r['id'] as String,
               name: r['name'] as String,
               sku: r['sku'] as String?,
@@ -706,6 +724,9 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
 UNION ALL
 SELECT part.product_id,part.quantity,part.cost_minor FROM event_products part
 JOIN business_documents d ON d.id=part.event_id AND d.status='posted'
+JOIN journal_entries j ON j.document_id=d.id AND j.status='posted'
+UNION ALL SELECT part.product_id,part.quantity,part.cost_minor FROM stock_adjustments part
+JOIN business_documents d ON d.id=part.document_id AND d.status='posted'
 JOIN journal_entries j ON j.document_id=d.id AND j.status='posted'
 ''');
     for (final row in outflows) {

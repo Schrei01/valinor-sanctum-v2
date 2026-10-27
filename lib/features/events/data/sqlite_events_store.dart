@@ -422,7 +422,7 @@ ORDER BY document.occurred_at_utc DESC,document.id''',
       final products = await txn.rawQuery(
         '''SELECT product.* FROM catalog_items product LEFT JOIN categories category ON category.id=product.category_id
 WHERE product.id=? AND product.is_active=1 AND (product.category_id IS NULL OR category.is_active=1)
-AND NOT EXISTS(SELECT 1 FROM events WHERE product_id=product.id)''',
+AND NOT EXISTS(SELECT 1 FROM events WHERE product_id=product.id) AND NOT EXISTS(SELECT 1 FROM catalog_services WHERE product_id=product.id)''',
         [input.productId],
       );
       if (products.length != 1) {

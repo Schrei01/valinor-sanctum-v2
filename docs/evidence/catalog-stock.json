@@ -1,0 +1,127 @@
+{
+  "version": "0.23.0+36",
+  "date": "2026-10-27",
+  "timezone": "America/Bogota",
+  "schemaVersion": 16,
+  "requirements": {
+    "retailValue": "sum(physical available units * current PVP)",
+    "valueScope": "all stocked physical catalog items including archived; independent of filters and page",
+    "exactBigIntAggregate": true,
+    "excludeUnlimitedFromValuation": true,
+    "shortcut": "Ctrl+D",
+    "shortcutScope": "Catalog only; also works without search focus",
+    "decrementToZero": true,
+    "hideExhaustedPhysicalProducts": true,
+    "noncashWriteoffs": true,
+    "unlimitedDayPassSelection": "Only exact Pasadía; other named variants unchanged",
+    "dayPassExcludedFromPurchases": true,
+    "dayPassSalesQuantitiesInReports": true
+  },
+  "validation": {
+    "fullSuite": {
+      "passed": 739,
+      "skipped": 3,
+      "skipReason": "Existing Windows symlink-permission tests"
+    },
+    "newCases": 17,
+    "analysis": "No issues found",
+    "syntheticRenderTestsPassed": 1,
+    "renderImagesInspected": [
+      "catalog-value",
+      "adjustment-dialog",
+      "catalog-narrow"
+    ],
+    "covered": [
+      "FIFO exact cost and zero cost",
+      "exhaustion and later sale/event consumption",
+      "unknown result replay",
+      "persistent reopen recovery",
+      "concurrent requests cannot oversell",
+      "rollback after late failure",
+      "immutable facts",
+      "chronology",
+      "exact service classification",
+      "unlimited service sold quantities reported",
+      "v15 rows/checksums and backup preserved",
+      "unsafe nonzero-cost conversion rejects without changing old database",
+      "shortcut confined to Catalog and modal-safe",
+      "search/page-independent valuation",
+      "aggregate above int64"
+    ],
+    "nativeBusinessTestOperations": false,
+    "nativeGuiTraversal": false
+  },
+  "candidate": {
+    "label": "candidate",
+    "schemaVersion": 16,
+    "tables": 68,
+    "priorTablesPreserved": true,
+    "priorMigrationRowsPreserved": true,
+    "serviceRows": 1,
+    "adjustmentRows": 0,
+    "preparedAdjustmentRows": 0,
+    "integrity": "ok",
+    "foreignKeys": 0,
+    "audit": {
+      "schemaVersion": 16,
+      "integrityOk": true,
+      "foreignKeyViolations": 0,
+      "serviceCount": 1,
+      "dayPassAvailableUnlimited": true,
+      "dayPassExcludedFromPurchases": true,
+      "otherProductsUnchangedClassification": true,
+      "adjustmentsCreated": 0
+    }
+  },
+  "active": {
+    "label": "active",
+    "schemaVersion": 16,
+    "tables": 68,
+    "priorTablesPreserved": true,
+    "priorMigrationRowsPreserved": true,
+    "serviceRows": 1,
+    "adjustmentRows": 0,
+    "preparedAdjustmentRows": 0,
+    "integrity": "ok",
+    "foreignKeys": 0,
+    "audit": {
+      "schemaVersion": 16,
+      "integrityOk": true,
+      "foreignKeyViolations": 0,
+      "serviceCount": 1,
+      "dayPassAvailableUnlimited": true,
+      "dayPassExcludedFromPurchases": true,
+      "otherProductsUnchangedClassification": true,
+      "adjustmentsCreated": 0
+    },
+    "manualBackupVerified": true,
+    "backupDirectory": "backups/catalog-stock-20261027",
+    "automaticV15BackupVerifiedByAppDatabase": true,
+    "migratedWithAppClosed": true,
+    "conservationRecheckedAfterLaunch": true,
+    "noSyntheticSalesOrAdjustmentsOnActive": true,
+    "originalPosAndSourceCopyUntouched": true
+  },
+  "distribution": {
+    "version": "0.23.0+36",
+    "files": 17,
+    "archiveBytes": 15072594,
+    "archiveSha256": "22BAFD3FED8984F651040D1D61FFABC768B4DCFC7C6E3E9DD53EF4FE5DA0AF31",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
+    "privateDataExcluded": true,
+    "published": true,
+    "executableVersionVerified": "0.23.0+36",
+    "visibleFooter": "0.23.0",
+    "priorVersionsRemoved": true,
+    "applicationLeftRunning": true,
+    "processResponding": true,
+    "windowTitle": "Valinor Sanctum 2.0"
+  },
+  "limitations": [
+    "Only stock decreases; no increase or reversal workflow added",
+    "Writeoff records are stored in the database; no history browser added",
+    "Unlimited services and events are excluded from physical inventory valuation",
+    "Native UI not traversed; synthetic full-app renders inspected"
+  ]
+}
