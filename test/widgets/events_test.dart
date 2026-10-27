@@ -230,7 +230,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('event-name')), findsOneWidget);
     expect(store.loads, 1);
-    await tester.tap(find.text('Inicio'));
+    await tester.tap(find.text('Catálogo'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Eventos'));
     await tester.pumpAndSettle();

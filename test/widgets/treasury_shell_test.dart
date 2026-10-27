@@ -73,7 +73,7 @@ void main() {
       tester.widget<Text>(find.byKey(const Key('treasury-amount-total'))).data,
       'COP 150,00',
     );
-    await tester.tap(find.text('Inicio'));
+    await tester.tap(find.text('Catálogo'));
     await tester.pumpAndSettle();
     treasury.snapshot = snapshot(20000);
     final previousLoads = treasury.loadCalls;

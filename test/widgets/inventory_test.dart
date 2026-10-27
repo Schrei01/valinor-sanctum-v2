@@ -106,25 +106,30 @@ void main() {
   testWidgets(
     'catalog requires configured profile and narrow navigation is usable',
     (tester) async {
-      await open(
+      final controller = await open(
         tester,
         FakeInventoryStore(),
         configured: false,
         size: const Size(400, 900),
       );
+      expect(find.text('Catálogo'), findsNothing);
+      expect(find.text('Compras'), findsNothing);
+      expect(find.byKey(const Key('business-name')), findsOneWidget);
+      expect(find.byKey(const Key('catalog-create')), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('business-name')),
+        'Ludoteca sintética',
+      );
+      await tester.tap(find.byKey(const Key('create-profile')));
+      await tester.pumpAndSettle();
+      expect(controller.profile!.moneyScale, 0);
       await tester.tap(find.text('Catálogo'));
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('Primero configura tu espacio'),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('catalog-create')), findsNothing);
+      expect(find.text('Catálogo'), findsNWidgets(2));
       await tester.tap(find.text('Compras'));
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('Primero configura tu espacio'),
-        findsOneWidget,
-      );
+      expect(find.text('Inicio'), findsNothing);
+      expect(find.text('Sistema'), findsNothing);
       expect(find.byKey(const Key('receive-purchase')), findsNothing);
       expect(tester.takeException(), isNull);
     },

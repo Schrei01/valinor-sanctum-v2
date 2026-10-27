@@ -448,7 +448,7 @@ void main() {
         );
       await open(tester, fake, size: const Size(400, 900));
       await fill(tester, '40,00');
-      await tap(tester, find.text('Sistema'));
+      await tap(tester, find.text('Catálogo'));
       await tap(tester, find.text('Tesorería'));
       expect(
         tester

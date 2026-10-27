@@ -89,7 +89,10 @@ Valinor Sanctum 2.0 - Versión de desarrollo
 
 Extrae la carpeta completa y abre valinor_sanctum_2.exe.
 Conserva las DLL y la carpeta data junto al ejecutable.
-Configura tu perfil. En Compras ingresa nombre, costo unitario, PVP, proveedor,
+La app abre en Ventas. El menú contiene Catálogo, Compras, Ventas, Deudores,
+Tesorería, Eventos y Reportes. Si el espacio es nuevo, indica solo su nombre:
+COP con 0 decimales y hora de Bogotá quedan fijos, sin selector de precisión.
+En Compras ingresa nombre, costo unitario, PVP, proveedor,
 categoría Comestible o Artículo, SKU opcional y cantidad. Puedes crear el producto o reponer uno existente.
 Al elegir un producto se completan SKU, categoría, PVP, proveedor y último costo
 conocido. Puedes modificarlos antes de ingresar la compra; completa la cantidad.

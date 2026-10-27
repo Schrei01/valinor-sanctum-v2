@@ -1,0 +1,44 @@
+{
+  "version": "0.18.1+28",
+  "dateBogota": "2026-10-26",
+  "schemaVersion": 14,
+  "schemaMigration": false,
+  "navigation": {
+    "homeRemoved": true,
+    "systemRemoved": true,
+    "commercialSections": 7,
+    "startup": "Ventas",
+    "newProfileScale": 0,
+    "scaleSelectorRemoved": true,
+    "existingStoredScalesPreserved": true
+  },
+  "verification": {
+    "focusedPassed": 26,
+    "broadPassed": 127,
+    "broadFailedObsoleteSetupExpectation": 1,
+    "obsoleteExpectationCorrected": true,
+    "finalPassed": 4,
+    "finalApplicationCases": 3,
+    "finalSyntheticRenderCases": 1,
+    "distinctApplicationCasesPassedAcrossRuns": 128,
+    "fullFinancialSuiteRepeated": false,
+    "analyze": "No issues found",
+    "dartFormatFiles": 11,
+    "activeTablesRowsAndSchemaUnchanged": 63,
+    "activeMoneyScale": 0,
+    "integrity": "ok",
+    "foreignKeyViolations": 0,
+    "nativeUiTraversal": false
+  },
+  "delivery": {
+    "releaseBuild": true,
+    "sanctumOverrides": false,
+    "files": 17,
+    "archiveBytes": 15004344,
+    "archiveSha256": "8D2E1D52DCCD6DB7F46E307294D00993B7848F880F00F6296C3E8C02416809B3",
+    "stableVersionedArchiveMatch": true,
+    "privateDataExcluded": true,
+    "oldDistributionsRemoved": true,
+    "appLeftOpen": false
+  }
+}

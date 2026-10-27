@@ -79,10 +79,7 @@ class WorkspaceController extends ChangeNotifier {
     }
   }
 
-  Future<bool> createProfile({
-    required String businessName,
-    required int moneyScale,
-  }) async {
+  Future<bool> createProfile({required String businessName}) async {
     if (busy || state != WorkspaceState.ready || profile != null) return false;
     final session = _session!;
     busy = true;
@@ -94,7 +91,7 @@ class WorkspaceController extends ChangeNotifier {
         profileId: session.profileId,
         businessName: businessName,
         currencyCode: 'COP',
-        moneyScale: moneyScale,
+        moneyScale: 0,
         timezone: 'America/Bogota',
         createdAtUtc: DateTime.now().toUtc(),
       );

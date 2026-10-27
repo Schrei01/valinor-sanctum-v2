@@ -4,7 +4,7 @@ class BusinessProfile {
     required this.profileId,
     required String businessName,
     required this.currencyCode,
-    required this.moneyScale,
+    this.moneyScale = 0,
     required this.timezone,
     required this.createdAtUtc,
   }) : businessName = businessName.trim() {

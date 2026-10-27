@@ -34,10 +34,7 @@ void main() {
       );
       await controller.initialize();
       expect(
-        await controller.createProfile(
-          businessName: 'Ludoteca sintética',
-          moneyScale: 2,
-        ),
+        await controller.createProfile(businessName: 'Ludoteca sintética'),
         isFalse,
       );
       expect(store.profile, isNotNull);
@@ -48,6 +45,7 @@ void main() {
       await controller.initialize();
       expect(controller.state, WorkspaceState.ready);
       expect(controller.profile!.businessName, 'Ludoteca sintética');
+      expect(controller.profile!.moneyScale, 0);
       expect(store.saves, 1);
       controller.dispose();
     },
@@ -63,15 +61,11 @@ void main() {
       await controller.initialize();
       final saving = controller.createProfile(
         businessName: 'Ludoteca sintética',
-        moneyScale: 2,
       );
       expect(controller.busy, isTrue);
       expect(controller.profile, isNull);
       expect(
-        await controller.createProfile(
-          businessName: 'Duplicado',
-          moneyScale: 0,
-        ),
+        await controller.createProfile(businessName: 'Duplicado'),
         isFalse,
       );
       store.saveGate!.complete();
@@ -89,18 +83,12 @@ void main() {
       openSession: () async => fakeSession(store),
     );
     await controller.initialize();
-    expect(
-      await controller.createProfile(businessName: 'Prueba', moneyScale: 2),
-      isFalse,
-    );
+    expect(await controller.createProfile(businessName: 'Prueba'), isFalse);
     expect(controller.profile, isNull);
     expect(controller.error, contains('Fallo sintético'));
     expect(controller.busy, isFalse);
     store.saveFailure = null;
-    expect(
-      await controller.createProfile(businessName: 'Prueba', moneyScale: 2),
-      isTrue,
-    );
+    expect(await controller.createProfile(businessName: 'Prueba'), isTrue);
     expect(controller.error, isNull);
     controller.dispose();
   });
@@ -135,10 +123,7 @@ void main() {
         expect(controller.busy, isFalse);
         expect(store.closes, 1);
         expect(
-          await controller.createProfile(
-            businessName: 'Ludoteca sintética',
-            moneyScale: 2,
-          ),
+          await controller.createProfile(businessName: 'Ludoteca sintética'),
           isFalse,
         );
         expect(store.saves, 0);

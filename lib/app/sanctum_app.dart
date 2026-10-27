@@ -24,7 +24,6 @@ const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
 const _paper = Color(0xFFF5F5F0);
 const _destinations = [
-  (Icons.home_outlined, 'Inicio'),
   (Icons.inventory_2_outlined, 'Catálogo'),
   (Icons.local_shipping_outlined, 'Compras'),
   (Icons.point_of_sale_outlined, 'Ventas'),
@@ -32,7 +31,6 @@ const _destinations = [
   (Icons.account_balance_outlined, 'Tesorería'),
   (Icons.event_outlined, 'Eventos'),
   (Icons.bar_chart_outlined, 'Reportes'),
-  (Icons.settings_outlined, 'Sistema'),
 ];
 
 class SanctumApp extends StatelessWidget {
@@ -70,7 +68,7 @@ class _WorkspaceShell extends StatefulWidget {
 }
 
 class _WorkspaceShellState extends State<_WorkspaceShell> {
-  int _section = 0;
+  int _section = 2;
   InventoryController? _inventory;
   DebtorsController? _debtors;
   ReportsController? _reports;
@@ -107,13 +105,13 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   void _selectSection(int index) {
     setState(() => _section = index);
     if (widget.controller.profile == null) return;
-    if (index == 1) unawaited(_inventory?.load());
-    if (index == 2) unawaited(_stockIntake?.load());
-    if (index == 3) unawaited(_quickSales?.load());
-    if (index == 4) unawaited(_debtors?.load());
-    if (index == 6) unawaited(_events?.load());
-    if (index == 7) unawaited(_reports?.load());
-    if (index == 5) {
+    if (index == 0) unawaited(_inventory?.load());
+    if (index == 1) unawaited(_stockIntake?.load());
+    if (index == 2) unawaited(_quickSales?.load());
+    if (index == 3) unawaited(_debtors?.load());
+    if (index == 5) unawaited(_events?.load());
+    if (index == 6) unawaited(_reports?.load());
+    if (index == 4) {
       unawaited(_treasury?.load());
       unawaited(_treasuryOperations?.load());
       unawaited(_supplierPayments?.load());
@@ -124,7 +122,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     final confirming = _supplierPayments?.confirming ?? false;
     final completed = _supplierWasConfirming && !confirming;
     _supplierWasConfirming = confirming;
-    if (completed && _section == 5) unawaited(_treasury?.load());
+    if (completed && _section == 4) unawaited(_treasury?.load());
   }
 
   @override
@@ -310,6 +308,13 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
           ),
         );
       }
+      if (controller.profile == null) {
+        return Scaffold(
+          body: SafeArea(
+            child: _scrollPage(_ProfileForm(controller: controller), false),
+          ),
+        );
+      }
       return LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 840;
@@ -334,11 +339,8 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                             index: _section,
                             alignment: Alignment.topCenter,
                             children: [
-                              _scrollPage(_Home(controller: controller), wide),
                               _scrollPage(
-                                controller.profile == null
-                                    ? const _ConfigureFirst()
-                                    : _inventory == null
+                                _inventory == null
                                     ? const _ModuleUnavailable()
                                     : CatalogPage(
                                         key: ObjectKey(_inventory),
@@ -353,9 +355,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                 wide,
                               ),
                               _scrollPage(
-                                controller.profile == null
-                                    ? const _ConfigureFirst()
-                                    : _stockIntake == null
+                                _stockIntake == null
                                     ? const _ModuleUnavailable()
                                     : PurchasesPage(
                                         key: ObjectKey(_stockIntake),
@@ -364,16 +364,9 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                       ),
                                 wide,
                               ),
+                              _scrollPage(_salesContent(controller), wide),
                               _scrollPage(
-                                controller.profile == null
-                                    ? const _ConfigureFirst()
-                                    : _salesContent(controller),
-                                wide,
-                              ),
-                              _scrollPage(
-                                controller.profile == null
-                                    ? const _ConfigureFirst()
-                                    : _debtors == null
+                                _debtors == null
                                     ? const _ModuleUnavailable()
                                     : DebtorsPage(
                                         key: ObjectKey(_debtors),
@@ -383,9 +376,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                 wide,
                               ),
                               _scrollPage(
-                                controller.profile == null
-                                    ? const _ConfigureFirst()
-                                    : _treasury == null
+                                _treasury == null
                                     ? const _ModuleUnavailable()
                                     : TreasuryPage(
                                         key: ObjectKey(_treasury),
@@ -409,9 +400,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                 wide,
                               ),
                               _scrollPage(
-                                controller.profile == null
-                                    ? const _ConfigureFirst()
-                                    : _events == null
+                                _events == null
                                     ? const _ModuleUnavailable()
                                     : EventsPage(
                                         key: ObjectKey(_events),
@@ -421,19 +410,13 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                 wide,
                               ),
                               _scrollPage(
-                                controller.profile == null
-                                    ? const _ConfigureFirst()
-                                    : _reports == null
+                                _reports == null
                                     ? const _ModuleUnavailable()
                                     : ReportsPage(
                                         key: ObjectKey(_reports),
                                         controller: _reports!,
                                         profile: controller.profile!,
                                       ),
-                                wide,
-                              ),
-                              _scrollPage(
-                                _System(controller: controller),
                                 wide,
                               ),
                             ],
@@ -489,19 +472,6 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
       profile: controller.profile!,
     );
   }
-}
-
-class _ConfigureFirst extends StatelessWidget {
-  const _ConfigureFirst();
-  @override
-  Widget build(BuildContext context) => const Card(
-    child: Padding(
-      padding: EdgeInsets.all(28),
-      child: Text(
-        'Primero configura tu espacio de trabajo en Inicio para abrir catálogo, compras, ventas, deudores, tesorería, eventos y reportes.',
-      ),
-    ),
-  );
 }
 
 class _ModuleUnavailable extends StatelessWidget {
@@ -654,7 +624,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.18.0',
+                    'Versión 0.18.1',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -693,160 +663,6 @@ class _Header extends StatelessWidget {
   );
 }
 
-class _Home extends StatelessWidget {
-  const _Home({required this.controller});
-  final WorkspaceController controller;
-  @override
-  Widget build(BuildContext context) {
-    final profile = controller.profile;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _Eyebrow('ESPACIO DE TRABAJO'),
-        const SizedBox(height: 12),
-        Text(
-          profile == null ? 'Prepara tu ludoteca' : 'Tu espacio está preparado',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: _forest,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          profile == null
-              ? 'Configura la identidad y la precisión monetaria de este nuevo espacio.'
-              : 'La configuración se conserva en una base local independiente.',
-          style: const TextStyle(color: Color(0xFF65716A), height: 1.6),
-        ),
-        const SizedBox(height: 28),
-        if (profile == null)
-          _ProfileForm(controller: controller)
-        else
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(26),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.check_circle_outline,
-                    color: _forest,
-                    size: 32,
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    profile.businessName,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _Tag(
-                        text: profile.currencyCode,
-                        icon: Icons.payments_outlined,
-                      ),
-                      _Tag(
-                        text: '${profile.moneyScale} decimales',
-                        icon: Icons.calculate_outlined,
-                      ),
-                      const _Tag(text: 'Bogotá', icon: Icons.schedule_outlined),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Entra en Ventas para atender varias cuentas y registrar productos y formas de pago desde una sola pantalla.',
-                    style: TextStyle(color: Color(0xFF65716A)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        const SizedBox(height: 30),
-        const _Eyebrow('MÓDULOS'),
-        const SizedBox(height: 16),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 720 ? 2 : 1;
-            final width = (constraints.maxWidth - (columns - 1) * 16) / columns;
-            return Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: [
-                for (final module in [
-                  (
-                    Icons.inventory_2_outlined,
-                    'Catálogo e inventario',
-                    'Ingresa productos, costo, PVP y cantidades desde Compras, con pago de contado.',
-                    'Disponible',
-                  ),
-                  (
-                    Icons.point_of_sale_outlined,
-                    'Ventas de mostrador',
-                    'Varias cuentas, varias líneas y forma de pago por línea. Registrar venta guarda la entrega y el cobro.',
-                    'Disponible',
-                  ),
-                  (
-                    Icons.account_balance_wallet_outlined,
-                    'Caja y movimientos',
-                    'Gastos, transferencias y conciliación.',
-                    'Pendiente',
-                  ),
-                  (
-                    Icons.insights_outlined,
-                    'Saldos de Caja y Nequi',
-                    'Saldos iniciales y finales de Caja y Nequi.',
-                    'Disponible',
-                  ),
-                ])
-                  SizedBox(
-                    width: width,
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(22),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(module.$1, color: _forest),
-                            const SizedBox(height: 16),
-                            Text(
-                              module.$2,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              module.$3,
-                              style: const TextStyle(
-                                color: Color(0xFF65716A),
-                                height: 1.5,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              module.$4,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF65716A),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
 class _ProfileForm extends StatefulWidget {
   const _ProfileForm({required this.controller});
   final WorkspaceController controller;
@@ -857,7 +673,6 @@ class _ProfileForm extends StatefulWidget {
 class _ProfileFormState extends State<_ProfileForm> {
   final _key = GlobalKey<FormState>();
   final _name = TextEditingController();
-  int _scale = 2;
   @override
   void dispose() {
     _name.dispose();
@@ -893,32 +708,7 @@ class _ProfileFormState extends State<_ProfileForm> {
                   : null,
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<int>(
-              isExpanded: true,
-              key: const Key('money-scale'),
-              initialValue: _scale,
-              decoration: const InputDecoration(
-                labelText: 'Precisión para pesos colombianos (COP)',
-              ),
-              items: const [
-                DropdownMenuItem(
-                  value: 0,
-                  child: Text('Pesos enteros · 0 decimales'),
-                ),
-                DropdownMenuItem(
-                  value: 2,
-                  child: Text('Pesos y centavos · 2 decimales'),
-                ),
-              ],
-              onChanged: widget.controller.busy
-                  ? null
-                  : (value) => setState(() => _scale = value!),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'La precisión se fija antes de registrar operaciones. Zona horaria: Bogotá.',
-              style: TextStyle(color: Color(0xFF65716A), height: 1.5),
-            ),
+            const Text('COP · 0 decimales · Hora de Bogotá'),
             const SizedBox(height: 20),
             if (widget.controller.error != null)
               Padding(
@@ -936,7 +726,6 @@ class _ProfileFormState extends State<_ProfileForm> {
                       if (_key.currentState!.validate()) {
                         await widget.controller.createProfile(
                           businessName: _name.text,
-                          moneyScale: _scale,
                         );
                       }
                     },
@@ -961,136 +750,6 @@ class _ProfileFormState extends State<_ProfileForm> {
           ],
         ),
       ),
-    ),
-  );
-}
-
-class _System extends StatelessWidget {
-  const _System({required this.controller});
-  final WorkspaceController controller;
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const _Eyebrow('SISTEMA'),
-      const SizedBox(height: 12),
-      Text(
-        'Almacenamiento y diagnóstico',
-        style: Theme.of(
-          context,
-        ).textTheme.headlineMedium?.copyWith(color: _forest),
-      ),
-      const SizedBox(height: 12),
-      const Text(
-        'Comprueba el estado del archivo exclusivo de este espacio.',
-        style: TextStyle(color: Color(0xFF65716A)),
-      ),
-      const SizedBox(height: 28),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(26),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Perfil: ${controller.profileId}',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Ubicación de la base de datos',
-                style: TextStyle(color: Color(0xFF65716A)),
-              ),
-              const SizedBox(height: 8),
-              SelectableText(
-                controller.databasePath,
-                key: const Key('database-path'),
-              ),
-              const Divider(height: 36),
-              _HealthRow(
-                label: 'Integridad SQLite',
-                ok: controller.health['integrityOk'] == true,
-              ),
-              _HealthRow(
-                label: 'Relaciones protegidas',
-                ok: controller.health['foreignKeysEnabled'] == true,
-              ),
-              _HealthRow(
-                label: 'Esquema verificado',
-                ok: controller.health['schemaChecksumVerified'] == true,
-              ),
-              _HealthRow(
-                label: 'Migración verificada',
-                ok: controller.health['migrationChecksumVerified'] == true,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Versión del esquema: ${controller.health['schemaVersion'] ?? '—'}',
-              ),
-              const SizedBox(height: 24),
-              if (controller.error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    controller.error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              OutlinedButton.icon(
-                onPressed: controller.busy ? null : controller.verifyStorage,
-                icon: const Icon(Icons.verified_outlined),
-                label: Text(
-                  controller.busy ? 'Verificando…' : 'Volver a verificar',
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      const SizedBox(height: 24),
-      const Text(
-        'Entorno de desarrollo. Compras de contado con ingreso al catálogo e inventario, ventas de mostrador y saldos iniciales disponibles. Arqueo, usuarios e importación aún están pendientes.',
-        style: TextStyle(color: Color(0xFF65716A), height: 1.5),
-      ),
-    ],
-  );
-}
-
-class _HealthRow extends StatelessWidget {
-  const _HealthRow({required this.label, required this.ok});
-  final String label;
-  final bool ok;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Row(
-      children: [
-        Icon(
-          ok ? Icons.check_circle_outline : Icons.error_outline,
-          size: 21,
-          color: ok ? _forest : Theme.of(context).colorScheme.error,
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Text(label)),
-        Text(ok ? 'Correcto' : 'Revisar', style: const TextStyle(fontSize: 12)),
-      ],
-    ),
-  );
-}
-
-class _Eyebrow extends StatelessWidget {
-  const _Eyebrow(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: const TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 1.6,
-      color: Color(0xFF65716A),
     ),
   );
 }

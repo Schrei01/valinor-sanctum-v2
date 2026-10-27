@@ -33,7 +33,7 @@ class _ReportsSpy implements ReportsStore {
 
 void main() {
   testWidgets(
-    'Reportes loads on section entry and refreshes without replacing Ventas or Sistema',
+    'Reportes loads on section entry and refreshes without Inicio or Sistema entries',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(1280, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -64,17 +64,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(reports.loads, 1);
       expect(find.text('Reportes'), findsNWidgets(2));
-      await tester.ensureVisible(find.text('Inicio'));
-      await tester.tap(find.text('Inicio'));
+      await tester.ensureVisible(find.text('Catálogo'));
+      await tester.tap(find.text('Catálogo'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Reportes'));
       await tester.tap(find.text('Reportes'));
       await tester.pumpAndSettle();
       expect(reports.loads, 2);
-      await tester.ensureVisible(find.text('Sistema'));
-      await tester.tap(find.text('Sistema'));
+      await tester.ensureVisible(find.text('Catálogo'));
+      await tester.tap(find.text('Catálogo'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('database-path')), findsOneWidget);
+      expect(find.byKey(const Key('database-path')), findsNothing);
+      expect(find.text('Inicio'), findsNothing);
+      expect(find.text('Sistema'), findsNothing);
       expect(find.text('Ventas'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
