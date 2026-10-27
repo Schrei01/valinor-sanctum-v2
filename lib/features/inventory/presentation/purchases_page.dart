@@ -314,6 +314,20 @@ class _PurchasesPageState extends State<PurchasesPage> {
                         const SizedBox(height: 16),
                         _fields([
                           TextFormField(
+                            key: const Key('intake-quantity'),
+                            controller: _quantity,
+                            inputFormatters: [
+                              const GroupedNumberFormatter(integerOnly: true),
+                            ],
+                            enabled: !locked,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Unidades',
+                            ),
+                            validator: _quantityError,
+                            onChanged: (_) => setState(_suggest),
+                          ),
+                          TextFormField(
                             key: const Key('intake-cost'),
                             controller: _cost,
                             inputFormatters: [const GroupedNumberFormatter()],
@@ -337,20 +351,6 @@ class _PurchasesPageState extends State<PurchasesPage> {
                             validator: (value) =>
                                 inventoryAmountError(value, widget.profile),
                             onChanged: (_) => setState(() => _pvpManual = true),
-                          ),
-                          TextFormField(
-                            key: const Key('intake-quantity'),
-                            controller: _quantity,
-                            inputFormatters: [
-                              const GroupedNumberFormatter(integerOnly: true),
-                            ],
-                            enabled: !locked,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Cantidad',
-                            ),
-                            validator: _quantityError,
-                            onChanged: (_) => setState(_suggest),
                           ),
                         ]),
                         const SizedBox(height: 8),
@@ -463,23 +463,26 @@ class _PurchasesPageState extends State<PurchasesPage> {
                                     : 'Ingresar producto',
                               ),
                             ),
-                            OutlinedButton.icon(
-                              key: const Key('intake-opening'),
-                              onPressed:
-                                  locked ||
-                                      controller.loadError != null ||
-                                      !data.paymentOptions.any(
-                                        (item) =>
-                                            item.isActive &&
-                                            item.canRecordOpening,
-                                      )
-                                  ? null
-                                  : () => _opening(data),
-                              icon: const Icon(
-                                Icons.account_balance_wallet_outlined,
+                            if (data.paymentOptions.any(
+                              (item) => item.isActive && item.canRecordOpening,
+                            ))
+                              OutlinedButton.icon(
+                                key: const Key('intake-opening'),
+                                onPressed:
+                                    locked ||
+                                        controller.loadError != null ||
+                                        !data.paymentOptions.any(
+                                          (item) =>
+                                              item.isActive &&
+                                              item.canRecordOpening,
+                                        )
+                                    ? null
+                                    : () => _opening(data),
+                                icon: const Icon(
+                                  Icons.account_balance_wallet_outlined,
+                                ),
+                                label: const Text('Saldo inicial'),
                               ),
-                              label: const Text('Saldo inicial'),
-                            ),
                           ],
                         ),
                       ],

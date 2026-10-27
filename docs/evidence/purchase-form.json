@@ -1,0 +1,54 @@
+{
+  "version": "0.22.1+35",
+  "date": "2026-10-27",
+  "schemaVersion": 15,
+  "requirements": {
+    "fieldOrder": [
+      "Unidades",
+      "Costo total de las unidades",
+      "PVP unitario"
+    ],
+    "hideOpeningWhenNoAccountEligible": true,
+    "leaveApplicationRunning": true
+  },
+  "validation": {
+    "existingPurchaseWidgetTestsPassed": 11,
+    "analysis": "No issues found",
+    "nativeWindowDetected": true,
+    "processResponding": true,
+    "nativePurchaseNavigationVerified": false,
+    "nativeInputError": "coordinate input geometry is unavailable",
+    "nativeCaptureError": "FrameArrived timed out: timed out waiting on channel",
+    "previouslyExistingStaticFooterObserved": "Versión 0.21.0",
+    "executableVersionVerified": "0.22.1+35"
+  },
+  "data": {
+    "schemaVersion": 15,
+    "tables": 64,
+    "allRowsAndSchemaPreserved": true,
+    "integrity": "ok",
+    "foreignKeys": 0,
+    "backupVerified": true,
+    "backupDirectory": "backups/purchase-form-20261027",
+    "migrationRequired": false,
+    "originalUntouched": true,
+    "noSyntheticBusinessOperations": true,
+    "conservationCheckedAfterLaunch": true
+  },
+  "distribution": {
+    "version": "0.22.1+35",
+    "files": 17,
+    "archiveBytes": 15041988,
+    "archiveSha256": "0927C066BECF51041F35AAB498856CBD7C56EF75CACC2B17C25BAE82E9C8ECD7",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
+    "privateDataExcluded": true,
+    "published": true,
+    "oldDistributionsCleaned": true
+  },
+  "applicationState": "RUNNING",
+  "limitations": [
+    "Native form screenshot unavailable; widget regression tests passed",
+    "Existing static footer version should be synchronized on the next release"
+  ]
+}
