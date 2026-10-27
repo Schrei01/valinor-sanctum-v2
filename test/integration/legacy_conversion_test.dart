@@ -69,7 +69,7 @@ void main() {
           'productId': i == 1 ? 1 : 999,
           'quantity': 1,
           'date': '2026-10-18T11:00:00.000',
-          'paymentMethod': 'Efectivo',
+          'paymentMethod': i == 1 ? 'Caja' : 'Transferencia',
         });
       }
       for (final r in [
@@ -295,6 +295,53 @@ void main() {
       expect((await SqliteTreasuryStore(app).load()).cashMinor, 200);
       expect(cash(await day(19)).closingMinor, 120);
       expect((await app.database.query('sales')).length, 1);
+      final combined = await SqliteReportsStore(app).load(
+        ReportPeriod(
+          start: DateTime.utc(2026, 10, 18),
+          end: DateTime.utc(2026, 10, 22),
+        ),
+      );
+      expect(combined.saleTotals.cashTotalMinor, isNull);
+      expect(combined.saleTotals.transferTotalMinor, isNull);
+      expect(combined.saleTotals.knownTotalMinor, 100);
+      expect(combined.saleTotals.cashMinor, 100);
+      expect(combined.saleTotals.totalMinor, isNull);
+      expect(combined.saleTotals.unpricedSales, 2);
+    },
+  );
+  test(
+    'archived sales without prices stay unknown only in their channel and time range',
+    () async {
+      await importLegacyHistory(target: app, sourcePath: source);
+      final old = await day(18);
+      expect(old.saleTotals.cashTotalMinor, isNull);
+      expect(old.saleTotals.transferTotalMinor, isNull);
+      expect(old.saleTotals.creditTotalMinor, 0);
+      expect(old.saleTotals.totalMinor, isNull);
+      expect(old.saleTotals.unpricedCashSales, 1);
+      expect(old.saleTotals.unpricedTransferSales, 1);
+      expect(old.saleTotals.unpricedSales, 2);
+      expect(old.saleTotals.knownTotalMinor, 0);
+      final noSales = await day(19);
+      expect(noSales.saleTotals.totalMinor, 0);
+      expect(noSales.saleTotals.unpricedSales, 0);
+      final afterTransfer = await day(21);
+      expect(afterTransfer.saleTotals.cashTotalMinor, 0);
+      expect(afterTransfer.saleTotals.transferTotalMinor, 0);
+      final beforeMinute = await SqliteReportsStore(app).load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 18, 10, 59),
+          end: DateTime.utc(2026, 10, 18, 10, 59),
+        ),
+      );
+      expect(beforeMinute.saleTotals.totalMinor, 0);
+      final minute = await SqliteReportsStore(app).load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 18, 11),
+          end: DateTime.utc(2026, 10, 18, 11),
+        ),
+      );
+      expect(minute.saleTotals.unpricedSales, 2);
     },
   );
   test(

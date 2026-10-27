@@ -166,6 +166,10 @@ void main() {
       expect(data.creditSalesMinor, 10000);
       expect(data.costOfGoodsMinor, 2001);
       expect(data.saleReceiptsMinor, 10000);
+      expect(data.saleTotals.cashTotalMinor, 0);
+      expect(data.saleTotals.transferTotalMinor, 10000);
+      expect(data.saleTotals.creditTotalMinor, 10000);
+      expect(data.saleTotals.totalMinor, 20000);
       expect(data.debtorPaymentsMinor, 0);
       expect(data.debtOpeningMinor, 30000);
       expect(data.debtClosingMinor, 40000);
@@ -189,6 +193,8 @@ void main() {
       expect(data.sales, hasLength(2));
       expect(data.salesMinor, 20000);
       expect(data.saleReceiptsMinor, 20000);
+      expect(data.saleTotals.cashTotalMinor, 20000);
+      expect(data.saleTotals.totalMinor, 20000);
       final cash = data.accounts.singleWhere(
         (a) => a.role == ReportAccountRole.cash,
       );
@@ -249,6 +255,8 @@ void main() {
       expect(data.salesMinor, 0);
       expect(data.saleReceiptsMinor, 0);
       expect(data.debtorPaymentsMinor, 6000);
+      expect(data.saleTotals.cashTotalMinor, 0);
+      expect(data.saleTotals.totalMinor, 0);
       expect(
         data.movements.where((m) => m.kind == ReportMovementKind.debtorPayment),
         hasLength(1),
@@ -289,6 +297,9 @@ void main() {
       expect(data.outflowsMinor, 0);
       expect(data.saleReceiptsMinor, 0);
       expect(data.operatingResultMinor, 0);
+      expect(data.saleTotals.cashTotalMinor, 0);
+      expect(data.saleTotals.transferTotalMinor, 0);
+      expect(data.saleTotals.totalMinor, 0);
       expect(
         data.accounts
             .singleWhere((a) => a.role == ReportAccountRole.cash)
@@ -459,6 +470,8 @@ void main() {
       await operations.confirmPrepared('expense');
       final data = await reports.load(period());
       expect(data.outflowsMinor, 4000);
+      expect(data.saleTotals.cashTotalMinor, 10000);
+      expect(data.saleTotals.totalMinor, 10000);
       expect(
         data.movements
             .singleWhere((m) => m.kind == ReportMovementKind.purchasePayment)
@@ -565,6 +578,9 @@ void main() {
       expect(data.creditSalesMinor, 10000);
       expect(data.saleReceiptsMinor, 0);
       expect(data.debtorPaymentsMinor, 4000);
+      expect(data.saleTotals.cashTotalMinor, 0);
+      expect(data.saleTotals.creditTotalMinor, 10000);
+      expect(data.saleTotals.totalMinor, 10000);
       expect(data.debtClosingMinor, 36000);
       expect(await rows(), before);
     },
@@ -610,6 +626,10 @@ void main() {
       expect(data.sales.single.transferMinor, 10000);
       expect(data.sales.single.creditMinor, 10000);
       expect(data.salesMinor, 30000);
+      expect(data.saleTotals.cashTotalMinor, 10000);
+      expect(data.saleTotals.transferTotalMinor, 10000);
+      expect(data.saleTotals.creditTotalMinor, 10000);
+      expect(data.saleTotals.totalMinor, 30000);
       expect(data.saleReceiptsMinor, 20000);
       expect(data.debtorPaymentsMinor, 0);
       expect(data.creditSalesMinor, 10000);

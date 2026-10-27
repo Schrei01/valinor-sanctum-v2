@@ -88,7 +88,7 @@ void main() {
       tester.widget<Text>(find.byKey(Key(key))).data!;
 
   testWidgets(
-    'converted historical balances are identified without changing the four-value scope',
+    'converted historical balances remain identified with sales totals',
     (tester) async {
       store.convertedHistory = true;
       await open(tester);
@@ -102,13 +102,19 @@ void main() {
   );
 
   testWidgets(
-    'only four Caja and Nequi balances are shown at their generated cutoffs',
+    'balances and sale tender totals are shown at their generated cutoffs',
     (tester) async {
       await open(tester);
       expect(value(tester, 'report-opening-cash'), 'COP 1.000,00');
       expect(value(tester, 'report-opening-nequi'), 'COP 500,00');
       expect(value(tester, 'report-closing-cash'), 'COP 940,00');
       expect(value(tester, 'report-closing-nequi'), 'COP 800,00');
+      // Abonos and internal transfers affect balances, but are not new sales.
+      expect(value(tester, 'report-sales-cash'), 'COP 60,00');
+      expect(value(tester, 'report-sales-transfer'), 'COP 200,00');
+      expect(value(tester, 'report-sales-credit'), 'COP 40,00');
+      expect(value(tester, 'report-sales-total'), 'COP 300,00');
+      expect(find.byKey(const Key('report-sales-other')), findsNothing);
       expect(find.text('26/10/2026 · 12:00 AM'), findsNWidgets(2));
       expect(find.text('26/10/2026 · 11:59 PM'), findsNWidgets(2));
       for (final label in [
@@ -190,6 +196,24 @@ void main() {
   );
 
   testWidgets(
+    'missing historical amounts retain known subtotals and exact unaffected channels on narrow screens',
+    (tester) async {
+      store.unpricedCashSales = 2;
+      await open(tester, size: const Size(620, 1000));
+      expect(value(tester, 'report-sales-cash'), 'Sin información');
+      expect(value(tester, 'report-sales-transfer'), 'COP 200,00');
+      expect(value(tester, 'report-sales-credit'), 'COP 40,00');
+      expect(value(tester, 'report-sales-total'), 'Sin información');
+      expect(find.text('Subtotal conocido: COP 60,00'), findsOneWidget);
+      expect(find.text('Subtotal conocido: COP 300,00'), findsOneWidget);
+      expect(find.textContaining('Hay 2 venta(s) antigua(s)'), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('report-sales-total')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'failed refresh retains the four balances and their last generated timestamps',
     (tester) async {
       await open(tester);
@@ -200,6 +224,7 @@ void main() {
         findsOneWidget,
       );
       expect(value(tester, 'report-closing-nequi'), 'COP 800,00');
+      expect(value(tester, 'report-sales-total'), 'COP 300,00');
       expect(find.text('26/10/2026 · 11:59 PM'), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     },

@@ -100,7 +100,7 @@ class _ReportsPageState extends State<ReportsPage> {
           InventoryPageHeading(
             title: 'Reportes',
             subtitle:
-                'Consulta los saldos iniciales y finales de Caja y Nequi.',
+                'Consulta saldos e ingresos por ventas de Caja, Nequi y Deudas.',
             busy: c.busy,
             onRefresh: c.load,
           ),
@@ -154,6 +154,8 @@ class _ReportsPageState extends State<ReportsPage> {
               runSpacing: 16,
               children: [_balances(data, true), _balances(data, false)],
             ),
+            const SizedBox(height: 20),
+            _salesTotals(data),
           ],
         ],
       );
@@ -241,4 +243,90 @@ class _ReportsPageState extends State<ReportsPage> {
       ),
     ],
   );
+
+  Widget _salesTotals(ReportsSnapshot data) {
+    final totals = data.saleTotals;
+    final hasOther = totals.otherMinor != 0 || totals.unpricedOtherSales != 0;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Ventas del período',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Del ${_moment(data.period.startLocal)} al ${_moment(data.period.endLocal)}',
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Total vendido = Caja + Nequi/Transferencia + Deudas${hasOther ? ' + otros medios' : ''}. Se incluyen solo ventas confirmadas; se excluyen abonos, aperturas y transferencias entre cuentas.',
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 24,
+              runSpacing: 20,
+              children: [
+                _saleAmount(
+                  'report-sales-cash',
+                  'Ingreso por ventas a Caja',
+                  totals.cashTotalMinor,
+                  totals.cashMinor,
+                ),
+                _saleAmount(
+                  'report-sales-transfer',
+                  'Ingreso por ventas a Nequi/Transferencia',
+                  totals.transferTotalMinor,
+                  totals.transferMinor,
+                ),
+                _saleAmount(
+                  'report-sales-credit',
+                  'Ventas a Deudas',
+                  totals.creditTotalMinor,
+                  totals.creditMinor,
+                ),
+                if (hasOther)
+                  _saleAmount(
+                    'report-sales-other',
+                    'Ventas por otros medios',
+                    totals.otherTotalMinor,
+                    totals.otherMinor,
+                  ),
+                _saleAmount(
+                  'report-sales-total',
+                  'Total vendido',
+                  totals.totalMinor,
+                  totals.knownTotalMinor,
+                ),
+              ],
+            ),
+            if (totals.unpricedSales > 0) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Hay ${totals.unpricedSales} venta(s) antigua(s) en el rango sin importe histórico. Los grupos afectados y el total completo se muestran Sin información; debajo figura el subtotal conocido.',
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _saleAmount(String key, String label, int? amount, int known) =>
+      SizedBox(
+        width: 245,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _balance(key, label, amount),
+            if (amount == null)
+              Text(
+                'Subtotal conocido: ${inventoryMoney(known, widget.profile)}',
+              ),
+          ],
+        ),
+      );
 }

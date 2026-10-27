@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../../core/infrastructure/database/app_database.dart';
 import '../../legacy_conversion/domain/legacy_time.dart';
 import '../domain/reports_store.dart';
@@ -359,6 +360,55 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
       'legacy_conversions',
       where: "status='complete'",
     );
+    final nativeSaleTotals = ReportSalesTotals.fromNative(sales);
+    final unpriced = [0, 0, 0, 0];
+    if (converted.isNotEmpty) {
+      final legacySales = await txn.query(
+        'legacy_source_rows',
+        columns: ['row_json'],
+        where: "source_table='sales'",
+      );
+      for (final row in legacySales) {
+        final archived =
+            jsonDecode(row['row_json'] as String) as Map<String, dynamic>;
+        DateTime? date;
+        try {
+          date = parseLegacyDate(archived['date']);
+        } on FormatException {
+          throw const ReportsValidationException(
+            'Una venta antigua no tiene una fecha válida para ubicarla en el reporte.',
+          );
+        }
+        if (date == null) {
+          throw const ReportsValidationException(
+            'Una venta antigua no tiene fecha para ubicarla en el reporte.',
+          );
+        }
+        if (!period.contains(date)) continue;
+        final method = (archived['paymentMethod'] as String? ?? '')
+            .trim()
+            .toLowerCase();
+        final group = switch (method) {
+          'efectivo' || 'caja' || 'cash' => 0,
+          'nequi' || 'transferencia' || 'transfer' => 1,
+          'deudas' || 'deuda' || 'crédito' || 'credito' => 2,
+          _ => 3,
+        };
+        // The source saved quantity and method, but no historical sale amount.
+        // Never reconstruct revenue using today's or the archived catalog PVP.
+        unpriced[group]++;
+      }
+    }
+    final saleTotals = ReportSalesTotals(
+      cashMinor: nativeSaleTotals.cashMinor,
+      transferMinor: nativeSaleTotals.transferMinor,
+      creditMinor: nativeSaleTotals.creditMinor,
+      otherMinor: nativeSaleTotals.otherMinor,
+      unpricedCashSales: unpriced[0],
+      unpricedTransferSales: unpriced[1],
+      unpricedCreditSales: unpriced[2],
+      unpricedOtherSales: unpriced[3],
+    );
     var historyUsed = false;
     Future<int?> historical(String role, DateTime before) async {
       if (converted.isEmpty) return null;
@@ -447,6 +497,7 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
       openingBalancesKnown: openingKnown,
       closingBalancesKnown: closingKnown,
       usesHistoricalBalances: historyUsed,
+      saleTotals: saleTotals,
       warnings: warnings,
     );
     result.validate();

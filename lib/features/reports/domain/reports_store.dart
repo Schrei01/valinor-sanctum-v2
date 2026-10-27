@@ -255,8 +255,10 @@ class ReportsSnapshot {
     required this.openingBalancesKnown,
     this.closingBalancesKnown = true,
     this.usesHistoricalBalances = false,
+    ReportSalesTotals? saleTotals,
     required List<String> warnings,
-  }) : accounts = List.unmodifiable(accounts),
+  }) : saleTotals = saleTotals ?? ReportSalesTotals.fromNative(sales),
+       accounts = List.unmodifiable(accounts),
        movements = List.unmodifiable(movements),
        sales = List.unmodifiable(sales),
        transfers = List.unmodifiable(transfers),
@@ -278,6 +280,7 @@ class ReportsSnapshot {
   final bool closingBalancesKnown;
   final bool usesHistoricalBalances;
   final List<String> warnings;
+  final ReportSalesTotals saleTotals;
   int get salesMinor => reportSum(sales.map((s) => s.salesMinor));
   int get creditSalesMinor => reportSum(sales.map((s) => s.creditMinor));
   int get costOfGoodsMinor =>
@@ -321,6 +324,7 @@ class ReportsSnapshot {
   /// Validate totals before a report is exposed to presentation code. Although
   /// final balances can fit in SQLite's range, gross movement totals may not.
   void validate() {
+    saleTotals.validate();
     salesMinor;
     creditSalesMinor;
     costOfGoodsMinor;
@@ -392,6 +396,75 @@ class ReportsSnapshot {
         isEvent: first.isEvent,
       );
     }).toList()..sort((a, b) => a.name.compareTo(b.name));
+  }
+}
+
+/// Sale revenue by the tender chosen when confirming the sale. Collections of
+/// old debt, openings and transfers between accounts never enter these totals.
+class ReportSalesTotals {
+  const ReportSalesTotals({
+    required this.cashMinor,
+    required this.transferMinor,
+    required this.creditMinor,
+    this.otherMinor = 0,
+    this.unpricedCashSales = 0,
+    this.unpricedTransferSales = 0,
+    this.unpricedCreditSales = 0,
+    this.unpricedOtherSales = 0,
+  });
+  factory ReportSalesTotals.fromNative(Iterable<ReportSaleLine> sales) {
+    final cash = reportSum(sales.map((s) => s.cashMinor));
+    final transfer = reportSum(sales.map((s) => s.transferMinor));
+    final credit = reportSum(sales.map((s) => s.creditMinor));
+    final other = reportMinor(
+      BigInt.from(reportSum(sales.map((s) => s.salesMinor))) -
+          BigInt.from(cash) -
+          BigInt.from(transfer) -
+          BigInt.from(credit),
+    );
+    return ReportSalesTotals(
+      cashMinor: cash,
+      transferMinor: transfer,
+      creditMinor: credit,
+      otherMinor: other,
+    );
+  }
+  final int cashMinor, transferMinor, creditMinor, otherMinor;
+  final int unpricedCashSales,
+      unpricedTransferSales,
+      unpricedCreditSales,
+      unpricedOtherSales;
+  int get unpricedSales =>
+      unpricedCashSales +
+      unpricedTransferSales +
+      unpricedCreditSales +
+      unpricedOtherSales;
+  int get knownTotalMinor =>
+      reportSum([cashMinor, transferMinor, creditMinor, otherMinor]);
+  int? get cashTotalMinor => unpricedCashSales == 0 ? cashMinor : null;
+  int? get transferTotalMinor =>
+      unpricedTransferSales == 0 ? transferMinor : null;
+  int? get creditTotalMinor => unpricedCreditSales == 0 ? creditMinor : null;
+  int? get otherTotalMinor => unpricedOtherSales == 0 ? otherMinor : null;
+  int? get totalMinor => unpricedSales == 0 ? knownTotalMinor : null;
+  void validate() {
+    for (final value in [
+      cashMinor,
+      transferMinor,
+      creditMinor,
+      otherMinor,
+      unpricedCashSales,
+      unpricedTransferSales,
+      unpricedCreditSales,
+      unpricedOtherSales,
+    ]) {
+      if (value < 0) {
+        throw const ReportsValidationException(
+          'El desglose de ventas contiene valores negativos.',
+        );
+      }
+    }
+    knownTotalMinor;
   }
 }
 
