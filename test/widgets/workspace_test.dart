@@ -39,7 +39,7 @@ void main() {
   });
 
   testWidgets(
-    'empty workspace validates input, saves and displays committed profile',
+    'empty workspace automatically configures Valinor and opens sales',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(1280, 960));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -54,15 +54,11 @@ void main() {
       );
       await controller.initialize();
       await tester.pumpWidget(SanctumApp(controller: controller));
-      await tester.tap(find.byKey(const Key('create-profile')));
       await tester.pumpAndSettle();
-      expect(store.saves, 0);
-      await tester.enterText(
-        find.byKey(const Key('business-name')),
-        'Ludoteca sintética',
-      );
-      await tester.tap(find.byKey(const Key('create-profile')));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('create-profile')), findsNothing);
+      expect(find.byKey(const Key('business-name')), findsNothing);
+      expect(store.profile!.businessName, 'Valinor');
+      expect(store.profile!.currencyCode, 'COP');
       expect(find.byKey(const Key('quick-new-account')), findsOneWidget);
       expect(find.text('Ventas'), findsNWidgets(2));
       expect(store.profile!.moneyScale, 0);
@@ -93,12 +89,8 @@ void main() {
       await tester.pumpWidget(SanctumApp(controller: controller));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      await tester.enterText(
-        find.byKey(const Key('business-name')),
-        'Ludoteca sintética',
-      );
-      await tester.tap(find.byKey(const Key('create-profile')));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('create-profile')), findsNothing);
+      expect(store.profile!.businessName, 'Valinor');
       expect(store.profile!.moneyScale, 0);
       await tester.tap(find.text('Eventos'));
       await tester.pumpAndSettle();
@@ -143,7 +135,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Configura tu espacio'), findsOneWidget);
+    expect(find.text('Configura tu espacio'), findsNothing);
+    expect(find.text('Valinor'), findsOneWidget);
     expect(find.byKey(const Key('money-scale')), findsNothing);
     expect(tester.takeException(), isNull);
     if (const bool.fromEnvironment('SANCTUM_CAPTURE_PREVIEW')) {

@@ -1,0 +1,100 @@
+{
+  "version": "0.25.0+39",
+  "date": "2026-10-27",
+  "schemaVersion": 16,
+  "startup": {
+    "automaticNewProfile": true,
+    "businessName": "Valinor",
+    "currency": "COP",
+    "moneyScale": 0,
+    "timezone": "America/Bogota",
+    "manualSetupFormRemoved": true,
+    "opensSales": true,
+    "healthCheckedBeforeWriting": true,
+    "savedProfileReadBack": true,
+    "retryDoesNotDuplicateSetup": true,
+    "existingProfilesPreserved": true,
+    "noFinancialOrInventoryFactsOnSetup": true,
+    "storageLocationUnchanged": true
+  },
+  "branding": {
+    "ownerConfirmedBoatAndMountainsLogo": true,
+    "sourceLogoUnchanged": true,
+    "reproducibleAssets": true,
+    "originalFlutterIconUnchanged": true,
+    "iconSha256": "A84C94729D45B34B5D810EFC72F4037049AAB9F5FCBECC19A039E12DFFA6FE33",
+    "logoSha256": "65C390D87ED40DED00B967D9F1DF52E85F76F6DA5AB9D61FADACA88C3DA7F976",
+    "nativeIconFrames": 9,
+    "groupFrames": [
+      9
+    ],
+    "allFramesMatchSourceIcon": true,
+    "flutterIconReplaced": true,
+    "windowsSizes": [
+      16,
+      20,
+      24,
+      32,
+      40,
+      48,
+      64,
+      128,
+      256
+    ],
+    "headerAndSidebarLogo": true,
+    "originalDrawingAndTextPreserved": true
+  },
+  "validation": {
+    "focusedPassed": 29,
+    "failed": 0,
+    "renderTestsIncluded": 3,
+    "imagesInspected": 3,
+    "widths": [
+      1366,
+      900,
+      400
+    ],
+    "height": 768,
+    "formatFiles": 188,
+    "formatChanges": 0,
+    "analysis": "No issues found",
+    "lockedDependenciesResolved": true
+  },
+  "data": {
+    "schemaVersion": 16,
+    "tables": 68,
+    "allRowsAndSchemaPreserved": true,
+    "integrity": "ok",
+    "foreignKeys": 0,
+    "backupVerified": true,
+    "backupDirectory": "backups/valinor-brand-20261027",
+    "checkedAfterAppLaunch": true,
+    "businessOperationsInActiveDatabase": false
+  },
+  "bundle": {
+    "version": "0.25.0+39",
+    "files": 18,
+    "archiveBytes": 15233740,
+    "archiveSha256": "2D637AEB2BEB64E11ED83D60D4AF9DB5322D23A6F96F50B88FA5D62C033F96FE",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
+    "privateDataExcluded": true,
+    "releaseWithoutOverrides": true,
+    "executableVersion": "0.25.0+39",
+    "footerVersion": "0.25.0",
+    "oldDistributionsCleaned": true
+  },
+  "app": {
+    "leftOpen": true,
+    "responding": true,
+    "versionObservedThroughAccessibility": true,
+    "logoObservedThroughAccessibility": true,
+    "setupFormVisible": false,
+    "nativeBusinessOperations": false
+  },
+  "ci": {
+    "previousHead": "0f3c7478fc399bfc1b6f0ba6a0b4442b4332a2aa",
+    "previousConclusion": "success",
+    "remoteStatusAtCommit": "pending new push; inspect Windows checks after commit"
+  }
+}

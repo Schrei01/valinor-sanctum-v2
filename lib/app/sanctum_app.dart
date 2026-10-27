@@ -4,6 +4,7 @@ import '../features/events/application/events_controller.dart';
 import '../features/events/presentation/events_page.dart';
 import 'dart:ui' show AppExitResponse;
 import 'package:flutter/material.dart';
+import '../core/presentation/valinor_logo.dart';
 import '../features/workspace/application/workspace_controller.dart';
 import '../features/inventory/application/inventory_controller.dart';
 import '../features/inventory/presentation/catalog_page.dart';
@@ -333,13 +334,6 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
           ),
         );
       }
-      if (controller.profile == null) {
-        return Scaffold(
-          body: SafeArea(
-            child: _scrollPage(_ProfileForm(controller: controller), false),
-          ),
-        );
-      }
       return LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 840;
@@ -581,12 +575,12 @@ class _Sidebar extends StatelessWidget {
           children: [
             const Padding(
               padding: EdgeInsets.only(left: 12, bottom: 6),
-              child: Icon(Icons.local_library_outlined, color: _gold, size: 34),
+              child: ValinorLogo(),
             ),
             const Padding(
               padding: EdgeInsets.all(12),
               child: Text(
-                'VALINOR\nSANCTUM',
+                'SANCTUM',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 23,
@@ -649,7 +643,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.24.0',
+                    'Versión 0.25.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -674,6 +668,8 @@ class _Header extends StatelessWidget {
     ),
     child: Row(
       children: [
+        const ValinorLogo(width: 40, height: 40),
+        const SizedBox(width: 10),
         Expanded(
           child: Text(
             businessName ?? 'Valinor Sanctum 2.0',
@@ -684,97 +680,6 @@ class _Header extends StatelessWidget {
         const SizedBox(width: 12),
         const _Tag(text: 'Desarrollo', icon: Icons.science_outlined),
       ],
-    ),
-  );
-}
-
-class _ProfileForm extends StatefulWidget {
-  const _ProfileForm({required this.controller});
-  final WorkspaceController controller;
-  @override
-  State<_ProfileForm> createState() => _ProfileFormState();
-}
-
-class _ProfileFormState extends State<_ProfileForm> {
-  final _key = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(26),
-      child: Form(
-        key: _key,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Configura tu espacio',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 20),
-            ),
-            const SizedBox(height: 24),
-            TextFormField(
-              key: const Key('business-name'),
-              controller: _name,
-              enabled: !widget.controller.busy,
-              maxLength: 80,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Nombre de la ludoteca',
-                hintText: 'Escribe el nombre del negocio',
-              ),
-              validator: (value) => value == null || value.trim().length < 2
-                  ? 'Escribe un nombre de al menos 2 caracteres.'
-                  : null,
-            ),
-            const SizedBox(height: 16),
-            const Text('COP · 0 decimales · Hora de Bogotá'),
-            const SizedBox(height: 20),
-            if (widget.controller.error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  widget.controller.error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            FilledButton.icon(
-              key: const Key('create-profile'),
-              onPressed: widget.controller.busy
-                  ? null
-                  : () async {
-                      if (_key.currentState!.validate()) {
-                        await widget.controller.createProfile(
-                          businessName: _name.text,
-                        );
-                      }
-                    },
-              icon: Icon(
-                widget.controller.busy
-                    ? Icons.hourglass_empty
-                    : Icons.arrow_forward,
-              ),
-              label: Text(
-                widget.controller.busy
-                    ? 'Guardando…'
-                    : 'Crear espacio de trabajo',
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: _forest,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 20,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     ),
   );
 }

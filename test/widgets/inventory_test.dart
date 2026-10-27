@@ -104,7 +104,7 @@ void main() {
   }
 
   testWidgets(
-    'catalog requires configured profile and narrow navigation is usable',
+    'new workspace automatically configures Valinor and narrow navigation is usable',
     (tester) async {
       final controller = await open(
         tester,
@@ -112,16 +112,12 @@ void main() {
         configured: false,
         size: const Size(400, 900),
       );
-      expect(find.text('Catálogo'), findsNothing);
-      expect(find.text('Compras'), findsNothing);
-      expect(find.byKey(const Key('business-name')), findsOneWidget);
+      expect(find.text('Catálogo'), findsOneWidget);
+      expect(find.text('Compras'), findsOneWidget);
+      expect(find.byKey(const Key('business-name')), findsNothing);
       expect(find.byKey(const Key('catalog-create')), findsNothing);
-      await tester.enterText(
-        find.byKey(const Key('business-name')),
-        'Ludoteca sintética',
-      );
-      await tester.tap(find.byKey(const Key('create-profile')));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('create-profile')), findsNothing);
+      expect(controller.profile!.businessName, 'Valinor');
       expect(controller.profile!.moneyScale, 0);
       await tester.tap(find.text('Catálogo'));
       await tester.pumpAndSettle();

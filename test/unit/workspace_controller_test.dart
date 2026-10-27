@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:valinor_sanctum_2/features/workspace/application/workspace_controller.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/workspace_store.dart';
+import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
 import '../support/fake_workspace_store.dart';
 
 void main() {
@@ -33,10 +34,6 @@ void main() {
         openSession: () async => fakeSession(store),
       );
       await controller.initialize();
-      expect(
-        await controller.createProfile(businessName: 'Ludoteca sintética'),
-        isFalse,
-      );
       expect(store.profile, isNotNull);
       expect(controller.profile, isNull);
       expect(controller.state, WorkspaceState.failed);
@@ -44,7 +41,7 @@ void main() {
       store.healthFailureAfterSave = null;
       await controller.initialize();
       expect(controller.state, WorkspaceState.ready);
-      expect(controller.profile!.businessName, 'Ludoteca sintética');
+      expect(controller.profile!.businessName, 'Valinor');
       expect(controller.profile!.moneyScale, 0);
       expect(store.saves, 1);
       controller.dispose();
@@ -52,26 +49,24 @@ void main() {
   );
 
   test(
-    'save is confirmed before publishing and a second submit is ignored',
+    'automatic setup is confirmed before publishing and repeated startup is ignored',
     () async {
       final store = FakeWorkspaceStore()..saveGate = Completer<void>();
       final controller = WorkspaceController(
         openSession: () async => fakeSession(store),
       );
-      await controller.initialize();
-      final saving = controller.createProfile(
-        businessName: 'Ludoteca sintética',
-      );
+      final saving = controller.initialize();
+      await Future<void>.delayed(Duration.zero);
       expect(controller.busy, isTrue);
       expect(controller.profile, isNull);
-      expect(
-        await controller.createProfile(businessName: 'Duplicado'),
-        isFalse,
-      );
+      await controller.initialize();
       store.saveGate!.complete();
-      expect(await saving, isTrue);
+      await saving;
       expect(store.saves, 1);
-      expect(controller.profile!.businessName, 'Ludoteca sintética');
+      expect(controller.profile!.businessName, 'Valinor');
+      expect(controller.profile!.currencyCode, 'COP');
+      expect(controller.profile!.moneyScale, 0);
+      expect(controller.profile!.timezone, 'America/Bogota');
       controller.dispose();
     },
   );
@@ -83,12 +78,14 @@ void main() {
       openSession: () async => fakeSession(store),
     );
     await controller.initialize();
-    expect(await controller.createProfile(businessName: 'Prueba'), isFalse);
+    expect(controller.state, WorkspaceState.failed);
     expect(controller.profile, isNull);
     expect(controller.error, contains('Fallo sintético'));
     expect(controller.busy, isFalse);
     store.saveFailure = null;
-    expect(await controller.createProfile(businessName: 'Prueba'), isTrue);
+    await controller.initialize();
+    expect(controller.state, WorkspaceState.ready);
+    expect(controller.profile!.businessName, 'Valinor');
     expect(controller.error, isNull);
     controller.dispose();
   });
@@ -122,10 +119,6 @@ void main() {
         expect(controller.error, contains('no fue satisfactoria'));
         expect(controller.busy, isFalse);
         expect(store.closes, 1);
-        expect(
-          await controller.createProfile(businessName: 'Ludoteca sintética'),
-          isFalse,
-        );
         expect(store.saves, 0);
         controller.dispose();
       },
@@ -181,6 +174,28 @@ void main() {
       gate.complete(fakeSession(store));
       await opening;
       expect(store.closes, 1);
+    },
+  );
+  test(
+    'existing profile and monetary scale are preserved without setup writes',
+    () async {
+      final prior = BusinessProfile(
+        profileId: 'test',
+        businessName: 'Perfil existente',
+        currencyCode: 'COP',
+        moneyScale: 2,
+        timezone: 'America/Bogota',
+        createdAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      final store = FakeWorkspaceStore()..profile = prior;
+      final controller = WorkspaceController(
+        openSession: () async => fakeSession(store),
+      );
+      await controller.initialize();
+      expect(controller.state, WorkspaceState.ready);
+      expect(controller.profile, same(prior));
+      expect(store.saves, 0);
+      controller.dispose();
     },
   );
 }

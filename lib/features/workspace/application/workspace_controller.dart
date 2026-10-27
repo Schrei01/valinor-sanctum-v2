@@ -60,60 +60,45 @@ class WorkspaceController extends ChangeNotifier {
         return;
       }
       _session = session;
-      profile = await session.store.readProfile();
-      if (profile != null && profile!.profileId != session.profileId) {
+      var confirmed = await session.store.readProfile();
+      if (confirmed != null && confirmed.profileId != session.profileId) {
         throw StateError('La base corresponde a otro perfil.');
       }
       health = await session.store.readHealth();
       _checkHealth();
+      if (confirmed == null) {
+        await session.store.createProfile(
+          BusinessProfile(
+            profileId: session.profileId,
+            businessName: 'Valinor',
+            currencyCode: 'COP',
+            moneyScale: 0,
+            timezone: 'America/Bogota',
+            createdAtUtc: DateTime.now().toUtc(),
+          ),
+        );
+        confirmed = await session.store.readProfile();
+        health = await session.store.readHealth();
+        _checkHealth();
+        if (confirmed == null ||
+            confirmed.profileId != session.profileId ||
+            confirmed.businessName != 'Valinor' ||
+            confirmed.currencyCode != 'COP' ||
+            confirmed.moneyScale != 0 ||
+            confirmed.timezone != 'America/Bogota') {
+          throw StateError('No se pudo recuperar la configuración de Valinor.');
+        }
+      }
+      if (_disposed) return;
+      profile = confirmed;
       state = WorkspaceState.ready;
     } catch (failure) {
+      profile = null;
       error = failure.toString();
       state = WorkspaceState.failed;
       final session = _session;
       _session = null;
       if (session != null) await session.store.close();
-    } finally {
-      busy = false;
-      _emit();
-    }
-  }
-
-  Future<bool> createProfile({required String businessName}) async {
-    if (busy || state != WorkspaceState.ready || profile != null) return false;
-    final session = _session!;
-    busy = true;
-    error = null;
-    _emit();
-    var committed = false;
-    try {
-      final next = BusinessProfile(
-        profileId: session.profileId,
-        businessName: businessName,
-        currencyCode: 'COP',
-        moneyScale: 0,
-        timezone: 'America/Bogota',
-        createdAtUtc: DateTime.now().toUtc(),
-      );
-      await session.store.createProfile(next);
-      committed = true;
-      // Read the committed configuration; never present an unconfirmed form as saved.
-      final confirmed = await session.store.readProfile();
-      health = await session.store.readHealth();
-      _checkHealth();
-      if (confirmed == null || confirmed.profileId != session.profileId) {
-        throw StateError('No se pudo recuperar el perfil confirmado.');
-      }
-      profile = confirmed;
-      return true;
-    } catch (failure) {
-      error = failure.toString();
-      if (committed) {
-        state = WorkspaceState.failed;
-        _session = null;
-        await session.store.close();
-      }
-      return false;
     } finally {
       busy = false;
       _emit();
