@@ -188,6 +188,20 @@ class QuickSalesSnapshot {
   final List<PreparedQuickSale> pendingSales;
   final List<ConfirmedQuickSale> sales;
   final List<DebtorSummary> debtors;
+
+  late final Map<String, StockPosition> _positions = Map.unmodifiable({
+    for (final position in stock) position.productId: position,
+  });
+
+  int stockQuantityFor(String productId) =>
+      _positions[productId]?.quantity ?? 0;
+
+  /// Keep all products for existing drafts; restrict only new selections.
+  Iterable<CatalogProduct> get availableProducts => products.where(
+    (product) =>
+        product.isActive &&
+        (product.isUnlimited || stockQuantityFor(product.id) > 0),
+  );
 }
 
 abstract interface class QuickSalesStore {

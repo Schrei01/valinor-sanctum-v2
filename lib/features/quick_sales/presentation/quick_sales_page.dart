@@ -84,10 +84,10 @@ class QuickSalesPage extends StatelessWidget {
               else
                 const Text('No se pudieron cargar las ventas.')
             else ...[
-              if (data.products.where((item) => item.isActive).isEmpty)
+              if (data.availableProducts.isEmpty)
                 const InventoryNotice(
                   text:
-                      'Crea un producto en Catálogo y registra su entrada en Compras para poder venderlo.',
+                      'No hay productos disponibles. Ingresa o repón mercancía desde Compras.',
                 ),
               if (controller.accounts.isEmpty)
                 Container(
@@ -630,7 +630,11 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
     }
   }
 
-  void _selected(CatalogProduct product) {
+  void _selected(CatalogProduct candidate) {
+    final product = widget.data.availableProducts
+        .where((p) => p.id == candidate.id)
+        .firstOrNull;
+    if (widget.locked || product == null) return;
     final priorPrice = widget.account.lines
         .where(
           (line) => line.id != widget.line.id && line.productId == product.id,
@@ -653,16 +657,15 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
     );
   }
 
+  String _availability(CatalogProduct product) => product.isUnlimited
+      ? 'Ilimitado'
+      : 'Unidades: ${GroupedNumberFormatter.format('${widget.data.stockQuantityFor(product.id)}')}';
+
   @override
   Widget build(BuildContext context) {
     final line = widget.line;
     final selected = _productFor(line.productId);
-    final stock =
-        widget.data.stock
-            .where((item) => item.productId == line.productId)
-            .firstOrNull
-            ?.quantity ??
-        0;
+    final stock = widget.data.stockQuantityFor(line.productId ?? '');
     final productField = RawAutocomplete<CatalogProduct>(
       textEditingController: _product,
       focusNode: _productFocus,
@@ -670,15 +673,12 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
       optionsBuilder: (query) {
         if (widget.locked) return const Iterable<CatalogProduct>.empty();
         final value = query.text.trim().toLowerCase();
-        return widget.data.products
-            .where(
-              (item) =>
-                  item.isActive &&
-                  (value.isEmpty ||
-                      item.name.toLowerCase().contains(value) ||
-                      (item.sku?.toLowerCase().contains(value) ?? false)),
-            )
-            .take(25);
+        return widget.data.availableProducts.where(
+          (item) =>
+              value.isEmpty ||
+              item.name.toLowerCase().contains(value) ||
+              (item.sku?.toLowerCase().contains(value) ?? false),
+        );
       },
       onSelected: _selected,
       fieldViewBuilder: (context, textController, focusNode, submit) => TextField(
@@ -692,42 +692,56 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           isDense: true,
           helperText: selected == null
               ? 'Selecciona un producto'
-              : 'Precio ${inventoryMoney(line.unitPriceMinor ?? 0, widget.profile)} · ${selected.isUnlimited ? 'Servicio · Disponibilidad ilimitada' : 'Stock $stock'}',
+              : 'Precio ${inventoryMoney(line.unitPriceMinor ?? 0, widget.profile)} · ${selected.isUnlimited ? 'Disponibilidad ilimitada' : 'Stock ${GroupedNumberFormatter.format('$stock')}'}',
         ),
         onChanged: _productChanged,
         textInputAction: TextInputAction.done,
         onEditingComplete: () {},
         onSubmitted: (_) => submit(),
       ),
-      optionsViewBuilder: (context, select, options) => Align(
-        alignment: Alignment.topLeft,
-        child: Material(
-          elevation: 5,
-          borderRadius: BorderRadius.circular(8),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: 240,
-              maxWidth: MediaQuery.sizeOf(context).width < 500 ? 285 : 420,
-            ),
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              shrinkWrap: true,
-              children: [
-                for (final product in options)
-                  ListTile(
+      optionsViewBuilder: (context, select, options) {
+        final available = {
+          for (final p in widget.data.availableProducts) p.id: p,
+        };
+        final rows = options
+            .map((p) => available[p.id])
+            .whereType<CatalogProduct>()
+            .toList();
+        if (rows.isEmpty) return const SizedBox.shrink();
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 5,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: 240,
+                maxWidth: MediaQuery.sizeOf(context).width < 500 ? 285 : 420,
+              ),
+              child: ListView.builder(
+                key: ValueKey('quick-options-${line.id}'),
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                shrinkWrap: true,
+                itemCount: rows.length,
+                itemBuilder: (context, index) {
+                  final product = rows[index];
+                  return ListTile(
                     dense: true,
                     title: Text(product.name),
-                    subtitle: product.sku == null ? null : Text(product.sku!),
+                    subtitle: Text(
+                      '${product.sku == null ? '' : '${product.sku} · '}${_availability(product)}',
+                    ),
                     trailing: Text(
                       inventoryMoney(product.listPriceMinor, widget.profile),
                     ),
                     onTap: () => select(product),
-                  ),
-              ],
+                  );
+                },
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
     final quantityField = TextField(
       key: ValueKey('quick-quantity-${line.id}'),

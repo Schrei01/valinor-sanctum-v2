@@ -1,0 +1,79 @@
+{
+  "version": "0.26.1+41",
+  "date": "2026-10-27",
+  "schemaVersion": 16,
+  "ui": {
+    "physicalProductsRequirePositiveStock": true,
+    "inactiveProductsExcluded": true,
+    "missingStockMeansZero": true,
+    "unlimitedServicesAndActiveEventsPreserved": true,
+    "skuStockAndPriceInSuggestions": true,
+    "groupedStockQuantities": true,
+    "fullScrollableList": true,
+    "firstTwentyFiveLimitRemoved": true,
+    "staleExhaustedOptionsFiltered": true,
+    "selectionRechecksCurrentAvailability": true,
+    "existingDraftsAndHistoryPreserved": true,
+    "emptyNoticePointsToPurchases": true
+  },
+  "validation": {
+    "focusedPassed": 27,
+    "renderTestsPassed": 2,
+    "failed": 0,
+    "imagesInspected": 2,
+    "widths": [
+      1366,
+      400
+    ],
+    "formatFiles": 190,
+    "formatChanges": 0,
+    "analysis": "No issues found",
+    "sqliteExhaustionAndReplenishmentPassed": true
+  },
+  "catalogComparison": {
+    "privateCopyOnly": true,
+    "catalogAndSalesQuantitiesMatch": true,
+    "availableProductIdentityMatches": true,
+    "zeroPhysicalProductsExcluded": true,
+    "unlimitedPreserved": true,
+    "copyAllRowsAndSchemaPreserved": true
+  },
+  "data": {
+    "schemaVersion": 16,
+    "tables": 68,
+    "allRowsAndSchemaPreserved": true,
+    "integrity": "ok",
+    "foreignKeys": 0,
+    "backupVerified": true,
+    "backupDirectory": "backups/sale-availability-20261027",
+    "checkedAfterAppLaunch": true,
+    "businessOperationsInActiveDatabase": false,
+    "startupLockRetriedAfterLoad": true
+  },
+  "bundle": {
+    "version": "0.26.1+41",
+    "files": 18,
+    "archiveBytes": 15263005,
+    "archiveSha256": "ECDD5F2786C64DBBD547497FA8A2563D32AFBBE9D0BFA435AF33627BCF24051C",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
+    "privateDataExcluded": true,
+    "releaseWithoutOverrides": true,
+    "executableVersion": "0.26.1+41",
+    "footerVersion": "0.26.1",
+    "oldDistributionsCleaned": true
+  },
+  "app": {
+    "leftOpen": true,
+    "responding": true,
+    "versionObservedThroughAccessibility": true,
+    "salesObservedThroughAccessibility": true,
+    "productOptionsOpenedOnActiveDatabase": false,
+    "nativeBusinessOperations": false
+  },
+  "ci": {
+    "previousHead": "658a2792b83550ea7d7cabbe6d00dc3e4b9071e3",
+    "previousConclusion": "success",
+    "remoteStatusAtCommit": "pending new push; inspect Windows checks after commit"
+  }
+}

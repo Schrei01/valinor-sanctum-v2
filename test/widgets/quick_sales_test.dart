@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
+import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/application/quick_sales_controller.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/presentation/quick_sales_page.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
@@ -145,6 +146,174 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets(
+    'product suggestions show exact stock, hide exhausted items, and retain unlimited services and events',
+    (tester) async {
+      final water = store.products.first;
+      store.products
+        ..clear()
+        ..addAll([
+          water,
+          const CatalogProduct(
+            id: 'pass',
+            name: 'Pasadía',
+            listPriceMinor: 5000,
+            isService: true,
+          ),
+          const CatalogProduct(
+            id: 'event',
+            name: 'Liga sintética',
+            listPriceMinor: 10000,
+            isEvent: true,
+          ),
+          const CatalogProduct(
+            id: 'zero',
+            name: 'Producto agotado',
+            sku: 'AGOTADO-SKU',
+            listPriceMinor: 500,
+          ),
+          const CatalogProduct(
+            id: 'missing',
+            name: 'Sin ingreso',
+            listPriceMinor: 500,
+          ),
+          const CatalogProduct(
+            id: 'inactive',
+            name: 'Archivado',
+            listPriceMinor: 500,
+            isActive: false,
+          ),
+          const CatalogProduct(
+            id: 'closed-event',
+            name: 'Evento cerrado',
+            listPriceMinor: 500,
+            isEvent: true,
+            isActive: false,
+          ),
+        ]);
+      store.stock
+        ..clear()
+        ..addAll(const [
+          StockPosition(productId: 'water', quantity: 1234, totalCostMinor: 0),
+          StockPosition(productId: 'zero', quantity: 0, totalCostMinor: 0),
+          StockPosition(productId: 'inactive', quantity: 3, totalCostMinor: 0),
+          StockPosition(
+            productId: 'closed-event',
+            quantity: 5,
+            totalCostMinor: 0,
+          ),
+        ]);
+      await open(tester);
+      await tap(tester, find.byKey(const Key('quick-new-account')));
+      await tap(tester, keyed('quick-product-'));
+      expect(find.text('AGUA · Unidades: 1.234'), findsOneWidget);
+      expect(find.text('Ilimitado'), findsNWidgets(2));
+      for (final name in [
+        'Producto agotado',
+        'Sin ingreso',
+        'Archivado',
+        'Evento cerrado',
+      ]) {
+        expect(find.text(name), findsNothing);
+      }
+      await enter(tester, keyed('quick-product-'), 'AGOTADO-SKU');
+      expect(find.text('Producto agotado'), findsNothing);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(controller.accounts.single.lines.single.productId, isNull);
+      await select(tester, 0, 'Agua sintética');
+      expect(find.textContaining('Stock 1.234'), findsOneWidget);
+      await controller.flushAll();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'refresh removes stale exhausted options and keeps saved draft lines for correction',
+    (tester) async {
+      await open(tester);
+      await tap(tester, find.byKey(const Key('quick-new-account')));
+      await enter(tester, keyed('quick-product-'), 'Agua');
+      expect(find.text('Agua sintética'), findsOneWidget);
+      store.stock.removeWhere((p) => p.productId == 'water');
+      await controller.load();
+      await tester.pumpAndSettle();
+      expect(find.text('Agua sintética'), findsNothing);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(controller.accounts.single.lines.single.productId, isNull);
+      store.stock.add(
+        const StockPosition(productId: 'water', quantity: 2, totalCostMinor: 0),
+      );
+      await controller.load();
+      await tester.pumpAndSettle();
+      await enter(tester, keyed('quick-product-'), 'AGUA');
+      await tap(tester, find.text('Agua sintética').last);
+      await controller.flushAll();
+      store.stock.removeWhere((p) => p.productId == 'water');
+      await controller.load();
+      await tester.pumpAndSettle();
+      expect(controller.accounts.single.lines.single.productId, 'water');
+      expect(find.textContaining('Stock 0'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'all available product suggestions can be reached beyond the first twenty five',
+    (tester) async {
+      for (var i = 1; i <= 30; i++) {
+        store.products.add(
+          CatalogProduct(
+            id: 'p$i',
+            name: 'Producto sintético $i',
+            listPriceMinor: 100,
+          ),
+        );
+        store.stock.add(
+          StockPosition(productId: 'p$i', quantity: i, totalCostMinor: 0),
+        );
+      }
+      await open(tester);
+      await tap(tester, find.byKey(const Key('quick-new-account')));
+      await tap(tester, keyed('quick-product-'));
+      await tester.scrollUntilVisible(
+        find.text('Producto sintético 30'),
+        150,
+        scrollable: find
+            .descendant(
+              of: keyed('quick-options-'),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Unidades: 30'), findsOneWidget);
+      await tap(tester, find.text('Producto sintético 30'));
+      expect(controller.accounts.single.lines.single.productId, 'p30');
+      await controller.flushAll();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'empty stock points to Compras instead of offering unavailable products',
+    (tester) async {
+      store.stock.clear();
+      await open(tester);
+      expect(
+        find.text(
+          'No hay productos disponibles. Ingresa o repón mercancía desde Compras.',
+        ),
+        findsOneWidget,
+      );
+      await tap(tester, find.byKey(const Key('quick-new-account')));
+      await enter(tester, keyed('quick-product-'), 'Agua');
+      expect(find.text('Agua sintética'), findsNothing);
+      expect(store.sales, isEmpty);
+    },
+  );
 
   testWidgets(
     'grouped quantity autosaves canonical digits and survives refresh',
