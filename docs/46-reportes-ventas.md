@@ -31,6 +31,8 @@ Las comprobaciones cubren efectivo, transferencia y deuda en un mismo producto, 
 
 Se auditaron las fechas y medios de los 4.305 registros históricos de la base activa. Siete rangos se contrastaron con un cálculo independiente sobre un respaldo consistente; todos coinciden. Las 63 tablas y el esquema de ese respaldo permanecieron idénticos después de consultar. La primera tentativa del helper con `query_only` rechazó el `BEGIN IMMEDIATE` que usa sqflite; se ejecutó después en la copia privada y se comprobó conservación completa, sin abrir la activa con Flutter. El análisis final no tiene incidencias.
 
-## Entrega preparada
+## Entrega publicada
 
-Release Windows 0.19.0+29 compilado sin overrides. ZIP generado y verificado con 17 archivos, sin bases, perfiles ni snapshots privados. El publicador encontró abierta la 0.18.1 y detuvo el reemplazo. Pendiente confirmación de cierre para publicar el ZIP ya generado en el acceso estable, verificarlo contra la copia versionada y limpiar la entrega anterior. La versión instalada continúa siendo 0.18.1 hasta completar ese paso. Ver [evidencia](evidence/report-sales.json).
+Release Windows 0.19.0+29 compilado sin overrides y publicado en el acceso estable después del cierre confirmado por el propietario. ZIP, entrega estable y copia versionada coinciden en sus 17 archivos, sin bases, perfiles ni snapshots privados. La carpeta y el ZIP de 0.18.1 se eliminaron conforme a la política de retención.
+
+Se creó y verificó un respaldo consistente de la base cerrada en `backups/report-sales-20261026`. Después de publicar se compararon las 63 tablas y el esquema: todos sus registros permanecen idénticos, integridad correcta, cero violaciones FK, esquema14 y escala0. Sin migración ni operaciones de prueba en la base activa. La app se deja cerrada; no se afirma un recorrido nativo nuevo. El propietario puede abrir la 0.19.0 con `Iniciar Valinor Sanctum.cmd`. Ver [evidencia](evidence/report-sales.json).

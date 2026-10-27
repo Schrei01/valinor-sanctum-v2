@@ -37,14 +37,26 @@
     "snapshotTablesAndSchemaPreserved": 63,
     "archivedSalesDatesAudited": 4305,
     "invalidArchiveDates": 0,
-    "nativeUiTraversal": false
+    "nativeUiTraversal": false,
+    "activeTablesRowsAndSchemaUnchanged": 63,
+    "integrity": "ok",
+    "foreignKeyViolations": 0,
+    "schemaVersion": 14,
+    "activeMoneyScale": 0,
+    "consistentBackupVerified": true
   },
   "delivery": {
     "releaseBuild": true,
     "sanctumOverrides": false,
     "files": 17,
     "privateDataExcluded": true,
-    "published": false,
-    "publicationWaitingForAppClosure": true
+    "published": true,
+    "publicationWaitingForAppClosure": false,
+    "archiveBytes": 15010439,
+    "archiveSha256": "E64F794825D14E376D99423A1F7E9792969843186EAAB15313E0492C504DA8F0",
+    "stableVersionedArchiveMatch": true,
+    "oldDistributionsRemoved": true,
+    "obsoleteArtifactsRemoved": 2,
+    "appLeftOpen": false
   }
 }
