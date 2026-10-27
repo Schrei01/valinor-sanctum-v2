@@ -1,0 +1,68 @@
+{
+  "version": "0.23.1+37",
+  "date": "2026-10-27",
+  "schemaVersion": 16,
+  "ci": {
+    "rootCause": "Shallow SHA-only Flutter checkout had no Git release tag; framework version became 0.0.0-unknown",
+    "pinnedVersion": "3.47.7",
+    "pinnedRevision": "abaf9c523780a608bd46686fd5e53740a07077f8",
+    "tagMatchesPinnedCommit": true,
+    "versionAndRevisionGuard": true,
+    "lockfileEnforced": true,
+    "packagesNotUpgraded": true,
+    "freshGitMetadataProbe": {
+      "beforeTags": 0,
+      "afterTag": "3.47.7",
+      "revisionVerified": true
+    },
+    "remoteStatusAtCommit": "pending new push; inspect Windows checks after commit"
+  },
+  "ui": {
+    "reservedShortcutAnnouncementRemoved": true,
+    "commandPreserved": true,
+    "publicReadmeAnnouncementRemoved": true
+  },
+  "validation": {
+    "focusedTestsPassed": 16,
+    "formatFilesChecked": 186,
+    "formatChanges": 0,
+    "analysis": "No issues found",
+    "lockedDependenciesResolved": true
+  },
+  "data": {
+    "label": "active",
+    "schemaUnchanged": true,
+    "originalRowsPreserved": true,
+    "unrelatedTablesUnchanged": true,
+    "cashBalancesUnchanged": true,
+    "totalDebtUnchanged": true,
+    "exampleDebtors": 2,
+    "integrity": "ok",
+    "foreignKeys": 0,
+    "backupVerified": true,
+    "backupDirectory": "backups/ci-debt-20261027",
+    "twoExampleOpenings": true,
+    "markedSynthetic": true,
+    "fundedFromExistingLegacy": true,
+    "onlyReceivableReclassification": true,
+    "replayVerifiedOnPrivateCopy": true,
+    "userAuthorizedExampleAllocation": true,
+    "onlySpecifiedAssignments": true,
+    "privateNamesAndAmountsExcludedFromRepository": true,
+    "sourcePosUntouched": true,
+    "migrationRequired": false
+  },
+  "distribution": {
+    "version": "0.23.1+37",
+    "files": 17,
+    "archiveBytes": 15072523,
+    "archiveSha256": "C5B05A06D35093E3CEC4AED720AE073526C26F0B492DDD170AE3A131B748617A",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
+    "privateDataExcluded": true,
+    "published": true,
+    "executableVersionVerified": "0.23.1+37",
+    "visibleFooter": "0.23.1",
+    "oldVersionsCleaned": true
+  }
+}

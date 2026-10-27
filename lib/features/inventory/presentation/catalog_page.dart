@@ -179,7 +179,7 @@ class CatalogPageState extends State<CatalogPage> {
             title: 'Catálogo',
             subtitle: showingReference
                 ? 'Consulta el inventario guardado en la copia.'
-                : 'Filtra por categoría o proveedor. Ctrl+D para descontar unidades. Ingresa mercancía desde Compras y crea eventos desde Eventos.',
+                : 'Filtra por categoría o proveedor. Ingresa mercancía desde Compras y crea eventos desde Eventos.',
             busy: controller.busy || _referenceLoading,
             onRefresh: _refresh,
           ),

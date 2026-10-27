@@ -16,11 +16,24 @@ jobs:
       - name: Prepare pinned portable Flutter
         shell: pwsh
         run: |
+          $flutterVersion = '3.47.7'
+          $flutterRevision = 'abaf9c523780a608bd46686fd5e53740a07077f8'
           New-Item -ItemType Directory -Force .tooling/flutter | Out-Null
           git -C .tooling/flutter init
-          git -C .tooling/flutter fetch --depth 1 https://github.com/flutter/flutter.git abaf9c523780a608bd46686fd5e53740a07077f8
-          git -C .tooling/flutter checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Could not initialize the portable SDK checkout.' }
+          # Flutter derives its semantic version from Git tags, even at a pinned commit.
+          git -C .tooling/flutter fetch --depth 1 https://github.com/flutter/flutter.git ("refs/tags/{0}:refs/tags/{0}" -f $flutterVersion)
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the pinned Flutter release tag.' }
+          $tagRevision = git -C .tooling/flutter rev-parse ("refs/tags/{0}^{{commit}}" -f $flutterVersion)
+          if ($LASTEXITCODE -ne 0 -or $tagRevision -ne $flutterRevision) { throw 'The Flutter release tag does not match the pinned commit.' }
+          git -C .tooling/flutter checkout --detach $flutterRevision
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check out the pinned Flutter commit.' }
           ./scripts/flutter.ps1 --version
+          if ($LASTEXITCODE -ne 0) { throw 'Flutter SDK bootstrap failed.' }
+          $sdk = ./scripts/flutter.ps1 --version --machine | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $sdk.frameworkVersion -ne $flutterVersion -or $sdk.frameworkRevision -ne $flutterRevision) {
+            throw 'Flutter SDK metadata does not match the pinned version and revision.'
+          }
       - name: Resolve locked dependencies
         shell: pwsh
         run: ./scripts/flutter.ps1 pub get --enforce-lockfile
