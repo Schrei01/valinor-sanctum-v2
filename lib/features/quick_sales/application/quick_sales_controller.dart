@@ -163,7 +163,19 @@ class QuickSalesController extends ChangeNotifier {
         ?.id,
   );
 
-  void rename(String id, String label) => _change(id, label: label);
+  void rename(String id, String label) {
+    final current = _cards[id]?.account;
+    final clearPerson =
+        current != null &&
+        current.customerName.isNotEmpty &&
+        label.trim() != current.customerName;
+    _change(
+      id,
+      label: label,
+      customerName: clearPerson ? '' : null,
+      clearDebtor: clearPerson,
+    );
+  }
 
   void updateCustomerName(String id, String customerName) =>
       _change(id, customerName: customerName);
@@ -174,6 +186,7 @@ class QuickSalesController extends ChangeNotifier {
         .firstOrNull;
     _change(
       id,
+      label: person?.name,
       customerName: person?.name ?? '',
       debtorId: person?.id,
       clearDebtor: person == null,

@@ -93,14 +93,13 @@ void main() {
 
   Future<void> enter(WidgetTester tester, Finder finder, String value) async {
     await tester.ensureVisible(finder);
-    if (tester.widget(finder) is DropdownButtonFormField<String>) {
-      await tester.tap(finder);
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining(value).last);
-    } else {
-      await tester.enterText(finder, value);
-    }
+    await tester.enterText(finder, value);
     await tester.pumpAndSettle();
+    if ((tester.widget<TextField>(finder).key as ValueKey<String>).value
+        .startsWith('quick-label-')) {
+      await tester.tap(find.text(value).last);
+      await tester.pumpAndSettle();
+    }
   }
 
   Future<void> product(WidgetTester tester, int row, String name) async {
@@ -122,15 +121,58 @@ void main() {
   String customerValue(WidgetTester tester) =>
       controller.accounts.single.customerName;
 
+  testWidgets(
+    'person picker fills Cuenta before payment selection and typing clears stale ownership',
+    (tester) async {
+      await open(tester);
+      await tap(tester, find.byKey(const Key('quick-new-account')));
+      await tap(tester, keyed('quick-person-picker-'));
+      await tap(tester, find.text('Cliente válido').last);
+      expect(
+        tester.widget<TextField>(keyed('quick-label-')).controller!.text,
+        'Cliente válido',
+      );
+      expect(controller.accounts.single.debtorId, 'Cliente válido');
+      expect(controller.hasCreditFor(controller.accounts.single), isFalse);
+      await enter(tester, keyed('quick-product-'), 'Agua sintética');
+      await tap(tester, find.text('Agua sintética').last);
+      await tester.enterText(keyed('quick-label-'), 'Mesa sin titular');
+      await tester.pumpAndSettle();
+      expect(controller.accounts.single.debtorId, isNull);
+      await payment(tester, 0, 'Deudas');
+      await tap(tester, keyed('quick-register-'));
+      expect(store.sales, isEmpty);
+      expect(
+        find.text('Asigna esta cuenta a una persona registrada en Deudores.'),
+        findsOneWidget,
+      );
+      await tester.enterText(keyed('quick-label-'), 'Cliente mix');
+      await tester.pumpAndSettle();
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(controller.accounts.single.debtorId, 'Cliente mixto');
+      expect(
+        tester.widget<TextField>(keyed('quick-label-')).controller!.text,
+        'Cliente mixto',
+      );
+      await tap(tester, keyed('quick-register-'));
+      expect(store.customerDebts, {'Cliente mixto': 300000});
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Deudas asks for the client and blocks anonymous credit', (
     tester,
   ) async {
     await open(tester);
     await tap(tester, find.byKey(const Key('quick-new-account')));
-    expect(keyed('quick-customer-'), findsNothing);
+    expect(keyed('quick-label-'), findsOneWidget);
     await product(tester, 0, 'Agua sintética');
     await payment(tester, 0, 'Deudas');
-    expect(find.text('Persona de la deuda'), findsOneWidget);
+    expect(
+      find.text('Selecciona una persona de Deudores para asignarle lo fiado.'),
+      findsOneWidget,
+    );
     expect(
       find.text('Cobrado: COP 0,00 · Deudas: COP 3.000,00'),
       findsOneWidget,
@@ -151,7 +193,7 @@ void main() {
     (tester) async {
       await open(tester);
       await creditAccount(tester);
-      await enter(tester, keyed('quick-customer-'), 'Cliente sintético');
+      await enter(tester, keyed('quick-label-'), 'Cliente sintético');
       await tap(tester, keyed('quick-register-').first);
       expect(store.sales, hasLength(1));
       expect(store.sales.single.result.creditMinor, 300000);
@@ -177,7 +219,7 @@ void main() {
     (tester) async {
       await open(tester);
       await creditAccount(tester);
-      await enter(tester, keyed('quick-customer-'), 'Cliente mixto');
+      await enter(tester, keyed('quick-label-'), 'Cliente mixto');
       await tap(tester, keyed('quick-add-line-').first);
       await product(tester, 1, 'Snack sintético');
       await tap(tester, keyed('quick-add-line-').first);
@@ -204,7 +246,7 @@ void main() {
   ) async {
     await open(tester);
     await creditAccount(tester);
-    await enter(tester, keyed('quick-customer-'), 'Cliente guardado');
+    await enter(tester, keyed('quick-label-'), 'Cliente guardado');
     await controller.flushAll();
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
@@ -220,20 +262,20 @@ void main() {
   });
 
   testWidgets(
-    'switching to cash hides client field and preserves its draft for reuse',
+    'account person remains visible for cash and credit without creating debt for paid lines',
     (tester) async {
       await open(tester);
       await creditAccount(tester);
-      await enter(tester, keyed('quick-customer-'), 'Cliente conservado');
+      await enter(tester, keyed('quick-label-'), 'Cliente conservado');
       await payment(tester, 0, 'Efectivo');
-      expect(keyed('quick-customer-'), findsNothing);
+      expect(keyed('quick-label-'), findsOneWidget);
       expect(controller.accounts.single.customerName, 'Cliente conservado');
       await controller.flushAll();
       await tester.pumpWidget(const SizedBox());
       controller.dispose();
       controller = QuickSalesController(store: store);
       await open(tester);
-      expect(keyed('quick-customer-'), findsNothing);
+      expect(keyed('quick-label-'), findsOneWidget);
       expect(controller.accounts.single.customerName, 'Cliente conservado');
       await payment(tester, 0, 'Deudas');
       expect(customerValue(tester), 'Cliente conservado');
@@ -251,16 +293,11 @@ void main() {
     (tester) async {
       await open(tester);
       await creditAccount(tester);
-      await enter(tester, keyed('quick-customer-'), 'Cliente reintento');
+      await enter(tester, keyed('quick-label-'), 'Cliente reintento');
       store.confirmationFailure = StateError('lost response');
       store.commitBeforeFailure = true;
       await tap(tester, keyed('quick-register-').first);
-      expect(
-        tester
-            .widget<DropdownButtonFormField<String>>(keyed('quick-customer-'))
-            .onChanged,
-        isNull,
-      );
+      expect(tester.widget<TextField>(keyed('quick-label-')).enabled, isFalse);
       expect(customerValue(tester), 'Cliente reintento');
       expect(store.stock.first.quantity, 19);
       store.confirmationFailure = null;
@@ -278,7 +315,7 @@ void main() {
     (tester) async {
       await open(tester);
       await creditAccount(tester);
-      await enter(tester, keyed('quick-customer-'), 'Cliente inicial');
+      await enter(tester, keyed('quick-label-'), 'Cliente inicial');
       store.confirmationFailure = const QuickSalesValidationException(
         'Stock cambió.',
       );
@@ -286,7 +323,7 @@ void main() {
       final rejectedId = store.preparedIds.single;
       await tap(tester, keyed('quick-unlock-').first);
       expect(customerValue(tester), 'Cliente inicial');
-      await enter(tester, keyed('quick-customer-'), 'Cliente corregido');
+      await enter(tester, keyed('quick-label-'), 'Cliente corregido');
       store.confirmationFailure = null;
       await tap(tester, keyed('quick-register-').first);
       expect(store.preparedIds.last, isNot(rejectedId));
@@ -298,7 +335,7 @@ void main() {
   testWidgets('credit client and summary fit a narrow window', (tester) async {
     await open(tester, size: const Size(400, 900));
     await creditAccount(tester);
-    await enter(tester, keyed('quick-customer-'), 'Cliente estrecho');
+    await enter(tester, keyed('quick-label-'), 'Cliente estrecho');
     await tester.ensureVisible(keyed('quick-register-').first);
     expect(tester.takeException(), isNull);
     await tap(tester, keyed('quick-register-').first);

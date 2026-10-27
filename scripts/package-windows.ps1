@@ -114,7 +114,10 @@ En Ventas crea varias cuentas, agrega productos y elige la forma de pago por lí
 Elige Efectivo, Transferencia o Deudas. Transferencia usa la cuenta de Nequi;
 ese nombre aparece en las líneas, resumen e historial de Ventas.
 Registrar venta guarda entrega, stock, costo y cobro en una sola operación.
-Para fiar, registra primero la persona en Deudores y selecciónala en la cuenta de Ventas.
+En Cuenta puedes escribir un nombre libre, buscar una persona registrada o
+abrir el selector de Deudores. Elegirla llena el nombre y vincula la cuenta.
+Para fiar, registra primero la persona en Deudores y selecciónala en Cuenta.
+Editar el nombre manualmente retira esa vinculación; vuelve a elegir la persona.
 Todas las líneas Deudas de una cuenta pertenecen a esa persona.
 Puedes combinar líneas pagadas y fiadas: solo lo pagado entra a Caja o Nequi.
 Lo fiado aumenta la deuda de esa persona y Deudas en Tesorería.

@@ -1,0 +1,79 @@
+{
+  "version": "0.26.0+40",
+  "date": "2026-10-27",
+  "schemaVersion": 16,
+  "ui": {
+    "accountNameAutocomplete": true,
+    "personPickerAvailableBeforeCredit": true,
+    "selectedPersonFillsAccountName": true,
+    "selectionUsesDebtorId": true,
+    "onePersonPerAccount": true,
+    "freeAccountNamesPreserved": true,
+    "typedNameAloneDoesNotAssign": true,
+    "renamingClearsOldOwnership": true,
+    "personRetainedWhenSwitchingPayment": true,
+    "oldConditionalSelectorRemoved": true,
+    "uncertainRequestsLocked": true
+  },
+  "accounting": {
+    "existingAtomicMixedSaleReused": true,
+    "creditIncreasesSelectedDebtorOnly": true,
+    "cashIncreasesCaja": true,
+    "transferIncreasesNequi": true,
+    "paidLinesDoNotIncreaseDebtorBalance": true,
+    "priorDebtIncluded": true,
+    "otherDebtorUnchanged": true,
+    "realSqliteControllerTestPassed": true,
+    "retryDoesNotDuplicate": true
+  },
+  "validation": {
+    "focusedPassed": 59,
+    "failed": 0,
+    "renderTestsIncluded": 3,
+    "imagesInspected": 4,
+    "widths": [
+      1366,
+      620,
+      400
+    ],
+    "formatFiles": 189,
+    "formatChanges": 0,
+    "analysis": "No issues found"
+  },
+  "data": {
+    "schemaVersion": 16,
+    "tables": 68,
+    "allRowsAndSchemaPreserved": true,
+    "integrity": "ok",
+    "foreignKeys": 0,
+    "backupVerified": true,
+    "backupDirectory": "backups/named-sales-20261027",
+    "checkedAfterAppLaunch": true,
+    "businessOperationsInActiveDatabase": false
+  },
+  "bundle": {
+    "version": "0.26.0+40",
+    "files": 18,
+    "archiveBytes": 15261349,
+    "archiveSha256": "4F082AE70F563E6A321BB509AC51FF1AE74A79CE068E31CC6B37BE8F8D263E73",
+    "stableMatchesArchive": true,
+    "versionedMatchesArchive": true,
+    "privateDataExcluded": true,
+    "releaseWithoutOverrides": true,
+    "executableVersion": "0.26.0+40",
+    "footerVersion": "0.26.0",
+    "oldDistributionsCleaned": true
+  },
+  "app": {
+    "leftOpen": true,
+    "responding": true,
+    "versionObservedThroughAccessibility": true,
+    "personPickerObservedThroughAccessibility": true,
+    "nativeBusinessOperations": false
+  },
+  "ci": {
+    "previousHead": "e99b4e5e8101a408b8f8cfc8720b9080f648d714",
+    "previousConclusion": "success",
+    "remoteStatusAtCommit": "pending new push; inspect Windows checks after commit"
+  }
+}

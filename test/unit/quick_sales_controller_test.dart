@@ -37,6 +37,49 @@ void main() {
   }
 
   test(
+    'choosing a person names the account and persists the same debtor before any credit line',
+    () async {
+      final id = account();
+      controller.selectDebtor(id, 'Cliente válido');
+      expect(controller.accounts.single.label, 'Cliente válido');
+      expect(controller.accounts.single.debtorId, 'Cliente válido');
+      expect(controller.hasCreditFor(controller.accounts.single), isFalse);
+      expect(await controller.flushAll(), isTrue);
+      await controller.load();
+      expect(controller.accounts.single.debtorId, 'Cliente válido');
+      expect(controller.accounts.single.customerName, 'Cliente válido');
+      final second = account();
+      controller.selectDebtor(second, 'Cliente mixto');
+      expect(
+        controller.accounts.firstWhere((a) => a.id == id).debtorId,
+        'Cliente válido',
+      );
+      expect(
+        controller.accounts.firstWhere((a) => a.id == second).label,
+        'Cliente mixto',
+      );
+    },
+  );
+
+  test(
+    'editing a named account clears its old debtor and cannot charge the prior person',
+    () async {
+      final id = account();
+      controller.selectDebtor(id, 'Cliente válido');
+      controller.rename(id, 'Mesa libre');
+      expect(controller.accounts.single.debtorId, isNull);
+      expect(controller.accounts.single.customerName, isEmpty);
+      fill(id, payment: QuickPaymentOption.creditId);
+      expect(await controller.register(id), isFalse);
+      expect(store.customerDebts, isEmpty);
+      expect(store.preparedIds, isEmpty);
+      controller.selectDebtor(id, 'Cliente mixto');
+      expect(await controller.register(id), isTrue);
+      expect(store.customerDebts, {'Cliente mixto': 300000});
+    },
+  );
+
+  test(
     'independent cards autosave incomplete lines and preserve them across reload errors',
     () async {
       final first = account();

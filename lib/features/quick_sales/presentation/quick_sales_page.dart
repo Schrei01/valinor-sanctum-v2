@@ -1,5 +1,6 @@
 import '../../../core/presentation/grouped_number_formatter.dart';
 import 'package:flutter/material.dart';
+import '../../debtors/domain/debtors_store.dart';
 import '../../../core/presentation/financial_total.dart';
 
 import '../../inventory/domain/inventory_store.dart';
@@ -248,6 +249,129 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
       ? 'Revisa cantidades'
       : inventoryMoney(amount.toInt(), widget.profile);
 
+  void _choosePerson(DebtorSummary person) {
+    _label.value = TextEditingValue(
+      text: person.name,
+      selection: TextSelection.collapsed(offset: person.name.length),
+    );
+    widget.controller.selectDebtor(widget.account.id, person.id);
+    _labelFocus.unfocus();
+  }
+
+  Widget _accountField(bool locked, bool hasCredit) {
+    final account = widget.account;
+    final people = widget.data.debtors.where((p) => p.isActive).toList();
+    final selected = widget.data.debtors
+        .where((p) => p.id == account.debtorId)
+        .firstOrNull;
+    final linked = account.debtorId != null;
+    final helper = linked
+        ? selected == null || !selected.isActive
+              ? '${account.customerName} · Fiado bloqueado'
+              : 'Titular: ${selected.name} · Debe ${inventoryMoney(selected.balanceMinor, widget.profile)}'
+        : hasCredit
+        ? people.isEmpty
+              ? 'Primero registra una persona en Deudores.'
+              : 'Selecciona una persona de Deudores para asignarle lo fiado.'
+        : null;
+    return LayoutBuilder(
+      builder: (context, constraints) => RawAutocomplete<DebtorSummary>(
+        textEditingController: _label,
+        focusNode: _labelFocus,
+        displayStringForOption: (p) => p.name,
+        optionsBuilder: (query) {
+          if (locked) return const Iterable<DebtorSummary>.empty();
+          final value = query.text.trim().toLowerCase();
+          return people.where(
+            (p) => value.isEmpty || p.name.toLowerCase().contains(value),
+          );
+        },
+        onSelected: _choosePerson,
+        fieldViewBuilder: (context, text, focus, submit) => TextField(
+          key: ValueKey('quick-label-${account.id}'),
+          controller: text,
+          focusNode: focus,
+          enabled: !locked,
+          maxLength: 120,
+          decoration: InputDecoration(
+            labelText: 'Cuenta',
+            hintText: 'Nombre de cuenta o persona',
+            counterText: '',
+            isDense: true,
+            helperText: helper,
+            helperMaxLines: 2,
+            suffixIcon: PopupMenuButton<String>(
+              key: ValueKey('quick-person-picker-${account.id}'),
+              tooltip: 'Elegir persona de Deudores',
+              enabled: !locked && people.isNotEmpty,
+              icon: const Icon(Icons.person_search_outlined),
+              constraints: BoxConstraints(
+                maxHeight: 320,
+                maxWidth: constraints.maxWidth.clamp(160.0, 380.0).toDouble(),
+              ),
+              onSelected: (id) =>
+                  _choosePerson(people.singleWhere((p) => p.id == id)),
+              itemBuilder: (context) => [
+                for (final p in people)
+                  PopupMenuItem(
+                    value: p.id,
+                    height: 60,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          p.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'Debe ${inventoryMoney(p.balanceMinor, widget.profile)}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          onChanged: (value) => widget.controller.rename(account.id, value),
+          onEditingComplete: () {},
+          onSubmitted: (_) => submit(),
+        ),
+        optionsViewBuilder: (context, select, options) {
+          final rows = options.toList();
+          return Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 5,
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: constraints.maxWidth,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    itemCount: rows.length,
+                    itemBuilder: (context, i) => ListTile(
+                      dense: true,
+                      selected: AutocompleteHighlightedOption.of(context) == i,
+                      title: Text(rows[i].name),
+                      subtitle: Text(
+                        'Debe ${inventoryMoney(rows[i].balanceMinor, widget.profile)}',
+                      ),
+                      onTap: () => select(rows[i]),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = widget.account;
@@ -282,21 +406,7 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    key: ValueKey('quick-label-${account.id}'),
-                    controller: _label,
-                    focusNode: _labelFocus,
-                    enabled: !locked,
-                    maxLength: 120,
-                    decoration: const InputDecoration(
-                      labelText: 'Cuenta',
-                      counterText: '',
-                      isDense: true,
-                    ),
-                    onChanged: (value) => controller.rename(account.id, value),
-                  ),
-                ),
+                Expanded(child: _accountField(locked, hasCredit)),
                 const SizedBox(width: 12),
                 Tooltip(
                   message: controller.isSaving(account.id)
@@ -333,47 +443,6 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
               ],
             ),
             const SizedBox(height: 16),
-            if (hasCredit) ...[
-              DropdownButtonFormField<String>(
-                key: ValueKey(
-                  'quick-customer-${account.id}-${account.debtorId}',
-                ),
-                initialValue: account.debtorId,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Persona de la deuda',
-                  helperText: widget.data.debtors.isEmpty
-                      ? 'Primero registra la persona en Deudores.'
-                      : 'Todas las líneas en Deudas de esta cuenta quedarán a su nombre.',
-                  isDense: true,
-                ),
-                items: [
-                  if (account.debtorId != null &&
-                      !widget.data.debtors.any(
-                        (p) => p.id == account.debtorId && p.isActive,
-                      ))
-                    DropdownMenuItem(
-                      value: account.debtorId,
-                      enabled: false,
-                      child: Text('${account.customerName} · Fiado bloqueado'),
-                    ),
-                  for (final person in widget.data.debtors.where(
-                    (p) => p.isActive,
-                  ))
-                    DropdownMenuItem(
-                      value: person.id,
-                      child: Text(
-                        '${person.name} · Debe ${inventoryMoney(person.balanceMinor, widget.profile)}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: locked
-                    ? null
-                    : (id) => controller.selectDebtor(account.id, id),
-              ),
-              const SizedBox(height: 16),
-            ],
             for (final line in account.lines)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
