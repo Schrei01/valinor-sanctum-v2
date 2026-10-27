@@ -640,6 +640,74 @@ WHERE sale.source_table='sales' ''');
     final resolvedDebtClosing = nativeClosingKnown
         ? reportMinor(debtClosing)
         : await historical('receivables', period.endExclusiveUtc);
+    // Reconstruct ownership and settlements at the same final cutoff as the
+    // ledger total. Never use the current balance view for a historical report.
+    final receivables = await txn.rawQuery('''
+SELECT receivable.id,receivable.initial_minor,document.occurred_at_utc,
+link.debtor_id,person.name,
+CASE WHEN link.source='historical' THEN json_extract(request.canonical_payload,'\$.input.occurredAtUtc')
+ELSE document.occurred_at_utc END assigned_effective_utc
+FROM all_customer_receivables receivable
+JOIN business_documents document ON document.id=receivable.origin_document_id AND document.status='posted'
+JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='posted'
+LEFT JOIN debtor_receivables link ON link.receivable_id=receivable.id
+LEFT JOIN debtor_requests request ON request.command_id=link.command_id
+LEFT JOIN debtors person ON person.id=link.debtor_id''');
+    final settlements = await txn.rawQuery(
+      '''
+SELECT settlement.receivable_id,settlement.amount_minor,document.occurred_at_utc
+FROM all_receivable_settlements settlement
+JOIN business_documents document ON document.id=settlement.collection_id AND document.status='posted'
+JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='posted' ''',
+    );
+    final paid = <String, BigInt>{};
+    for (final row in settlements) {
+      if (!_date(row['occurred_at_utc']).isBefore(period.endExclusiveUtc)) {
+        continue;
+      }
+      final id = row['receivable_id'] as String;
+      paid[id] =
+          (paid[id] ?? BigInt.zero) + BigInt.from(row['amount_minor'] as int);
+    }
+    final balances = <String, BigInt>{}, names = <String, String>{};
+    for (final row in receivables) {
+      if (!_date(row['occurred_at_utc']).isBefore(period.endExclusiveUtc) ||
+          row['debtor_id'] == null ||
+          !_date(
+            row['assigned_effective_utc'],
+          ).isBefore(period.endExclusiveUtc)) {
+        continue;
+      }
+      final remaining =
+          BigInt.from(row['initial_minor'] as int) -
+          (paid[row['id']] ?? BigInt.zero);
+      final id = row['debtor_id'] as String;
+      balances[id] = (balances[id] ?? BigInt.zero) + remaining;
+      names[id] = row['name'] as String;
+    }
+    final debtorBalances = [
+      for (final entry in balances.entries)
+        if (entry.value != BigInt.zero)
+          ReportDebtorBalance(
+            id: entry.key,
+            name: names[entry.key]!,
+            amountMinor: reportMinor(entry.value),
+          ),
+    ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    if (resolvedDebtClosing != null) {
+      final unassigned =
+          BigInt.from(resolvedDebtClosing) -
+          balances.values.fold(BigInt.zero, (a, b) => a + b);
+      if (unassigned != BigInt.zero) {
+        debtorBalances.add(
+          ReportDebtorBalance(
+            id: 'unassigned',
+            name: 'Sin asignar',
+            amountMinor: reportMinor(unassigned),
+          ),
+        );
+      }
+    }
     if (!openingKnown) {
       warnings.add(
         'No hay información suficiente para todos los saldos iniciales.',
@@ -672,6 +740,7 @@ WHERE sale.source_table='sales' ''');
       events: eventResults,
       debtOpeningMinor: resolvedDebtOpening,
       debtClosingMinor: resolvedDebtClosing,
+      debtorBalances: debtorBalances,
       coverageStartUtc: coverage,
       openingBalancesKnown: openingKnown,
       closingBalancesKnown: closingKnown,

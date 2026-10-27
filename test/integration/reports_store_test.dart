@@ -263,6 +263,27 @@ void main() {
       );
       expect(data.debtOpeningMinor, 40000);
       expect(data.debtClosingMinor, 34000);
+      expect(
+        data.debtorBalances.singleWhere((d) => d.id == person).amountMinor,
+        4000,
+      );
+      expect(
+        data.debtorBalances
+            .singleWhere((d) => d.id == 'unassigned')
+            .amountMinor,
+        30000,
+      );
+      final earlier = await reports.load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 19),
+          end: DateTime.utc(2026, 10, 20, 8, 59),
+        ),
+      );
+      expect(
+        earlier.debtorBalances.singleWhere((d) => d.id == person).amountMinor,
+        10000,
+      );
+      expect(earlier.debtClosingMinor, 40000);
       expect(await rows(), before);
     },
   );
@@ -354,6 +375,22 @@ void main() {
       );
       expect(data.debtOpeningMinor, 30000);
       expect(data.debtClosingMinor, 35000);
+      expect(
+        {for (final d in data.debtorBalances) d.name: d.amountMinor},
+        {
+          'Anterior incluida': 10000,
+          'Anterior adicional': 5000,
+          'Sin asignar': 20000,
+        },
+      );
+      final beforeAssignment = await reports.load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 19),
+          end: DateTime.utc(2026, 10, 20, 8, 59),
+        ),
+      );
+      expect(beforeAssignment.debtorBalances.single.id, 'unassigned');
+      expect(beforeAssignment.debtorBalances.single.amountMinor, 30000);
     },
   );
   test(
@@ -591,6 +628,36 @@ void main() {
       expect(data.saleTotals.totalMinor, 10000);
       expect(data.debtClosingMinor, 36000);
       expect(await rows(), before);
+      expect(data.debtorBalances.single.id, 'unassigned');
+      expect(data.debtorBalances.single.amountMinor, 36000);
+      final person = await registerDebtor(app, 'Titular asignado después');
+      final debtors = SqliteDebtorsStore(app, synthetic: true);
+      await debtors.prepare(
+        DebtorCommand(
+          commandId: 'assign-history',
+          kind: 'assign',
+          debtorId: person,
+          receivableId: receivable['id'] as String,
+          occurredAtUtc: at.add(const Duration(hours: 2)),
+        ),
+      );
+      await debtors.confirm('assign-history');
+      final earlier = await reports.load(
+        ReportPeriod.timed(start: day, end: DateTime.utc(2026, 10, 20, 10, 59)),
+      );
+      expect(earlier.debtorBalances.single.id, 'unassigned');
+      expect(earlier.debtorBalances.single.amountMinor, 36000);
+      final assigned = await reports.load(period());
+      expect(
+        assigned.debtorBalances.singleWhere((d) => d.id == person).amountMinor,
+        6000,
+      );
+      expect(
+        assigned.debtorBalances
+            .singleWhere((d) => d.id == 'unassigned')
+            .amountMinor,
+        30000,
+      );
     },
   );
   test(

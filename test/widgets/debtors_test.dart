@@ -192,6 +192,11 @@ void main() {
     );
     await open(t, size: const Size(620, 1000));
     await tap(t, find.byKey(const Key('debtor-person-ana')));
+    expect(
+      t.getTopLeft(find.byKey(const Key('debtor-confirm-payment'))).dy -
+          t.getBottomRight(find.byKey(const Key('debtor-payment-amount'))).dy,
+      greaterThanOrEqualTo(16),
+    );
     await tap(t, find.text('Pagar todo'));
     await tap(t, option());
     await tap(t, find.text('Efectivo').last);

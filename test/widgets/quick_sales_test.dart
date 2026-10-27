@@ -194,7 +194,10 @@ void main() {
         controller.accounts.first.lines.map((line) => line.paymentOptionId),
         ['cash', 'nequi'],
       );
-      expect(find.text('Total COP 8.000,00'), findsOneWidget);
+      expect(
+        tester.widget<Text>(keyed('quick-total-').first).data,
+        'COP 8.000,00',
+      );
       expect(
         find.textContaining('Transferencia: COP 2.000,00'),
         findsOneWidget,

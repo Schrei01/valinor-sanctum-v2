@@ -1,4 +1,5 @@
 import '../../../core/presentation/grouped_number_formatter.dart';
+import '../../../core/presentation/financial_total.dart';
 import 'package:flutter/material.dart';
 import '../../../core/domain/money.dart';
 import '../../inventory/domain/inventory_store.dart';
@@ -353,10 +354,10 @@ class _DebtorsPageState extends State<DebtorsPage> {
           children: [
             Text(person.name, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            Text(
-              'Deuda pendiente: ${_money(person.balanceMinor)}',
-              key: const Key('debtor-balance'),
-              style: Theme.of(context).textTheme.titleMedium,
+            FinancialTotal(
+              label: 'Deuda pendiente',
+              value: _money(person.balanceMinor),
+              valueKey: const Key('debtor-balance'),
             ),
             if (!person.isActive)
               const Text(
@@ -459,8 +460,11 @@ class _DebtorsPageState extends State<DebtorsPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
                   Wrap(
                     spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       TextButton(
                         onPressed: _locked || person.balanceMinor == 0

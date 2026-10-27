@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/presentation/financial_total.dart';
 
 import '../../inventory/presentation/inventory_widgets.dart';
 import '../../workspace/domain/business_profile.dart';
@@ -210,7 +211,6 @@ class _TreasuryPageState extends State<TreasuryPage> {
                 amount: data.totalAvailableMinor,
                 icon: Icons.account_balance_wallet_outlined,
                 width: width,
-                highlighted: true,
               ),
             ],
           ),
@@ -249,16 +249,15 @@ class _TreasuryPageState extends State<TreasuryPage> {
     required int amount,
     required IconData icon,
     required double width,
-    bool highlighted = false,
     String? note,
   }) {
-    const forest = Color(0xFF183D35);
-    final foreground = highlighted ? Colors.white : forest;
+    final colors = Theme.of(context).colorScheme;
+    final foreground = colors.onPrimaryContainer;
     return SizedBox(
       width: width,
       child: Card(
         key: Key('treasury-balance-$keyName'),
-        color: highlighted ? forest : Colors.white,
+        color: colors.surface,
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -266,33 +265,15 @@ class _TreasuryPageState extends State<TreasuryPage> {
             children: [
               Icon(icon, color: foreground, size: 24),
               const SizedBox(height: 14),
-              Text(
-                title,
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _money(amount),
-                key: Key('treasury-amount-$keyName'),
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 23,
-                  fontWeight: FontWeight.w700,
-                ),
+              FinancialTotal(
+                label: title,
+                value: _money(amount),
+                valueKey: Key('treasury-amount-$keyName'),
               ),
               const SizedBox(height: 8),
               Text(
                 subtitle,
-                style: TextStyle(
-                  color: highlighted
-                      ? const Color(0xFFDAE6E0)
-                      : const Color(0xFF65716A),
-                  height: 1.4,
-                ),
+                style: TextStyle(color: colors.onSurfaceVariant, height: 1.4),
               ),
               if (note != null) ...[
                 const SizedBox(height: 8),

@@ -223,6 +223,15 @@ void main() {
       expect(value(tester, 'report-outflows-transfer'), 'COP 0,00');
       expect(value(tester, 'report-outflows-total'), 'COP 70,00');
       expect(value(tester, 'report-transfers-total'), 'COP 100,00');
+      expect(value(tester, 'report-debtors-total'), 'COP 290,00');
+      expect(value(tester, 'report-debtor-one'), 'COP 180,00');
+      expect(value(tester, 'report-debtor-two'), 'COP 110,00');
+      expect(
+        tester.getTopLeft(find.text('NOTAS DEL REPORTE').first).dy,
+        greaterThan(
+          tester.getBottomRight(find.byKey(const Key('report-items'))).dy,
+        ),
+      );
       expect(
         tester
             .widget<Semantics>(find.byKey(const Key('report-transfer-route-0')))
@@ -309,7 +318,8 @@ void main() {
     (tester) async {
       store.unknownBalances = true;
       await open(tester, size: const Size(620, 1000));
-      expect(find.text('Sin información'), findsNWidgets(4));
+      expect(find.text('Sin información'), findsNWidgets(5));
+      expect(value(tester, 'report-debtors-total'), 'Sin información');
       expect(find.textContaining('historial disponible'), findsOneWidget);
       expect(value(tester, 'report-opening-cash'), 'Sin información');
       expect(value(tester, 'report-closing-nequi'), 'Sin información');
@@ -414,6 +424,65 @@ void main() {
       expect(value(tester, 'report-closing-nequi'), 'COP 800,00');
       expect(value(tester, 'report-sales-total'), 'COP 300,00');
       expect(find.textContaining('26/10/2026 · 11:59 PM'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'long debtor and transfer lists scroll locally with totals kept in the receipt',
+    (tester) async {
+      store.debtorRows = [
+        for (var i = 0; i < 30; i++)
+          ReportDebtorBalance(
+            id: 'p$i',
+            name: 'Persona $i',
+            amountMinor: i == 29 ? 0 : 1000,
+          ),
+      ];
+      store.transferRows = [
+        for (final route in [
+          ('Caja', 'Nequi'),
+          ('Nequi', 'Caja'),
+          ('Caja', 'Caja mayor'),
+          ('Caja mayor', 'Caja'),
+          ('Nequi', 'Caja mayor'),
+          ('Caja mayor', 'Nequi'),
+        ].indexed)
+          ReportTransfer(
+            documentId: 't${route.$1}',
+            occurredAtUtc: DateTime.utc(2026, 10, 26),
+            sourceAccountId: route.$2.$1,
+            sourceName: route.$2.$1,
+            destinationAccountId: route.$2.$2,
+            destinationName: route.$2.$2,
+            amountMinor: 100,
+            note: '',
+          ),
+      ];
+      await open(tester);
+      final list = find.byKey(const Key('report-debtors-details'));
+      final receipt = find.byKey(const Key('report-receipt'));
+      final bottom = tester.getBottomRight(receipt).dy;
+      expect(bottom, lessThan(850));
+      expect(tester.getSize(list).height, lessThanOrEqualTo(120));
+      expect(
+        tester
+            .getSize(find.byKey(const Key('report-transfers-details')))
+            .height,
+        lessThanOrEqualTo(120),
+      );
+      await tester.drag(list, const Offset(0, -1800));
+      await tester.pumpAndSettle();
+      expect(find.text('Persona 29').hitTestable(), findsOneWidget);
+      expect(
+        find.byKey(const Key('report-debtors-total')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('report-transfers-total')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.getBottomRight(receipt).dy, bottom);
+      expect(value(tester, 'report-debtors-total'), 'COP 290,00');
       expect(tester.takeException(), isNull);
     },
   );

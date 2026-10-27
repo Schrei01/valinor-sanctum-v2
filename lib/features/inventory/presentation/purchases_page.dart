@@ -1,4 +1,5 @@
 import '../../../core/presentation/grouped_number_formatter.dart';
+import '../../../core/presentation/financial_total.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/domain/money.dart';
@@ -383,6 +384,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                         ),
                         const Text(
                           'Sugerencia = costo total ÷ cantidad ÷ 0,65. Puedes elegir un PVP menor. El PVP elegido aplica a todas las existencias y sus cambios quedan guardados.',
+                          style: TextStyle(fontSize: 12, height: 1.4),
                         ),
                         const SizedBox(height: 20),
                         _fields([
@@ -422,14 +424,14 @@ class _PurchasesPageState extends State<PurchasesPage> {
                           ),
                         ]),
                         const SizedBox(height: 16),
-                        Text(
-                          _total == null
-                              ? 'Total de compra: completa costo total y cantidad'
+                        FinancialTotal(
+                          label: 'Total de compra',
+                          value: _total == null
+                              ? 'Completa costo y cantidad'
                               : _total! > Money.maxMinorUnits
-                              ? 'Total de compra: supera el límite permitido'
-                              : 'Total de compra: ${inventoryMoney(_total!.toInt(), widget.profile)}',
-                          key: const Key('intake-total'),
-                          style: Theme.of(context).textTheme.titleLarge,
+                              ? 'Supera el límite permitido'
+                              : inventoryMoney(_total!.toInt(), widget.profile),
+                          valueKey: const Key('intake-total'),
                         ),
                         if (_total != null &&
                             _total! >

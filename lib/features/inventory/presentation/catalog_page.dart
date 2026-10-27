@@ -1,4 +1,5 @@
 import '../../../core/presentation/grouped_number_formatter.dart';
+import '../../../core/presentation/financial_total.dart';
 import 'stock_adjustment_dialog.dart';
 import 'dart:async';
 
@@ -536,15 +537,10 @@ class CatalogPageState extends State<CatalogPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Valor estimado del inventario',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              amount,
-              key: const Key('catalog-retail-value'),
-              style: Theme.of(context).textTheme.titleLarge,
+            FinancialTotal(
+              label: 'Valor estimado del inventario',
+              value: amount,
+              valueKey: const Key('catalog-retail-value'),
             ),
             const SizedBox(height: 12),
             const Text(

@@ -1,6 +1,7 @@
 import '../../../core/presentation/grouped_number_formatter.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../core/presentation/financial_total.dart';
 import '../../../core/domain/money.dart';
 import '../../inventory/domain/inventory_store.dart';
 import '../../inventory/presentation/inventory_widgets.dart';
@@ -396,9 +397,12 @@ class _EventsPageState extends State<EventsPage> {
                           ),
                         ),
                       if (_quote != null) ...[
-                        Text(
-                          'Productos: ${_money(_quote!.productsCostMinor)} · Costo total: ${_money(_quote!.totalCostMinor)}',
+                        FinancialTotal(
+                          label: 'Costo total del evento',
+                          value: _money(_quote!.totalCostMinor),
                         ),
+                        const SizedBox(height: 8),
+                        Text('Productos: ${_money(_quote!.productsCostMinor)}'),
                         Text(
                           _amountOrZero(_fixed.text) == 0 && _products.isEmpty
                               ? 'PU: ${_money(0)} · Sin costos para calcular una sugerencia.'

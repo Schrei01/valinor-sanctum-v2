@@ -10,6 +10,7 @@ class FakeReportsStore implements ReportsStore {
   bool noTransfers = false;
   List<ReportTransfer>? transferRows;
   List<ReportItem>? itemRows;
+  List<ReportDebtorBalance>? debtorRows;
   int unpricedTransferRecords = 0;
   int unpricedCashSales = 0;
   int estimatedCashMinor = 0, estimatedSales = 0;
@@ -28,6 +29,7 @@ class FakeReportsStore implements ReportsStore {
           noTransfers: noTransfers,
           transferRows: transferRows,
           itemRows: itemRows,
+          debtorRows: debtorRows,
           unpricedTransferRecords: unpricedTransferRecords,
           unpricedCashSales: unpricedCashSales,
           estimatedCashMinor: estimatedCashMinor,
@@ -44,6 +46,7 @@ ReportsSnapshot reportFixture(
   bool noTransfers = false,
   List<ReportTransfer>? transferRows,
   List<ReportItem>? itemRows,
+  List<ReportDebtorBalance>? debtorRows,
   int unpricedTransferRecords = 0,
   int unpricedCashSales = 0,
   int estimatedCashMinor = 0,
@@ -223,6 +226,21 @@ ReportsSnapshot reportFixture(
     ],
     debtOpeningMinor: unknownBalances ? null : 30000,
     debtClosingMinor: unknownBalances ? null : 29000,
+    debtorBalances: unknownBalances
+        ? const []
+        : debtorRows ??
+              const [
+                ReportDebtorBalance(
+                  id: 'one',
+                  name: 'Persona uno',
+                  amountMinor: 18000,
+                ),
+                ReportDebtorBalance(
+                  id: 'two',
+                  name: 'Persona dos',
+                  amountMinor: 11000,
+                ),
+              ],
     coverageStartUtc: unknownBalances ? at.add(const Duration(days: 1)) : null,
     openingBalancesKnown: !unknownBalances,
     usesHistoricalBalances: convertedHistory,

@@ -184,7 +184,11 @@ void main() {
       expect(find.textContaining('Vencimiento'), findsNothing);
       expect(find.textContaining('crédito'), findsNothing);
       await fill(tester);
-      expect(find.text('Total de compra: COP 1.234,50'), findsOneWidget);
+      expect(find.text('Total de compra'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('intake-total'))).data,
+        'COP 1.234,50',
+      );
       await tap(tester, keyed('intake-payment-'));
       await tap(tester, find.text('Nequi').last);
       expect(find.text('Saldo disponible: COP 5.000,00'), findsOneWidget);

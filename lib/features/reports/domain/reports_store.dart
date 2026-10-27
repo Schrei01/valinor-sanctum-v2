@@ -294,6 +294,16 @@ class ReportEventResult {
       reportMinor(BigInt.from(salesMinor) - BigInt.from(costMinor));
 }
 
+class ReportDebtorBalance {
+  const ReportDebtorBalance({
+    required this.id,
+    required this.name,
+    required this.amountMinor,
+  });
+  final String id, name;
+  final int amountMinor;
+}
+
 class ReportsSnapshot {
   ReportsSnapshot({
     required this.period,
@@ -301,6 +311,7 @@ class ReportsSnapshot {
     required List<ReportMovement> movements,
     required List<ReportSaleLine> sales,
     List<ReportItem>? items,
+    List<ReportDebtorBalance> debtorBalances = const [],
     required List<ReportTransfer> transfers,
     required List<ReportExpense> expenses,
     required List<ReportDebtChange> debtChanges,
@@ -325,6 +336,7 @@ class ReportsSnapshot {
              return date == 0 ? a.id.compareTo(b.id) : date;
            }),
        ),
+       debtorBalances = List.unmodifiable(debtorBalances),
        accounts = List.unmodifiable(accounts),
        movements = List.unmodifiable(movements),
        sales = List.unmodifiable(sales),
@@ -338,6 +350,9 @@ class ReportsSnapshot {
   final List<ReportMovement> movements;
   final List<ReportSaleLine> sales;
   final List<ReportItem> items;
+
+  /// Outstanding ownership at the final cutoff, including unassigned debt.
+  final List<ReportDebtorBalance> debtorBalances;
   final List<ReportTransfer> transfers;
   final List<ReportExpense> expenses;
   final List<ReportDebtChange> debtChanges;

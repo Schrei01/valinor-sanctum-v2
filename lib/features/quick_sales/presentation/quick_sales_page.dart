@@ -1,5 +1,6 @@
 import '../../../core/presentation/grouped_number_formatter.dart';
 import 'package:flutter/material.dart';
+import '../../../core/presentation/financial_total.dart';
 
 import '../../inventory/domain/inventory_store.dart';
 import '../../inventory/presentation/inventory_widgets.dart';
@@ -413,10 +414,10 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
               runSpacing: 12,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Text(
-                  'Total ${_money(total)}',
-                  key: ValueKey('quick-total-${account.id}'),
-                  style: Theme.of(context).textTheme.titleLarge,
+                FinancialTotal(
+                  label: 'Total',
+                  value: _money(total),
+                  valueKey: ValueKey('quick-total-${account.id}'),
                 ),
                 if (hasCredit)
                   Text(

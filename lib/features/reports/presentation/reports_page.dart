@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/presentation/grouped_number_formatter.dart';
+import '../../../core/presentation/financial_total.dart';
 
 import '../../inventory/presentation/inventory_widgets.dart';
 import '../../workspace/domain/business_profile.dart';
@@ -130,7 +131,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
@@ -158,12 +159,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Horario de Bogotá · El rango incluye todo el minuto final.',
-                style: _muted,
-              ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               if (_rangeError != null) InventoryNotice(text: _rangeError!),
               if (c.busy) const LinearProgressIndicator(),
               if (c.error != null)
@@ -179,6 +175,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 const Text('Elige las fechas y horas y genera el reporte.'),
               if (data != null) _receipt(data),
               if (data != null) ...[const SizedBox(height: 16), _items(data)],
+              if (data != null) ...[const SizedBox(height: 16), _notes(data)],
             ],
           ),
         ),
@@ -331,7 +328,7 @@ class _ReportsPageState extends State<ReportsPage> {
         side: BorderSide(color: colors.outlineVariant),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -339,7 +336,7 @@ class _ReportsPageState extends State<ReportsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: colors.primaryContainer,
                     borderRadius: BorderRadius.circular(10),
@@ -357,83 +354,93 @@ class _ReportsPageState extends State<ReportsPage> {
                     children: [
                       Text(
                         widget.profile.businessName,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'RESUMEN DE ACTIVIDAD',
-                        style: _muted.copyWith(
-                          letterSpacing: 1.1,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        'Del ${_moment(data.period.startLocal)} al ${_moment(data.period.endLocal)}',
+                        key: const Key('report-period'),
+                        style: _muted,
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Del ${_moment(data.period.startLocal)} al ${_moment(data.period.endLocal)}',
-              key: const Key('report-period'),
-              style: _muted,
-            ),
-            const Divider(height: 24),
-            _sectionTitle('Saldos'),
-            const SizedBox(height: 8),
-            _balances(data),
-            const Divider(height: 24),
+            const Divider(height: 12),
             LayoutBuilder(
               builder: (context, constraints) {
+                final balancesPanel = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionTitle('Saldos'),
+                    const SizedBox(height: 8),
+                    _balances(data),
+                  ],
+                );
                 final salesPanel = _salesPanel(sales);
                 final outflowPanel = _outflowPanel(outflows);
+                if (constraints.maxWidth >= 900) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: balancesPanel),
+                      const SizedBox(width: 24),
+                      Expanded(child: salesPanel),
+                      const SizedBox(width: 24),
+                      Expanded(child: outflowPanel),
+                    ],
+                  );
+                }
                 if (constraints.maxWidth < 660) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      balancesPanel,
+                      const Divider(height: 16),
                       salesPanel,
                       const Divider(height: 24),
                       outflowPanel,
                     ],
                   );
                 }
-                return Row(
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: salesPanel),
-                    const SizedBox(width: 28),
-                    Expanded(child: outflowPanel),
+                    balancesPanel,
+                    const Divider(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: salesPanel),
+                        const SizedBox(width: 28),
+                        Expanded(child: outflowPanel),
+                      ],
+                    ),
                   ],
                 );
               },
             ),
-            const Divider(height: 24),
-            _transfers(data),
-            const SizedBox(height: 10),
-            if (data.usesHistoricalBalances)
-              _note(
-                'Los saldos anteriores a la apertura usan el historial convertido de la copia.',
-              ),
-            if (!data.openingBalancesKnown || !data.closingBalancesKnown)
-              _note(
-                'Sin información: el historial disponible no contiene algunos saldos del corte.',
-              ),
-            if (sales.estimatedSales > 0)
-              _note(
-                'Incluye ${sales.estimatedSales} registro(s) de ventas antiguas estimadas · ${inventoryMoney(sales.estimatedTotalMinor, widget.profile)}. Cantidad × PVP de la copia; el precio aplicado y los descuentos antiguos no se conservaron.',
-              ),
-            if (sales.unpricedSales > 0)
-              _note(
-                'Hay ${sales.unpricedSales} registro(s) de ventas antiguas sin información. Los importes parciales excluyen esos registros.',
-              ),
-            if (outflows.unpricedRecords > 0)
-              _note(
-                'Egresos parciales: ${outflows.unpricedRecords} registro(s) sin importe válido.',
-              ),
-            _note(
-              'Ventas: Efectivo + Transferencia + Deudas; sin abonos. Egresos: salidas registradas de Caja y Nequi; sin transferencias internas.',
+            const Divider(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final panels = [_debtors(data), _transfers(data)];
+                if (constraints.maxWidth < 660) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [panels[0], const Divider(height: 24), panels[1]],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: panels[0]),
+                    const SizedBox(width: 28),
+                    Expanded(child: panels[1]),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -441,94 +448,42 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  Widget _note(String text) => Padding(
-    padding: const EdgeInsets.only(top: 4),
-    child: Text(text, style: _muted),
-  );
-  Widget _transfers(ReportsSnapshot data) {
-    final routes = data.transferRoutes;
+  Widget _notes(ReportsSnapshot data) {
+    final sales = data.saleTotals, outflows = data.outflowTotals;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(child: _sectionTitle('Transferencias entre cuentas')),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  data.unpricedTransferRecords > 0
-                      ? 'Total trasladado (parcial)'
-                      : 'Total trasladado',
-                  style: _muted,
-                ),
-                _amount(
-                  'report-transfers-total',
-                  data.transferTotalMinor ??
-                      (data.knownTransferTotalMinor == 0
-                          ? null
-                          : data.knownTransferTotalMinor),
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        if (routes.isEmpty && data.unpricedTransferRecords == 0)
-          Text('Sin transferencias en este rango.', style: _muted),
-        if (routes.isNotEmpty)
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(3),
-              1: FixedColumnWidth(44),
-              2: FlexColumnWidth(1.4),
-            },
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            children: [
-              TableRow(
-                children: [
-                  Text('Origen / Destino', style: _muted),
-                  Text('Mov.', textAlign: TextAlign.center, style: _muted),
-                  Text('Importe', textAlign: TextAlign.right, style: _muted),
-                ],
-              ),
-              for (var i = 0; i < routes.length; i++)
-                TableRow(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Semantics(
-                        key: Key('report-transfer-route-$i'),
-                        label:
-                            '${routes[i].sourceName} → ${routes[i].destinationName}',
-                        child: Wrap(
-                          spacing: 5,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              routes[i].sourceName,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            const Icon(Icons.arrow_forward_rounded, size: 14),
-                            Text(
-                              routes[i].destinationName,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${routes[i].count}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    _amount('report-transfer-amount-$i', routes[i].amountMinor),
-                  ],
-                ),
-            ],
+        _sectionTitle('Notas del reporte'),
+        _note('Horario de Bogotá · El rango incluye todo el minuto final.'),
+        if (data.usesHistoricalBalances)
+          _note(
+            'Los saldos anteriores a la apertura usan el historial convertido de la copia.',
           ),
+        if (!data.openingBalancesKnown || !data.closingBalancesKnown)
+          _note(
+            'Sin información: el historial disponible no contiene algunos saldos del corte.',
+          ),
+        if (sales.estimatedSales > 0)
+          _note(
+            'Incluye ${sales.estimatedSales} registro(s) de ventas antiguas estimadas · ${inventoryMoney(sales.estimatedTotalMinor, widget.profile)}. Cantidad × PVP de la copia; el precio aplicado y los descuentos antiguos no se conservaron.',
+          ),
+        if (sales.unpricedSales > 0)
+          _note(
+            'Hay ${sales.unpricedSales} registro(s) de ventas antiguas sin información. Los importes parciales excluyen esos registros.',
+          ),
+        if (outflows.unpricedRecords > 0)
+          _note(
+            'Egresos parciales: ${outflows.unpricedRecords} registro(s) sin importe válido.',
+          ),
+        _note(
+          'Ventas: Efectivo + Transferencia + Deudas; sin abonos. Egresos: salidas registradas de Caja y Nequi; sin transferencias internas.',
+        ),
+        _note(
+          'Deudores: saldo pendiente a la fecha y hora final, incluidos saldos anteriores al período. Las asignaciones posteriores no se aplican a cortes anteriores.',
+        ),
+        _note(
+          'Los egresos incluyen compras, gastos y costos de eventos pagados. Las transferencias entre cuentas no generan ventas ni egresos.',
+        ),
         if (data.unpricedTransferRecords > 0)
           _note(
             'Total transferido parcial: ${data.unpricedTransferRecords} registro(s) sin información de importe.',
@@ -537,6 +492,142 @@ class _ReportsPageState extends State<ReportsPage> {
           _note(
             'Incluye transferencias registradas en la copia, con sus cuentas originales.',
           ),
+      ],
+    );
+  }
+
+  Widget _debtors(ReportsSnapshot data) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _sectionTitle('Deudores al cierre'),
+      const SizedBox(height: 8),
+      if (data.debtorBalances.isEmpty)
+        Text(
+          data.debtClosingMinor == null
+              ? 'Sin información del corte.'
+              : 'Sin deudas asignadas en este corte.',
+          style: _muted,
+        ),
+      _compactDetails(
+        'report-debtors-details',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final person in data.debtorBalances)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(person.name)),
+                    const SizedBox(width: 12),
+                    _amount('report-debtor-${person.id}', person.amountMinor),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 6),
+      FinancialTotal(
+        label: 'Total deudas',
+        value: data.debtClosingMinor == null
+            ? 'Sin información'
+            : inventoryMoney(data.debtClosingMinor!, widget.profile),
+        valueKey: const Key('report-debtors-total'),
+      ),
+    ],
+  );
+
+  Widget _note(String text) => Padding(
+    padding: const EdgeInsets.only(top: 4),
+    child: Text(text, style: _muted),
+  );
+  Widget _compactDetails(String key, Widget child) => ConstrainedBox(
+    constraints: const BoxConstraints(maxHeight: 120),
+    child: SingleChildScrollView(key: Key(key), primary: false, child: child),
+  );
+  Widget _transfers(ReportsSnapshot data) {
+    final routes = data.transferRoutes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('Transferencias entre cuentas'),
+        const SizedBox(height: 6),
+        if (routes.isEmpty && data.unpricedTransferRecords == 0)
+          Text('Sin transferencias en este rango.', style: _muted),
+        if (routes.isNotEmpty)
+          _compactDetails(
+            'report-transfers-details',
+            Table(
+              columnWidths: const {
+                0: FlexColumnWidth(3),
+                1: FixedColumnWidth(44),
+                2: FlexColumnWidth(1.4),
+              },
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+              children: [
+                TableRow(
+                  children: [
+                    Text('Origen / Destino', style: _muted),
+                    Text('Mov.', textAlign: TextAlign.center, style: _muted),
+                    Text('Importe', textAlign: TextAlign.right, style: _muted),
+                  ],
+                ),
+                for (var i = 0; i < routes.length; i++)
+                  TableRow(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Semantics(
+                          key: Key('report-transfer-route-$i'),
+                          label:
+                              '${routes[i].sourceName} → ${routes[i].destinationName}',
+                          child: Wrap(
+                            spacing: 5,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                routes[i].sourceName,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              const Icon(Icons.arrow_forward_rounded, size: 14),
+                              Text(
+                                routes[i].destinationName,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${routes[i].count}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      _amount(
+                        'report-transfer-amount-$i',
+                        routes[i].amountMinor,
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 6),
+        FinancialTotal(
+          label: data.unpricedTransferRecords > 0
+              ? 'Total trasladado (parcial)'
+              : 'Total trasladado',
+          value:
+              data.transferTotalMinor == null &&
+                  data.knownTransferTotalMinor == 0
+              ? 'Sin información'
+              : inventoryMoney(
+                  data.transferTotalMinor ?? data.knownTransferTotalMinor,
+                  widget.profile,
+                ),
+          valueKey: const Key('report-transfers-total'),
+        ),
       ],
     );
   }
@@ -558,7 +649,7 @@ class _ReportsPageState extends State<ReportsPage> {
         .where((a) => a.role == ReportAccountRole.transfer)
         .firstOrNull;
     Widget cell(Widget child) =>
-        Padding(padding: const EdgeInsets.symmetric(vertical: 7), child: child);
+        Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: child);
     return Table(
       columnWidths: const {
         0: FlexColumnWidth(1),
@@ -655,13 +746,7 @@ class _ReportsPageState extends State<ReportsPage> {
         totals.transferMinor,
         totals.unpricedTransferRecords,
       ),
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(
-          'Compras, gastos y costos de eventos pagados.',
-          style: _muted,
-        ),
-      ),
+      const SizedBox(height: 30),
       _saleRow(
         'report-outflows-total',
         'Total egresos',
@@ -669,7 +754,6 @@ class _ReportsPageState extends State<ReportsPage> {
         totals.knownTotalMinor,
         totals.unpricedRecords,
         total: true,
-        expense: true,
       ),
     ],
   );
@@ -680,57 +764,48 @@ class _ReportsPageState extends State<ReportsPage> {
     int known,
     int missing, {
     bool total = false,
-    bool expense = false,
   }) {
-    final colors = Theme.of(context).colorScheme;
+    if (total) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: FinancialTotal(
+          label: missing > 0 ? '$label (parcial)' : label,
+          value: amount == null && known == 0
+              ? 'Sin información'
+              : inventoryMoney(amount ?? known, widget.profile),
+          valueKey: Key(key),
+        ),
+      );
+    }
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: total ? 10 : 0,
-        vertical: total ? 10 : 8,
-      ),
-      margin: EdgeInsets.only(top: total ? 6 : 0),
-      decoration: total
-          ? BoxDecoration(
-              color: expense
-                  ? colors.tertiaryContainer.withValues(alpha: 0.5)
-                  : colors.primaryContainer.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(8),
-            )
-          : null,
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Expanded(
             flex: 4,
             child: Text(
               missing > 0 ? '$label (parcial)' : label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: total ? FontWeight.w700 : FontWeight.w400,
-              ),
+              style: const TextStyle(fontSize: 14),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             flex: 3,
-            child: _amount(
-              key,
-              amount ?? (known == 0 ? null : known),
-              total: total,
-            ),
+            child: _amount(key, amount ?? (known == 0 ? null : known)),
           ),
         ],
       ),
     );
   }
 
-  Widget _amount(String key, int? amount, {bool total = false}) => Text(
+  Widget _amount(String key, int? amount) => Text(
     amount == null ? 'Sin información' : inventoryMoney(amount, widget.profile),
     key: Key(key),
     textAlign: TextAlign.right,
-    style: TextStyle(
-      fontSize: total ? 17 : 15,
-      fontWeight: total ? FontWeight.w700 : FontWeight.w600,
-      fontFeatures: const [FontFeature.tabularFigures()],
+    style: const TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      fontFeatures: [FontFeature.tabularFigures()],
     ),
   );
 }

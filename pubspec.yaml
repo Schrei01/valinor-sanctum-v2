@@ -1,7 +1,7 @@
 name: valinor_sanctum_2
 description: Aplicación de escritorio independiente para Valinor Sanctum 2.0.
 publish_to: none
-version: 0.23.1+37
+version: 0.24.0+38
 
 environment:
   sdk: ^3.12.0
