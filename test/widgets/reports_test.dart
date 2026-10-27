@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:valinor_sanctum_2/features/reports/application/reports_controller.dart';
 import 'package:valinor_sanctum_2/features/reports/presentation/reports_page.dart';
+import 'package:valinor_sanctum_2/features/reports/domain/reports_store.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
 import '../support/fake_reports_store.dart';
 
@@ -104,6 +107,26 @@ void main() {
   testWidgets(
     'balances and sale tender totals are shown at their generated cutoffs',
     (tester) async {
+      // Real font metrics are required for the compact receipt height assertion.
+      await tester.runAsync(() async {
+        final loader = FontLoader('Roboto');
+        for (final font in [
+          'roboto-regular.ttf',
+          'roboto-medium.ttf',
+          'roboto-bold.ttf',
+        ]) {
+          loader.addFont(
+            Future.value(
+              ByteData.sublistView(
+                await File(
+                  '.tooling/flutter/bin/cache/artifacts/material_fonts/$font',
+                ).readAsBytes(),
+              ),
+            ),
+          );
+        }
+        await loader.load();
+      });
       await open(tester);
       expect(value(tester, 'report-opening-cash'), 'COP 1.000,00');
       expect(value(tester, 'report-opening-nequi'), 'COP 500,00');
@@ -117,6 +140,15 @@ void main() {
       expect(value(tester, 'report-outflows-cash'), 'COP 70,00');
       expect(value(tester, 'report-outflows-transfer'), 'COP 0,00');
       expect(value(tester, 'report-outflows-total'), 'COP 70,00');
+      expect(value(tester, 'report-transfers-total'), 'COP 100,00');
+      expect(
+        tester
+            .widget<Semantics>(find.byKey(const Key('report-transfer-route-0')))
+            .properties
+            .label,
+        'Caja → Nequi',
+      );
+      expect(value(tester, 'report-transfer-amount-0'), 'COP 100,00');
       expect(
         tester.getBottomRight(find.byKey(const Key('report-receipt'))).dy,
         lessThan(850),
@@ -234,6 +266,55 @@ void main() {
       expect(find.textContaining('Incluye 3 registro(s)'), findsOneWidget);
       expect(find.textContaining('· COP 120,00'), findsOneWidget);
       expect(find.text('Total vendido (parcial)'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'empty transfer range shows zero without hiding the other report values',
+    (tester) async {
+      store.noTransfers = true;
+      await open(tester);
+      expect(value(tester, 'report-transfers-total'), 'COP 0,00');
+      expect(find.text('Sin transferencias en este rango.'), findsOneWidget);
+      expect(find.byKey(const Key('report-transfer-route-0')), findsNothing);
+      expect(value(tester, 'report-sales-total'), 'COP 300,00');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'historical transfer with missing companion amount is identified as partial',
+    (tester) async {
+      store.unpricedTransferRecords = 1;
+      store.transferRows = [
+        ReportTransfer(
+          documentId: 'old',
+          occurredAtUtc: DateTime.utc(2026, 10, 26),
+          sourceAccountId: 'reserve',
+          sourceName: 'Caja Mayor',
+          destinationAccountId: 'debt',
+          destinationName: 'Deudas',
+          amountMinor: 12500,
+          note: '',
+          isHistorical: true,
+        ),
+      ];
+      await open(tester, size: const Size(620, 1100));
+      expect(value(tester, 'report-transfers-total'), 'COP 125,00');
+      expect(
+        tester
+            .widget<Semantics>(find.byKey(const Key('report-transfer-route-0')))
+            .properties
+            .label,
+        'Caja mayor → Deudas',
+      );
+      expect(find.text('Total trasladado (parcial)'), findsOneWidget);
+      expect(
+        find.textContaining('1 registro(s) sin información de importe'),
+        findsOneWidget,
+      );
+      expect(value(tester, 'report-outflows-total'), 'COP 70,00');
       expect(tester.takeException(), isNull);
     },
   );

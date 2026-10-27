@@ -148,6 +148,8 @@ Registra pagos y abonos a proveedores con saldo disponible, incluso por varios m
 Las solicitudes de pago guardadas se recuperan al reabrir sin duplicarse.
 En Reportes elige la fecha inicial y, al aceptar, la hora en formato AM/PM.
 El resultado se presenta como comprobante compacto con saldos, ventas y egresos.
+Incluye transferencias del rango agrupadas por origen y destino, número de
+movimientos y total trasladado; no se suman otra vez a ventas ni egresos.
 Los egresos suman salidas registradas de Caja y Nequi; no incluyen transferencias
 internas, Caja mayor ni ajustes de deuda. Los totales se muestran por separado.
 Repite con el final y pulsa Generar reporte para consultar los saldos iniciales

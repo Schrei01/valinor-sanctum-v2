@@ -7,6 +7,9 @@ class FakeReportsStore implements ReportsStore {
   Completer<void>? gate;
   bool unknownBalances = false, uncategorized = false;
   bool convertedHistory = false;
+  bool noTransfers = false;
+  List<ReportTransfer>? transferRows;
+  int unpricedTransferRecords = 0;
   int unpricedCashSales = 0;
   int estimatedCashMinor = 0, estimatedSales = 0;
   ReportsSnapshot Function(ReportPeriod)? build;
@@ -21,6 +24,9 @@ class FakeReportsStore implements ReportsStore {
           unknownBalances: unknownBalances,
           uncategorized: uncategorized,
           convertedHistory: convertedHistory,
+          noTransfers: noTransfers,
+          transferRows: transferRows,
+          unpricedTransferRecords: unpricedTransferRecords,
           unpricedCashSales: unpricedCashSales,
           estimatedCashMinor: estimatedCashMinor,
           estimatedSales: estimatedSales,
@@ -33,6 +39,9 @@ ReportsSnapshot reportFixture(
   bool unknownBalances = false,
   bool uncategorized = false,
   bool convertedHistory = false,
+  bool noTransfers = false,
+  List<ReportTransfer>? transferRows,
+  int unpricedTransferRecords = 0,
   int unpricedCashSales = 0,
   int estimatedCashMinor = 0,
   int estimatedSales = 0,
@@ -58,6 +67,7 @@ ReportsSnapshot reportFixture(
   );
   return ReportsSnapshot(
     period: period,
+    unpricedTransferRecords: unpricedTransferRecords,
     saleTotals: ReportSalesTotals(
       cashMinor: 6000,
       transferMinor: 20000,
@@ -163,18 +173,21 @@ ReportsSnapshot reportFixture(
         isEvent: true,
       ),
     ],
-    transfers: [
-      ReportTransfer(
-        documentId: 'transfer',
-        occurredAtUtc: at,
-        sourceAccountId: 'cash',
-        sourceName: 'Caja',
-        destinationAccountId: 'nequi',
-        destinationName: 'Nequi',
-        amountMinor: 10000,
-        note: 'Movimiento sintético',
-      ),
-    ],
+    transfers:
+        transferRows ??
+        [
+          if (!noTransfers)
+            ReportTransfer(
+              documentId: 'transfer',
+              occurredAtUtc: at,
+              sourceAccountId: 'cash',
+              sourceName: 'Caja',
+              destinationAccountId: 'nequi',
+              destinationName: 'Nequi',
+              amountMinor: 10000,
+              note: 'Movimiento sintético',
+            ),
+        ],
     expenses: [
       ReportExpense(
         documentId: 'expense',

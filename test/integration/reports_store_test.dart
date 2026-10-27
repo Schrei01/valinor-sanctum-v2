@@ -290,6 +290,8 @@ void main() {
       final data = await reports.load(period());
       expect(data.transfers, hasLength(1));
       expect(data.transfers.single.amountMinor, 12000);
+      expect(data.knownTransferTotalMinor, 12000);
+      expect(data.transferRoutes.single.count, 1);
       expect(
         data.movements.where((m) => m.kind == ReportMovementKind.transfer),
         hasLength(2),

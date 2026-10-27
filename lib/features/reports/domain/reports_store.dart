@@ -181,6 +181,7 @@ class ReportTransfer {
     required this.destinationName,
     required this.amountMinor,
     required this.note,
+    this.isHistorical = false,
   });
   final String documentId,
       sourceAccountId,
@@ -190,7 +191,27 @@ class ReportTransfer {
       note;
   final DateTime occurredAtUtc;
   final int amountMinor;
+  final bool isHistorical;
 }
+
+class ReportTransferRoute {
+  const ReportTransferRoute({
+    required this.sourceName,
+    required this.destinationName,
+    required this.count,
+    required this.amountMinor,
+  });
+  final String sourceName, destinationName;
+  final int count, amountMinor;
+}
+
+String _transferAccountName(String name) => switch (name.trim().toLowerCase()) {
+  'caja' || 'efectivo' || 'cash' => 'Caja',
+  'nequi' || 'transferencia' || 'transfer' => 'Nequi',
+  'caja mayor' => 'Caja mayor',
+  'deudas' => 'Deudas',
+  _ => name.trim().isEmpty ? 'Cuenta sin información' : name.trim(),
+};
 
 class ReportExpense {
   const ReportExpense({
@@ -257,6 +278,7 @@ class ReportsSnapshot {
     this.usesHistoricalBalances = false,
     ReportSalesTotals? saleTotals,
     ReportOutflowTotals? outflowTotals,
+    this.unpricedTransferRecords = 0,
     required List<String> warnings,
   }) : saleTotals = saleTotals ?? ReportSalesTotals.fromNative(sales),
        outflowTotals =
@@ -285,6 +307,41 @@ class ReportsSnapshot {
   final List<String> warnings;
   final ReportSalesTotals saleTotals;
   final ReportOutflowTotals outflowTotals;
+  final int unpricedTransferRecords;
+  int get knownTransferTotalMinor =>
+      reportSum(transfers.map((t) => t.amountMinor));
+  int? get transferTotalMinor =>
+      unpricedTransferRecords == 0 ? knownTransferTotalMinor : null;
+  List<ReportTransferRoute> get transferRoutes {
+    final grouped = <(String, String), List<ReportTransfer>>{};
+    for (final transfer in transfers) {
+      grouped
+          .putIfAbsent((
+            _transferAccountName(transfer.sourceName),
+            _transferAccountName(transfer.destinationName),
+          ), () => [])
+          .add(transfer);
+    }
+    return List.unmodifiable(
+      grouped.entries
+          .map(
+            (e) => ReportTransferRoute(
+              sourceName: e.key.$1,
+              destinationName: e.key.$2,
+              count: e.value.length,
+              amountMinor: reportSum(e.value.map((t) => t.amountMinor)),
+            ),
+          )
+          .toList()
+        ..sort((a, b) {
+          final source = a.sourceName.compareTo(b.sourceName);
+          return source == 0
+              ? a.destinationName.compareTo(b.destinationName)
+              : source;
+        }),
+    );
+  }
+
   int get salesMinor => reportSum(sales.map((s) => s.salesMinor));
   int get creditSalesMinor => reportSum(sales.map((s) => s.creditMinor));
   int get costOfGoodsMinor =>
@@ -330,6 +387,12 @@ class ReportsSnapshot {
   void validate() {
     saleTotals.validate();
     outflowTotals.validate();
+    if (unpricedTransferRecords < 0 ||
+        transfers.any((t) => t.amountMinor < 0)) {
+      throw const ReportsValidationException(
+        'El reporte de transferencias contiene valores inválidos.',
+      );
+    }
     salesMinor;
     creditSalesMinor;
     costOfGoodsMinor;

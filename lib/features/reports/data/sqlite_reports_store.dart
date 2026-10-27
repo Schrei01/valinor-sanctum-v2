@@ -377,7 +377,63 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
     final unpriced = [0, 0, 0, 0];
     final estimated = [BigInt.zero, BigInt.zero, BigInt.zero, BigInt.zero];
     var estimatedSales = 0;
+    var unpricedTransferRecords = 0;
     if (converted.isNotEmpty) {
+      final oldTransfers = await txn.query(
+        'legacy_source_rows',
+        columns: ['source_id', 'row_json'],
+        where: "source_table='transfermovements'",
+      );
+      for (final row in oldTransfers) {
+        final old =
+            jsonDecode(row['row_json'] as String) as Map<String, dynamic>;
+        if ((old['tipo'] as String? ?? '').trim().toLowerCase() !=
+            'transferencia') {
+          continue;
+        }
+        DateTime? date;
+        try {
+          date = parseLegacyDate(old['fecha']);
+        } on FormatException {
+          throw const ReportsValidationException(
+            'Una transferencia antigua tiene una fecha inválida.',
+          );
+        }
+        if (date == null) {
+          throw const ReportsValidationException(
+            'Una transferencia antigua no tiene fecha.',
+          );
+        }
+        if (!period.contains(date)) continue;
+        int? amount;
+        try {
+          amount = legacyTreasuryAmountToMinor(
+            '${old['monto']}',
+            moneyScale: profile.single['money_scale'] as int,
+          );
+        } on LegacyTreasuryFormatException {
+          /* Preserve incomplete amounts. */
+        }
+        if (amount == null || amount < 0) {
+          unpricedTransferRecords++;
+          continue;
+        }
+        final source = (old['cuenta_origen'] as String? ?? '').trim();
+        final destination = (old['cuenta_destino'] as String? ?? '').trim();
+        transfers.add(
+          ReportTransfer(
+            documentId: 'legacy-transfer:${row['source_id']}',
+            occurredAtUtc: date,
+            sourceAccountId: 'legacy-account:${source.toLowerCase()}',
+            sourceName: source,
+            destinationAccountId: 'legacy-account:${destination.toLowerCase()}',
+            destinationName: destination,
+            amountMinor: amount,
+            note: old['motivo'] as String? ?? '',
+            isHistorical: true,
+          ),
+        );
+      }
       final oldMovements = await txn.query(
         'legacy_source_rows',
         columns: ['row_json'],
@@ -573,12 +629,17 @@ WHERE sale.source_table='sales' ''');
         'Los saldos anteriores a la apertura usan el historial convertido, en hora de Bogotá.',
       );
     }
+    transfers.sort((a, b) {
+      final date = a.occurredAtUtc.compareTo(b.occurredAtUtc);
+      return date == 0 ? a.documentId.compareTo(b.documentId) : date;
+    });
     final result = ReportsSnapshot(
       period: period,
       accounts: resolvedAccounts,
       movements: movements,
       sales: sales,
       transfers: transfers,
+      unpricedTransferRecords: unpricedTransferRecords,
       expenses: expenses,
       debtChanges: debtChanges,
       events: eventResults,

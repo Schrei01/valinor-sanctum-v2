@@ -94,6 +94,7 @@ void main() {
         });
       }
       for (final r in [
+        // Balance history remains independent of the archived transfer log.
         {'id': 1, 'total': 0.0, 'fecha': null},
         {'id': 2, 'total': 100.0, 'fecha': '2026-10-18T10:00:00.000000'},
         {'id': 3, 'total': 110.0, 'fecha': '2026-10-18T10:00:00.000000'},
@@ -117,6 +118,24 @@ void main() {
         'total': 30.0,
         'fecha': '2026-10-18T09:00:00.000',
       });
+      for (final row in [
+        [1, 'Caja', 'Nequi', 7, '2026-10-18T11:00:00'],
+        [2, 'Nequi', 'Caja', 2, '2026-10-18T11:00:00'],
+        [3, 'Caja Mayor', 'Deudas', 3, '2026-10-18T11:00:00'],
+        [4, 'Caja', 'Nequi', 5, '2026-10-18T10:59:59.999999'],
+        [5, 'Caja', 'Nequi', 11, '2026-10-18T11:01:00'],
+        [6, 'Caja', 'Nequi', 'invalid', '2026-10-18T11:00:00'],
+      ]) {
+        await old.insert('transfermovements', {
+          'id': row[0],
+          'tipo': 'transferencia',
+          'cuenta_origen': row[1],
+          'cuenta_destino': row[2],
+          'monto': row[3],
+          'fecha': row[4],
+          'motivo': 'Transferencia sintética',
+        });
+      }
     } finally {
       await old.close();
     }
@@ -402,6 +421,49 @@ void main() {
       expect(minute.outflowTotals.cashMinor, 7);
       expect(minute.outflowTotals.transferMinor, 11);
       expect((await day(21)).outflowTotals.totalMinor, 0);
+      expect(await nativeRows(), before);
+    },
+  );
+  test(
+    'archived transfers respect minute edges, route direction and missing amounts without replaying balances',
+    () async {
+      await importLegacyHistory(target: app, sourcePath: source);
+      final before = await nativeRows();
+      final old = await day(18);
+      expect(old.transfers.length, 5);
+      expect(old.transfers.every((t) => t.isHistorical), isTrue);
+      expect(old.knownTransferTotalMinor, 28);
+      expect(old.transferTotalMinor, isNull);
+      expect(old.unpricedTransferRecords, 1);
+      final cashToNequi = old.transferRoutes.singleWhere(
+        (r) => r.sourceName == 'Caja' && r.destinationName == 'Nequi',
+      );
+      expect(cashToNequi.count, 3);
+      expect(cashToNequi.amountMinor, 23);
+      expect(
+        old.transferRoutes.any(
+          (r) => r.sourceName == 'Caja mayor' && r.destinationName == 'Deudas',
+        ),
+        isTrue,
+      );
+      final minute = await SqliteReportsStore(app).load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 18, 11),
+          end: DateTime.utc(2026, 10, 18, 11),
+        ),
+      );
+      expect(minute.transfers.length, 3);
+      expect(minute.knownTransferTotalMinor, 12);
+      expect(minute.unpricedTransferRecords, 1);
+      final mixed = await SqliteReportsStore(app).load(
+        ReportPeriod(
+          start: DateTime.utc(2026, 10, 18),
+          end: DateTime.utc(2026, 10, 21),
+        ),
+      );
+      expect(mixed.transfers.length, 6);
+      expect(mixed.knownTransferTotalMinor, 48);
+      expect(mixed.transfers.where((t) => !t.isHistorical).length, 1);
       expect(await nativeRows(), before);
     },
   );

@@ -277,7 +277,9 @@ class _ReportsPageState extends State<ReportsPage> {
                 );
               },
             ),
-            const SizedBox(height: 14),
+            const Divider(height: 24),
+            _transfers(data),
+            const SizedBox(height: 10),
             if (data.usesHistoricalBalances)
               _note(
                 'Los saldos anteriores a la apertura usan el historial convertido de la copia.',
@@ -311,6 +313,102 @@ class _ReportsPageState extends State<ReportsPage> {
     padding: const EdgeInsets.only(top: 4),
     child: Text(text, style: _muted),
   );
+  Widget _transfers(ReportsSnapshot data) {
+    final routes = data.transferRoutes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _sectionTitle('Transferencias entre cuentas')),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  data.unpricedTransferRecords > 0
+                      ? 'Total trasladado (parcial)'
+                      : 'Total trasladado',
+                  style: _muted,
+                ),
+                _amount(
+                  'report-transfers-total',
+                  data.transferTotalMinor ??
+                      (data.knownTransferTotalMinor == 0
+                          ? null
+                          : data.knownTransferTotalMinor),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (routes.isEmpty && data.unpricedTransferRecords == 0)
+          Text('Sin transferencias en este rango.', style: _muted),
+        if (routes.isNotEmpty)
+          Table(
+            columnWidths: const {
+              0: FlexColumnWidth(3),
+              1: FixedColumnWidth(44),
+              2: FlexColumnWidth(1.4),
+            },
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              TableRow(
+                children: [
+                  Text('Origen / Destino', style: _muted),
+                  Text('Mov.', textAlign: TextAlign.center, style: _muted),
+                  Text('Importe', textAlign: TextAlign.right, style: _muted),
+                ],
+              ),
+              for (var i = 0; i < routes.length; i++)
+                TableRow(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Semantics(
+                        key: Key('report-transfer-route-$i'),
+                        label:
+                            '${routes[i].sourceName} → ${routes[i].destinationName}',
+                        child: Wrap(
+                          spacing: 5,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              routes[i].sourceName,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            const Icon(Icons.arrow_forward_rounded, size: 14),
+                            Text(
+                              routes[i].destinationName,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${routes[i].count}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    _amount('report-transfer-amount-$i', routes[i].amountMinor),
+                  ],
+                ),
+            ],
+          ),
+        if (data.unpricedTransferRecords > 0)
+          _note(
+            'Total transferido parcial: ${data.unpricedTransferRecords} registro(s) sin información de importe.',
+          ),
+        if (data.transfers.any((t) => t.isHistorical))
+          _note(
+            'Incluye transferencias registradas en la copia, con sus cuentas originales.',
+          ),
+      ],
+    );
+  }
+
   Widget _sectionTitle(String title) => Text(
     title.toUpperCase(),
     style: TextStyle(
