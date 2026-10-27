@@ -407,6 +407,11 @@ class ReportSalesTotals {
     required this.transferMinor,
     required this.creditMinor,
     this.otherMinor = 0,
+    this.estimatedCashMinor = 0,
+    this.estimatedTransferMinor = 0,
+    this.estimatedCreditMinor = 0,
+    this.estimatedOtherMinor = 0,
+    this.estimatedSales = 0,
     this.unpricedCashSales = 0,
     this.unpricedTransferSales = 0,
     this.unpricedCreditSales = 0,
@@ -429,7 +434,24 @@ class ReportSalesTotals {
       otherMinor: other,
     );
   }
+  /// Exact native revenue. Archived estimates remain separate below.
   final int cashMinor, transferMinor, creditMinor, otherMinor;
+  final int estimatedCashMinor,
+      estimatedTransferMinor,
+      estimatedCreditMinor,
+      estimatedOtherMinor,
+      estimatedSales;
+  int get knownCashMinor => reportSum([cashMinor, estimatedCashMinor]);
+  int get knownTransferMinor =>
+      reportSum([transferMinor, estimatedTransferMinor]);
+  int get knownCreditMinor => reportSum([creditMinor, estimatedCreditMinor]);
+  int get knownOtherMinor => reportSum([otherMinor, estimatedOtherMinor]);
+  int get estimatedTotalMinor => reportSum([
+    estimatedCashMinor,
+    estimatedTransferMinor,
+    estimatedCreditMinor,
+    estimatedOtherMinor,
+  ]);
   final int unpricedCashSales,
       unpricedTransferSales,
       unpricedCreditSales,
@@ -439,13 +461,18 @@ class ReportSalesTotals {
       unpricedTransferSales +
       unpricedCreditSales +
       unpricedOtherSales;
-  int get knownTotalMinor =>
-      reportSum([cashMinor, transferMinor, creditMinor, otherMinor]);
-  int? get cashTotalMinor => unpricedCashSales == 0 ? cashMinor : null;
+  int get knownTotalMinor => reportSum([
+    knownCashMinor,
+    knownTransferMinor,
+    knownCreditMinor,
+    knownOtherMinor,
+  ]);
+  int? get cashTotalMinor => unpricedCashSales == 0 ? knownCashMinor : null;
   int? get transferTotalMinor =>
-      unpricedTransferSales == 0 ? transferMinor : null;
-  int? get creditTotalMinor => unpricedCreditSales == 0 ? creditMinor : null;
-  int? get otherTotalMinor => unpricedOtherSales == 0 ? otherMinor : null;
+      unpricedTransferSales == 0 ? knownTransferMinor : null;
+  int? get creditTotalMinor =>
+      unpricedCreditSales == 0 ? knownCreditMinor : null;
+  int? get otherTotalMinor => unpricedOtherSales == 0 ? knownOtherMinor : null;
   int? get totalMinor => unpricedSales == 0 ? knownTotalMinor : null;
   void validate() {
     for (final value in [
@@ -453,6 +480,11 @@ class ReportSalesTotals {
       transferMinor,
       creditMinor,
       otherMinor,
+      estimatedCashMinor,
+      estimatedTransferMinor,
+      estimatedCreditMinor,
+      estimatedOtherMinor,
+      estimatedSales,
       unpricedCashSales,
       unpricedTransferSales,
       unpricedCreditSales,

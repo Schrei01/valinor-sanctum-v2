@@ -8,6 +8,7 @@ class FakeReportsStore implements ReportsStore {
   bool unknownBalances = false, uncategorized = false;
   bool convertedHistory = false;
   int unpricedCashSales = 0;
+  int estimatedCashMinor = 0, estimatedSales = 0;
   ReportsSnapshot Function(ReportPeriod)? build;
   @override
   Future<ReportsSnapshot> load(ReportPeriod period) async {
@@ -21,6 +22,8 @@ class FakeReportsStore implements ReportsStore {
           uncategorized: uncategorized,
           convertedHistory: convertedHistory,
           unpricedCashSales: unpricedCashSales,
+          estimatedCashMinor: estimatedCashMinor,
+          estimatedSales: estimatedSales,
         );
   }
 }
@@ -31,6 +34,8 @@ ReportsSnapshot reportFixture(
   bool uncategorized = false,
   bool convertedHistory = false,
   int unpricedCashSales = 0,
+  int estimatedCashMinor = 0,
+  int estimatedSales = 0,
 }) {
   final at = period.startUtc.add(const Duration(hours: 10));
   ReportMovement movement(
@@ -58,6 +63,8 @@ ReportsSnapshot reportFixture(
       transferMinor: 20000,
       creditMinor: 4000,
       unpricedCashSales: unpricedCashSales,
+      estimatedCashMinor: estimatedCashMinor,
+      estimatedSales: estimatedSales,
     ),
     accounts: [
       ReportAccount(

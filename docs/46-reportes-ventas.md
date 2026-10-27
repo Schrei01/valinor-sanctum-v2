@@ -1,5 +1,7 @@
 # Reportes de ventas — 0.19.0
 
+Actualización posterior: [0.19.1 combina ventas nuevas con estimaciones de las antiguas dentro del rango](47-ventas-historicas-rango.md). La política de importes históricos descrita aquí corresponde a la entrega 0.19.0.
+
 Reportes conserva los cuatro saldos de Caja y Nequi al inicio y al final del rango. Añade **Ingreso por ventas a Caja**, **Ingreso por ventas a Nequi/Transferencia**, **Ventas a Deudas** y **Total vendido**. La suma usa los importes guardados al confirmar cada venta y la forma de pago elegida en sus líneas. Si se registraron otros medios de pago locales, aparecen aparte y se incluyen en el total para que concilie.
 
 Una venta a Deudas cuenta como venta en el momento de su confirmación. El abono posterior modifica dinero y cartera, pero no vuelve a sumar ventas. También se excluyen aperturas, transferencias internas, compras y gastos. Por eso estos ingresos no equivalen a restar saldo inicial al final ni a sumar todas las entradas de una cuenta.

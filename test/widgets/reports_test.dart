@@ -200,15 +200,33 @@ void main() {
     (tester) async {
       store.unpricedCashSales = 2;
       await open(tester, size: const Size(620, 1000));
-      expect(value(tester, 'report-sales-cash'), 'Sin información');
+      expect(value(tester, 'report-sales-cash'), 'COP 60,00');
       expect(value(tester, 'report-sales-transfer'), 'COP 200,00');
       expect(value(tester, 'report-sales-credit'), 'COP 40,00');
-      expect(value(tester, 'report-sales-total'), 'Sin información');
-      expect(find.text('Subtotal conocido: COP 60,00'), findsOneWidget);
-      expect(find.text('Subtotal conocido: COP 300,00'), findsOneWidget);
-      expect(find.textContaining('Hay 2 venta(s) antigua(s)'), findsOneWidget);
+      expect(value(tester, 'report-sales-total'), 'COP 300,00');
+      expect(find.text('Total vendido (parcial)'), findsOneWidget);
+      expect(find.text('Sin información: 2 registro(s).'), findsNWidgets(2));
+      expect(
+        find.textContaining('Hay 2 registro(s) de ventas antiguas'),
+        findsOneWidget,
+      );
       await tester.ensureVisible(find.byKey(const Key('report-sales-total')));
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'historical estimates and native revenue share the range totals with explicit quality',
+    (tester) async {
+      store.estimatedCashMinor = 12000;
+      store.estimatedSales = 3;
+      await open(tester);
+      expect(value(tester, 'report-sales-cash'), 'COP 180,00');
+      expect(value(tester, 'report-sales-total'), 'COP 420,00');
+      expect(find.textContaining('Incluye 3 registro(s)'), findsOneWidget);
+      expect(find.text('Incluye estimado: COP 120,00'), findsNWidgets(2));
+      expect(find.text('Total vendido (parcial)'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

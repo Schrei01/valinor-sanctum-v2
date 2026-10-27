@@ -246,7 +246,8 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Widget _salesTotals(ReportsSnapshot data) {
     final totals = data.saleTotals;
-    final hasOther = totals.otherMinor != 0 || totals.unpricedOtherSales != 0;
+    final hasOther =
+        totals.knownOtherMinor != 0 || totals.unpricedOtherSales != 0;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -274,39 +275,55 @@ class _ReportsPageState extends State<ReportsPage> {
                   'report-sales-cash',
                   'Ingreso por ventas a Caja',
                   totals.cashTotalMinor,
-                  totals.cashMinor,
+                  totals.knownCashMinor,
+                  estimated: totals.estimatedCashMinor,
+                  missing: totals.unpricedCashSales,
                 ),
                 _saleAmount(
                   'report-sales-transfer',
                   'Ingreso por ventas a Nequi/Transferencia',
                   totals.transferTotalMinor,
-                  totals.transferMinor,
+                  totals.knownTransferMinor,
+                  estimated: totals.estimatedTransferMinor,
+                  missing: totals.unpricedTransferSales,
                 ),
                 _saleAmount(
                   'report-sales-credit',
                   'Ventas a Deudas',
                   totals.creditTotalMinor,
-                  totals.creditMinor,
+                  totals.knownCreditMinor,
+                  estimated: totals.estimatedCreditMinor,
+                  missing: totals.unpricedCreditSales,
                 ),
                 if (hasOther)
                   _saleAmount(
                     'report-sales-other',
                     'Ventas por otros medios',
                     totals.otherTotalMinor,
-                    totals.otherMinor,
+                    totals.knownOtherMinor,
+                    estimated: totals.estimatedOtherMinor,
+                    missing: totals.unpricedOtherSales,
                   ),
                 _saleAmount(
                   'report-sales-total',
                   'Total vendido',
                   totals.totalMinor,
                   totals.knownTotalMinor,
+                  estimated: totals.estimatedTotalMinor,
+                  missing: totals.unpricedSales,
                 ),
               ],
             ),
+            if (totals.estimatedSales > 0) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Incluye ${totals.estimatedSales} registro(s) de ventas antiguas estimadas: cantidad × PVP conservado en la copia. Las ventas nuevas usan su importe registrado. El precio antiguo aplicado y los descuentos no se conservaron.',
+              ),
+            ],
             if (totals.unpricedSales > 0) ...[
               const SizedBox(height: 16),
               Text(
-                'Hay ${totals.unpricedSales} venta(s) antigua(s) en el rango sin importe histórico. Los grupos afectados y el total completo se muestran Sin información; debajo figura el subtotal conocido.',
+                'Hay ${totals.unpricedSales} registro(s) de ventas antiguas sin información suficiente para calcular su importe. Los valores marcados como parciales excluyen esos registros; no representan el total completo.',
               ),
             ],
           ],
@@ -315,18 +332,29 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  Widget _saleAmount(String key, String label, int? amount, int known) =>
-      SizedBox(
-        width: 245,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _balance(key, label, amount),
-            if (amount == null)
-              Text(
-                'Subtotal conocido: ${inventoryMoney(known, widget.profile)}',
-              ),
-          ],
+  Widget _saleAmount(
+    String key,
+    String label,
+    int? amount,
+    int known, {
+    int estimated = 0,
+    int missing = 0,
+  }) => SizedBox(
+    width: 245,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _balance(
+          key,
+          missing > 0 ? '$label (parcial)' : label,
+          amount ?? (known == 0 ? null : known),
         ),
-      );
+        if (estimated != 0)
+          Text(
+            'Incluye estimado: ${inventoryMoney(estimated, widget.profile)}',
+          ),
+        if (missing > 0) Text('Sin información: $missing registro(s).'),
+      ],
+    ),
+  );
 }

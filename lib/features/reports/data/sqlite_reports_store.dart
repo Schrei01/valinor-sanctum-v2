@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../../../core/infrastructure/database/app_database.dart';
 import '../../legacy_conversion/domain/legacy_time.dart';
+import '../../treasury/domain/legacy_treasury_snapshot.dart';
 import '../domain/reports_store.dart';
 
 /// Pure read model. A single SQLite transaction supplies every report section.
@@ -362,12 +363,16 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
     );
     final nativeSaleTotals = ReportSalesTotals.fromNative(sales);
     final unpriced = [0, 0, 0, 0];
+    final estimated = [BigInt.zero, BigInt.zero, BigInt.zero, BigInt.zero];
+    var estimatedSales = 0;
     if (converted.isNotEmpty) {
-      final legacySales = await txn.query(
-        'legacy_source_rows',
-        columns: ['row_json'],
-        where: "source_table='sales'",
-      );
+      final legacySales = await txn.rawQuery('''
+SELECT sale.row_json, product.row_json product_json
+FROM legacy_source_rows sale
+LEFT JOIN legacy_source_rows product ON product.source_table='products'
+  AND product.source_id=json_extract(sale.row_json, '\$.productId')
+  AND product.conversion_id=sale.conversion_id
+WHERE sale.source_table='sales' ''');
       for (final row in legacySales) {
         final archived =
             jsonDecode(row['row_json'] as String) as Map<String, dynamic>;
@@ -394,9 +399,27 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
           'deudas' || 'deuda' || 'crédito' || 'credito' => 2,
           _ => 3,
         };
-        // The source saved quantity and method, but no historical sale amount.
-        // Never reconstruct revenue using today's or the archived catalog PVP.
-        unpriced[group]++;
+        // Join only the immutable archived product, never today's catalog.
+        final productJson = row['product_json'] as String?;
+        final quantity = archived['quantity'];
+        int? price;
+        if (productJson != null && quantity is int && quantity >= 0) {
+          final product = jsonDecode(productJson) as Map<String, dynamic>;
+          try {
+            price = legacyTreasuryAmountToMinor(
+              '${product['price']}',
+              moneyScale: profile.single['money_scale'] as int,
+            );
+          } on LegacyTreasuryFormatException {
+            // Missing, invalid or unrepresentable prices remain unknown.
+          }
+        }
+        if (price == null || price < 0) {
+          unpriced[group]++;
+        } else {
+          estimated[group] += BigInt.from(price) * BigInt.from(quantity as int);
+          estimatedSales++;
+        }
       }
     }
     final saleTotals = ReportSalesTotals(
@@ -404,6 +427,11 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
       transferMinor: nativeSaleTotals.transferMinor,
       creditMinor: nativeSaleTotals.creditMinor,
       otherMinor: nativeSaleTotals.otherMinor,
+      estimatedCashMinor: reportMinor(estimated[0]),
+      estimatedTransferMinor: reportMinor(estimated[1]),
+      estimatedCreditMinor: reportMinor(estimated[2]),
+      estimatedOtherMinor: reportMinor(estimated[3]),
+      estimatedSales: estimatedSales,
       unpricedCashSales: unpriced[0],
       unpricedTransferSales: unpriced[1],
       unpricedCreditSales: unpriced[2],

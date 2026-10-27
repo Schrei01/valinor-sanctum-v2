@@ -152,8 +152,9 @@ y finales de Caja y Nequi. Los momentos corresponden al horario de Bogotá.
 Los saldos sin respaldo histórico se muestran Sin información.
 También muestra ingresos por ventas a Caja, Nequi/Transferencia, ventas a Deudas
 y Total vendido, sin sumar abonos ni transferencias entre cuentas.
-Las ventas antiguas sin importe histórico muestran Sin información en su medio
-y en el total completo, conservando debajo el subtotal conocido.
+Las ventas antiguas se calculan como cantidad por PVP archivado en la copia y
+se identifican como estimadas. Los valores parciales excluyen registros sin
+producto o precio válido y muestran cuántos siguen Sin información.
 Si la base fue convertida, Reportes usa sus saldos históricos antes de la apertura,
 sin sumar de nuevo inventario ni dinero. Las fechas antiguas se interpretan en Bogotá.
 Caja/arqueo y ajustes de inventario siguen pendientes.

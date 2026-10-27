@@ -1,0 +1,51 @@
+{
+  "version": "0.19.1+30",
+  "dateBogota": "2026-10-27",
+  "schemaVersion": 14,
+  "schemaMigration": false,
+  "query": {
+    "nativeAndArchivedSalesInSameRange": true,
+    "historicalFormula": "quantity × immutable archived product PVP",
+    "historicalAmountsMarkedEstimated": true,
+    "partialTotalsExcludeUncalculableRecords": true,
+    "currentCatalogPriceNotUsed": true,
+    "operationalSalesReplayed": false,
+    "stockMoneyDebtWrites": false,
+    "persistentTablesOrViewsAdded": false
+  },
+  "verification": {
+    "focusedPassed": 43,
+    "followupConversionAndRenderPassed": 8,
+    "finalDomainUiAndRenderPassed": 13,
+    "distinctApplicationCasesPassed": 43,
+    "syntheticRenderCases": 1,
+    "fullFinancialSuiteRepeated": false,
+    "analyze": "No issues found",
+    "syntheticWideAndNarrowInspected": true,
+    "realSnapshotRangesIndependentlyReconciled": 7,
+    "snapshotTablesRowsAndSchemaPreserved": 63,
+    "eligibleArchivedSales": 4153,
+    "missingProductRecords": 152,
+    "nativeUiTraversal": false,
+    "activeTablesRowsAndSchemaUnchanged": 63,
+    "integrity": "ok",
+    "foreignKeyViolations": 0,
+    "schemaVersion": 14,
+    "activeMoneyScale": 0,
+    "consistentClosedBackupVerified": true
+  },
+  "delivery": {
+    "releaseBuild": true,
+    "published": true,
+    "privateDataExcluded": true,
+    "publicationWaitingForAppClosure": false,
+    "sanctumOverrides": false,
+    "files": 17,
+    "archiveBytes": 15013161,
+    "archiveSha256": "A8EE669AF7FAD40C1019988FFFA80832A4A05F7730D14F428A6B6DC12353325E",
+    "stableVersionedArchiveMatch": true,
+    "oldDistributionsRemoved": true,
+    "obsoleteArtifactsRemoved": 2,
+    "appLeftOpen": false
+  }
+}

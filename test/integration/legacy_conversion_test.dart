@@ -8,6 +8,7 @@ import 'package:valinor_sanctum_2/core/infrastructure/database/app_database.dart
 import 'package:valinor_sanctum_2/features/inventory/data/sqlite_inventory_opening_store.dart';
 import 'package:valinor_sanctum_2/features/inventory/data/sqlite_inventory_store.dart';
 import 'package:valinor_sanctum_2/features/inventory/domain/inventory_opening.dart';
+import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart';
 import 'package:valinor_sanctum_2/features/inventory/domain/reference_inventory.dart';
 import 'package:valinor_sanctum_2/features/legacy_conversion/data/sqlite_legacy_conversion.dart';
 import 'package:valinor_sanctum_2/features/reports/data/sqlite_reports_store.dart';
@@ -67,7 +68,7 @@ void main() {
         await old.insert('sales', {
           'id': i,
           'productId': i == 1 ? 1 : 999,
-          'quantity': 1,
+          'quantity': i == 1 ? 3 : 1,
           'date': '2026-10-18T11:00:00.000',
           'paymentMethod': i == 1 ? 'Caja' : 'Transferencia',
         });
@@ -301,27 +302,42 @@ void main() {
           end: DateTime.utc(2026, 10, 22),
         ),
       );
-      expect(combined.saleTotals.cashTotalMinor, isNull);
+      expect(combined.saleTotals.cashTotalMinor, 400);
       expect(combined.saleTotals.transferTotalMinor, isNull);
-      expect(combined.saleTotals.knownTotalMinor, 100);
+      expect(combined.saleTotals.knownTotalMinor, 400);
       expect(combined.saleTotals.cashMinor, 100);
+      expect(combined.saleTotals.estimatedCashMinor, 300);
+      expect(combined.saleTotals.estimatedSales, 1);
       expect(combined.saleTotals.totalMinor, isNull);
-      expect(combined.saleTotals.unpricedSales, 2);
+      expect(combined.saleTotals.unpricedSales, 1);
     },
   );
   test(
-    'archived sales without prices stay unknown only in their channel and time range',
+    'archived sales use immutable copied PVP in range, orphan amounts remain unknown',
     () async {
       await importLegacyHistory(target: app, sourcePath: source);
       final old = await day(18);
-      expect(old.saleTotals.cashTotalMinor, isNull);
+      expect(old.saleTotals.cashTotalMinor, 300);
       expect(old.saleTotals.transferTotalMinor, isNull);
       expect(old.saleTotals.creditTotalMinor, 0);
       expect(old.saleTotals.totalMinor, isNull);
-      expect(old.saleTotals.unpricedCashSales, 1);
+      expect(old.saleTotals.unpricedCashSales, 0);
       expect(old.saleTotals.unpricedTransferSales, 1);
-      expect(old.saleTotals.unpricedSales, 2);
-      expect(old.saleTotals.knownTotalMinor, 0);
+      expect(old.saleTotals.unpricedSales, 1);
+      expect(old.saleTotals.knownTotalMinor, 300);
+      expect(old.saleTotals.estimatedCashMinor, 300);
+      expect(old.saleTotals.estimatedSales, 1);
+      final inventory = SqliteInventoryStore(app, synthetic: true);
+      final product = (await inventory.load()).products.single;
+      await inventory.saveProduct(
+        CatalogProduct(
+          id: product.id,
+          name: 'PVP actual diferente',
+          listPriceMinor: 999,
+        ),
+      );
+      final beforeReads = await nativeRows();
+      expect((await day(18)).saleTotals.estimatedCashMinor, 300);
       final noSales = await day(19);
       expect(noSales.saleTotals.totalMinor, 0);
       expect(noSales.saleTotals.unpricedSales, 0);
@@ -341,7 +357,9 @@ void main() {
           end: DateTime.utc(2026, 10, 18, 11),
         ),
       );
-      expect(minute.saleTotals.unpricedSales, 2);
+      expect(minute.saleTotals.unpricedSales, 1);
+      expect(minute.saleTotals.estimatedCashMinor, 300);
+      expect(await nativeRows(), beforeReads);
     },
   );
   test(
