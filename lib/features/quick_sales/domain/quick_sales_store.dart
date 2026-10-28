@@ -11,12 +11,32 @@ class QuickSaleLine {
     this.quantityText = '1',
     this.unitPriceMinor,
     this.paymentOptionId,
+    this.paymentParts = const [],
   });
   final String id;
   final String? productId;
   final String quantityText;
   final int? unitPriceMinor;
   final String? paymentOptionId;
+  final List<QuickLinePaymentPart> paymentParts;
+  bool get isSplit => paymentParts.isNotEmpty;
+  bool get hasCredit => isSplit
+      ? paymentParts.any(
+          (p) =>
+              p.paymentOptionId == QuickPaymentOption.creditId &&
+              p.amountMinor > 0,
+        )
+      : paymentOptionId == QuickPaymentOption.creditId;
+}
+
+class QuickLinePaymentPart {
+  const QuickLinePaymentPart(this.paymentOptionId, this.amountMinor);
+  final String paymentOptionId;
+  final int amountMinor;
+  Map<String, Object?> toJson() => {
+    'paymentOptionId': paymentOptionId,
+    'amountMinor': amountMinor,
+  };
 }
 
 class QuickSaleAccount {
@@ -139,6 +159,7 @@ class ConfirmedQuickSaleLine {
     required this.totalMinor,
     required this.paymentLabel,
     this.isCredit = false,
+    this.paymentBreakdown = const {},
   });
   final String productName;
   final int quantity;
@@ -146,6 +167,7 @@ class ConfirmedQuickSaleLine {
   final int totalMinor;
   final String paymentLabel;
   final bool isCredit;
+  final Map<String, int> paymentBreakdown;
 
   String get displayPaymentLabel => _displaySalesPaymentLabel(paymentLabel);
 }

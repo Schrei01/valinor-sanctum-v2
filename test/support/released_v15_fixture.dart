@@ -5,6 +5,7 @@ import 'package:valinor_sanctum_2/core/infrastructure/database/schema.dart';
 
 /// Test-only reconstruction; never an application downgrade path.
 Future<void> restoreReleasedV15ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV16ForFixture(db);
   for (final sql in DatabaseSchema.migration16Statements) {
     final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
     if (name != null) await db.execute('DROP TRIGGER $name');
@@ -44,4 +45,29 @@ Future<void> restoreReleasedV15ForFixture(DatabaseExecutor db) async {
       where: 'version=15',
     )).single['schema_checksum'],
   );
+}
+
+/// Rebuilds only an empty v17 addition in a synthetic fixture.
+Future<void> restoreReleasedV16ForFixture(DatabaseExecutor db) async {
+  for (final sql in DatabaseSchema.migration17Statements) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name != null) await db.execute('DROP TRIGGER $name');
+  }
+  await db.execute('DROP TABLE quick_sale_split_tenders');
+  await db.execute(
+    'ALTER TABLE quick_sales_lines DROP COLUMN payment_split_json',
+  );
+  for (final name in [
+    'quick_credit_requests_validate_insert',
+    'quick_sale_requests_validate_update',
+    'debtor_receivable_validate',
+  ]) {
+    await db.execute(
+      DatabaseSchema.migration13Statements.singleWhere(
+        (s) => RegExp('CREATE TRIGGER $name\\b').hasMatch(s),
+      ),
+    );
+  }
+  await db.delete('schema_migrations', where: 'version=17');
+  await db.execute('PRAGMA user_version=16');
 }

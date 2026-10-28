@@ -98,7 +98,10 @@ void main() {
         {'product_id': 'pass', 'kind': 'day_pass'},
       ]);
       expect(await app.database.query('stock_adjustments'), isEmpty);
-      expect((await app.readHealth())['schemaVersion'], 16);
+      expect(
+        (await app.readHealth())['schemaVersion'],
+        AppDatabase.schemaVersion,
+      );
       final backup = (await Directory(
         p.join(dir.path, 'backups'),
       ).list().toList()).whereType<File>().single;

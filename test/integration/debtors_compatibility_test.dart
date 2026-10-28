@@ -198,6 +198,10 @@ void main() {
             copy.remove('debtor_id');
             copy['status'] = 'open';
           }
+          if (table == 'quick_sales_lines') {
+            // This fixture reconstructs v12 before the split column existed.
+            copy.remove('payment_split_json');
+          }
           await old.insert(table, copy);
         }
       }

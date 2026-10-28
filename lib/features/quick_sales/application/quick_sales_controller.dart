@@ -324,18 +324,26 @@ class QuickSalesController extends ChangeNotifier {
             BigInt.from(int.tryParse(line.quantityText) ?? 0),
   );
 
-  bool hasCreditFor(QuickSaleAccount account) => account.lines.any(
-    (line) => line.paymentOptionId == QuickPaymentOption.creditId,
-  );
+  bool hasCreditFor(QuickSaleAccount account) =>
+      account.lines.any((line) => line.hasCredit);
 
   BigInt creditTotalFor(QuickSaleAccount account) => account.lines
-      .where((line) => line.paymentOptionId == QuickPaymentOption.creditId)
+      .where((line) => line.hasCredit)
       .fold(
         BigInt.zero,
         (sum, line) =>
             sum +
-            BigInt.from(line.unitPriceMinor ?? 0) *
-                BigInt.from(int.tryParse(line.quantityText) ?? 0),
+            (line.isSplit
+                ? line.paymentParts
+                      .where(
+                        (p) => p.paymentOptionId == QuickPaymentOption.creditId,
+                      )
+                      .fold(
+                        BigInt.zero,
+                        (a, p) => a + BigInt.from(p.amountMinor),
+                      )
+                : BigInt.from(line.unitPriceMinor ?? 0) *
+                      BigInt.from(int.tryParse(line.quantityText) ?? 0)),
       );
 
   Future<bool> register(String id) async {

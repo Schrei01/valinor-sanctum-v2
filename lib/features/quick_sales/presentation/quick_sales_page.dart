@@ -8,6 +8,7 @@ import '../../inventory/presentation/inventory_widgets.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../application/quick_sales_controller.dart';
 import '../domain/quick_sales_store.dart';
+import 'split_payment_dialog.dart';
 
 class QuickSalesPage extends StatelessWidget {
   const QuickSalesPage({
@@ -131,7 +132,7 @@ class QuickSalesPage extends StatelessWidget {
                               'Cliente: ${sale.result.customerName} · Deudas: ${inventoryMoney(sale.result.creditMinor, profile)}',
                             ...sale.lines.map(
                               (line) =>
-                                  '${line.quantity} × ${line.productName} · ${line.displayPaymentLabel}',
+                                  '${line.quantity} × ${line.productName} · ${line.paymentBreakdown.isEmpty ? line.displayPaymentLabel : line.paymentBreakdown.entries.map((p) => "${p.key == 'Nequi' ? 'Transferencia' : p.key} ${inventoryMoney(p.value, profile)}").join(' · ')}',
                             ),
                           ].join('\n'),
                         ),
@@ -384,6 +385,21 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     final credit = controller.creditTotalFor(account);
     final groups = <String, BigInt>{};
     for (final line in account.lines) {
+      if (line.isSplit) {
+        for (final part in line.paymentParts) {
+          final option = widget.data.paymentOptions
+              .where((p) => p.id == part.paymentOptionId)
+              .firstOrNull;
+          if (option != null) {
+            groups.update(
+              option.displayLabel,
+              (v) => v + BigInt.from(part.amountMinor),
+              ifAbsent: () => BigInt.from(part.amountMinor),
+            );
+          }
+        }
+        continue;
+      }
       final option = widget.data.paymentOptions
           .where((item) => item.id == line.paymentOptionId)
           .firstOrNull;
@@ -454,6 +470,8 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                   profile: widget.profile,
                   locked: locked,
                   onChanged: (value) => controller.editLine(account.id, value),
+                  onSelectDebtor: (id) =>
+                      controller.selectDebtor(account.id, id),
                   onRemove: () => controller.removeLine(account.id, line.id),
                 ),
               ),
@@ -569,6 +587,7 @@ class _QuickLineEditor extends StatefulWidget {
     required this.locked,
     required this.onChanged,
     required this.onRemove,
+    required this.onSelectDebtor,
   });
   final QuickSaleAccount account;
   final QuickSaleLine line;
@@ -577,6 +596,7 @@ class _QuickLineEditor extends StatefulWidget {
   final bool locked;
   final ValueChanged<QuickSaleLine> onChanged;
   final VoidCallback onRemove;
+  final ValueChanged<String> onSelectDebtor;
   @override
   State<_QuickLineEditor> createState() => _QuickLineEditorState();
 }
@@ -765,20 +785,21 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           quantityText: value.replaceAll('.', ''),
           unitPriceMinor: line.unitPriceMinor,
           paymentOptionId: line.paymentOptionId,
+          paymentParts: line.paymentParts,
         ),
       ),
     );
     final options = widget.data.paymentOptions
         .where((option) => option.isActive || option.id == line.paymentOptionId)
         .toList();
-    final paymentField = DropdownButtonFormField<String>(
+    final paymentSelector = DropdownButtonFormField<String>(
       key: ValueKey('quick-payment-${line.id}'),
       initialValue: options.any((item) => item.id == line.paymentOptionId)
           ? line.paymentOptionId
           : null,
       isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: 'Forma de pago',
+      decoration: InputDecoration(
+        labelText: line.isSplit ? 'Pago dividido' : 'Forma de pago',
         isDense: true,
         helperText: ' ',
       ),
@@ -809,6 +830,62 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
     final amount =
         BigInt.from(line.unitPriceMinor ?? 0) *
         BigInt.from(int.tryParse(line.quantityText) ?? 0);
+    final paymentField = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        paymentSelector,
+        if (line.isSplit)
+          Text(
+            line.paymentParts
+                .map((part) {
+                  final label =
+                      widget.data.paymentOptions
+                          .where((p) => p.id == part.paymentOptionId)
+                          .firstOrNull
+                          ?.displayLabel ??
+                      'Pago';
+                  return '$label ${inventoryMoney(part.amountMinor, widget.profile)}';
+                })
+                .join(' · '),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        TextButton(
+          key: ValueKey('quick-split-${line.id}'),
+          onPressed:
+              widget.locked ||
+                  line.productId == null ||
+                  amount <= BigInt.zero ||
+                  amount > BigInt.from(0x7fffffffffffffff)
+              ? null
+              : () async {
+                  final result = await showDialog<SplitPaymentSelection>(
+                    context: context,
+                    builder: (_) => SplitPaymentDialog(
+                      line: line,
+                      account: widget.account,
+                      data: widget.data,
+                      profile: widget.profile,
+                    ),
+                  );
+                  if (!mounted || result == null || widget.locked) return;
+                  if (result.debtorId != null &&
+                      result.debtorId != widget.account.debtorId) {
+                    widget.onSelectDebtor(result.debtorId!);
+                  }
+                  widget.onChanged(
+                    QuickSaleLine(
+                      id: line.id,
+                      productId: line.productId,
+                      quantityText: line.quantityText,
+                      unitPriceMinor: line.unitPriceMinor,
+                      paymentParts: result.parts,
+                    ),
+                  );
+                },
+          child: Text(line.isSplit ? 'Editar reparto' : 'Dividir pago'),
+        ),
+      ],
+    );
     final subtotal = Text(
       amount > BigInt.from(0x7fffffffffffffff)
           ? 'Revisa cantidad'

@@ -210,6 +210,7 @@ ORDER BY document.occurred_at_utc,document.id,line.sequence''',
     for (final table in [
       'quick_sale_line_payments',
       'quick_sale_line_tenders',
+      'quick_sale_split_tenders',
     ]) {
       for (final row in await txn.query(table)) {
         final key = (

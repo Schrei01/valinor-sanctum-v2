@@ -150,6 +150,12 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
           whereArgs: [row['command_id']],
           orderBy: 'sequence',
         );
+        final splitFacts = await txn.query(
+          'quick_sale_split_tenders',
+          where: 'request_id=?',
+          whereArgs: [row['command_id']],
+          orderBy: 'sequence',
+        );
         final facts = <Map<String, Object?>>[...cashFacts, ...creditFacts]
           ..sort(
             (a, b) => (a['sequence'] as int).compareTo(b['sequence'] as int),
@@ -157,6 +163,27 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         final payload =
             jsonDecode(row['canonical_payload'] as String)
                 as Map<String, dynamic>;
+        if (payload['version'] == 4) {
+          for (final line
+              in (payload['lines'] as List).cast<Map<String, dynamic>>()) {
+            final parts = splitFacts.where(
+              (f) => f['source_line_id'] == line['lineId'],
+            );
+            facts.add({
+              'product_name_snapshot': line['productName'],
+              'quantity': line['quantity'],
+              'unit_price_minor': line['unitPriceMinor'],
+              'total_minor': line['totalMinor'],
+              'payment_option_label_snapshot': 'Dividido',
+              'payment_breakdown': {
+                for (final part in parts)
+                  part['payment_option_label_snapshot'] as String:
+                      part['total_minor'] as int,
+              },
+              'is_credit': parts.any((p) => p['is_credit'] == 1) ? 1 : 0,
+            });
+          }
+        }
         sales.add(
           ConfirmedQuickSale(
             commandId: row['command_id'] as String,
@@ -172,6 +199,9 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
                     totalMinor: f['total_minor'] as int,
                     paymentLabel: f['payment_option_label_snapshot'] as String,
                     isCredit: f['is_credit'] == 1,
+                    paymentBreakdown: Map.unmodifiable(
+                      (f['payment_breakdown'] as Map<String, int>?) ?? const {},
+                    ),
                   ),
                 )
                 .toList(),
@@ -229,6 +259,26 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
       }
       if (line.productId != null) _id(line.productId!);
       if (line.paymentOptionId != null) _id(line.paymentOptionId!);
+      final splitIds = <String>{};
+      if (line.paymentParts.length > 3 ||
+          (line.isSplit && line.paymentOptionId != null)) {
+        throw const QuickSalesValidationException(
+          'Revisa el reparto de pagos.',
+        );
+      }
+      for (final part in line.paymentParts) {
+        if (!splitIds.add(part.paymentOptionId) ||
+            part.amountMinor <= 0 ||
+            ![
+              'quick-default:EFECTIVO',
+              'quick-default:NEQUI',
+              QuickPaymentOption.creditId,
+            ].contains(part.paymentOptionId)) {
+          throw const QuickSalesValidationException(
+            'El reparto requiere importes positivos y medios diferentes.',
+          );
+        }
+      }
     }
     return _database.database.transaction((txn) async {
       await _profile(txn);
@@ -315,6 +365,9 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
           'product_id': line.productId,
           'quantity_text': line.quantityText,
           'unit_price_minor': line.unitPriceMinor,
+          'payment_split_json': jsonEncode(
+            line.paymentParts.map((p) => p.toJson()).toList(),
+          ),
           'payment_option_id':
               line.paymentOptionId == QuickPaymentOption.creditId
               ? null
@@ -421,6 +474,9 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         throw const QuickSalesValidationException(
           'Escribe un nombre y agrega productos a la cuenta.',
         );
+      }
+      if (account.lines.any((l) => l.isSplit)) {
+        return _prepareSplit(txn, account, profile, commandId, occurredAtUtc);
       }
       final lines = <Map<String, Object?>>[];
       final prices = <String, int>{};
@@ -601,8 +657,12 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
       );
     }
     final payload = jsonDecode(canonical) as Map<String, dynamic>;
-    final creditCheckout = payload['version'] == 2 || payload['version'] == 3;
-    final registeredCheckout = payload['version'] == 3;
+    final splitCheckout = payload['version'] == 4;
+    final creditCheckout =
+        payload['version'] == 2 || payload['version'] == 3 || splitCheckout;
+    final registeredCheckout =
+        payload['version'] == 3 ||
+        (splitCheckout && (payload['creditMinor'] as int) > 0);
     final profile = await _profile(txn);
     final accounts = await txn.query(
       'quick_sales_accounts',
@@ -616,7 +676,7 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         payload['currency'] != profile.currencyCode ||
         payload['scale'] != profile.moneyScale ||
         (payload['version'] != 1 && !creditCheckout) ||
-        (creditCheckout &&
+        ((registeredCheckout || (creditCheckout && !splitCheckout)) &&
             (accounts.single['customer_name'] != payload['customerName'] ||
                 (payload['customerName'] as String).trim().isEmpty)) ||
         payload['occurredAtUtc'] != request['occurred_at_utc']) {
@@ -624,7 +684,8 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         'La cuenta no coincide con la solicitud guardada.',
       );
     }
-    final lines = (payload['lines'] as List).cast<Map<String, dynamic>>();
+    final lines = (payload[splitCheckout ? 'tenders' : 'lines'] as List)
+        .cast<Map<String, dynamic>>();
     if (registeredCheckout) {
       final person = await txn.query(
         'debtors',
@@ -817,7 +878,11 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         (l) => l['product_id'] == line['productId'],
       );
       await txn.insert(
-        creditCheckout ? 'quick_sale_line_tenders' : 'quick_sale_line_payments',
+        splitCheckout
+            ? 'quick_sale_split_tenders'
+            : creditCheckout
+            ? 'quick_sale_line_tenders'
+            : 'quick_sale_line_payments',
         {
           'id': InventoryIds.next(),
           'request_id': commandId,
@@ -902,6 +967,158 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
       whereArgs: [request['account_id']],
     );
     return result;
+  }
+
+  Future<PreparedQuickSale> _prepareSplit(
+    DatabaseExecutor txn,
+    QuickSaleAccount account,
+    BusinessProfile profile,
+    String commandId,
+    DateTime occurred,
+  ) async {
+    final lines = <Map<String, Object?>>[], tenders = <Map<String, Object?>>[];
+    final prices = <String, int>{};
+    var total = BigInt.zero, credit = BigInt.zero;
+    for (var sequence = 0; sequence < account.lines.length; sequence++) {
+      final line = account.lines[sequence];
+      if (line.productId == null ||
+          line.unitPriceMinor == null ||
+          !RegExp(r'^[0-9]+$').hasMatch(line.quantityText.trim())) {
+        throw const QuickSalesValidationException(
+          'Completa producto, cantidad y precio de cada línea.',
+        );
+      }
+      final quantity = _int(BigInt.parse(line.quantityText.trim()), 'Cantidad');
+      final price = line.unitPriceMinor!;
+      if (quantity <= 0 || price < 0) {
+        throw const QuickSalesValidationException('Revisa cantidad y precio.');
+      }
+      Money.fromMinorUnits(
+        price,
+        currency: profile.currencyCode,
+        scale: profile.moneyScale,
+      );
+      if (prices.containsKey(line.productId) &&
+          prices[line.productId] != price) {
+        throw const QuickSalesValidationException(
+          'El mismo producto debe tener el mismo precio en esta cuenta.',
+        );
+      }
+      prices[line.productId!] = price;
+      final products = await txn.rawQuery(
+        'SELECT p.* FROM catalog_items p LEFT JOIN categories c ON c.id=p.category_id WHERE p.id=? AND p.is_active=1 AND (p.category_id IS NULL OR c.is_active=1)',
+        [line.productId],
+      );
+      if (products.length != 1) {
+        throw const QuickSalesValidationException(
+          'Uno de los productos ya no está activo.',
+        );
+      }
+      final amount = _int(
+        BigInt.from(quantity) * BigInt.from(price),
+        'Total de línea',
+      );
+      final parts = line.isSplit
+          ? line.paymentParts
+          : [QuickLinePaymentPart(line.paymentOptionId ?? '', amount)];
+      if (parts.fold(
+            BigInt.zero,
+            (sum, p) => sum + BigInt.from(p.amountMinor),
+          ) !=
+          BigInt.from(amount)) {
+        throw const QuickSalesValidationException(
+          'La suma del reparto debe coincidir con el total de la línea.',
+        );
+      }
+      final physical = <String, Object?>{
+        'lineId': line.id,
+        'productId': line.productId,
+        'productName': products.single['name'],
+        'quantity': quantity,
+        'unitPriceMinor': price,
+        'totalMinor': amount,
+      };
+      lines.add(physical);
+      total += BigInt.from(amount);
+      for (var partIndex = 0; partIndex < parts.length; partIndex++) {
+        final part = parts[partIndex];
+        _int(BigInt.from(part.amountMinor), 'Importe de pago');
+        final isCredit = part.paymentOptionId == QuickPaymentOption.creditId;
+        final option = isCredit
+            ? _creditFact()
+            : await _optionFact(txn, part.paymentOptionId);
+        if (isCredit) credit += BigInt.from(part.amountMinor);
+        tenders.add({
+          ...physical,
+          'quantity': partIndex == 0 ? quantity : 0,
+          'totalMinor': part.amountMinor,
+          'lineSequence': sequence,
+          'partIndex': partIndex,
+          'isCredit': isCredit,
+          ...option,
+        });
+      }
+    }
+    final totalMinor = _int(total, 'Total de venta'),
+        creditMinor = _int(credit, 'Total de deuda');
+    if (totalMinor <= 0) {
+      throw const QuickSalesValidationException(
+        'El total de venta debe ser positivo.',
+      );
+    }
+    final customer = creditMinor > 0
+        ? account.customerName.trim()
+        : 'Consumidor final';
+    if (creditMinor > 0) {
+      final person = await txn.query(
+        'debtors',
+        where: 'id=? AND is_active=1',
+        whereArgs: [account.debtorId],
+      );
+      if (customer.isEmpty ||
+          person.length != 1 ||
+          person.single['name'] != customer) {
+        throw const QuickSalesValidationException(
+          'Asigna la cuenta a una persona registrada en Deudores.',
+        );
+      }
+      await _checkCreditCapacity(txn, credit);
+    }
+    final now = DateTime.now().toUtc().toIso8601String();
+    final row = <String, Object?>{
+      'command_id': commandId,
+      'account_id': account.id,
+      'account_revision': account.revision,
+      'canonical_payload': jsonEncode({
+        'version': 4,
+        'profileId': profile.profileId,
+        'currency': profile.currencyCode,
+        'scale': profile.moneyScale,
+        'label': account.label,
+        'occurredAtUtc': occurred.toIso8601String(),
+        'totalMinor': totalMinor,
+        'creditMinor': creditMinor,
+        'paidMinor': _int(total - credit, 'Total pagado'),
+        'customerName': customer,
+        'debtorId': creditMinor > 0 ? account.debtorId : null,
+        'lines': lines,
+        'tenders': tenders,
+      }),
+      'occurred_at_utc': occurred.toIso8601String(),
+      'prepared_at_utc': now,
+      'status': 'prepared',
+      'sale_command_id': InventoryIds.next(),
+      'collection_command_id': InventoryIds.next(),
+      'legacy_draft_id': InventoryIds.next(),
+    };
+    await txn.insert('quick_sale_requests', row);
+    await txn.update(
+      'quick_sales_accounts',
+      {'status': 'prepared', 'updated_at_utc': now},
+      where: 'id=?',
+      whereArgs: [account.id],
+    );
+    return _prepared(row);
   }
 
   Future<void> _reject(String id, String reason) =>
@@ -1156,6 +1373,14 @@ WHERE line.account_id='system:legacy-customer-receivables'
               productId: l['product_id'] as String?,
               quantityText: l['quantity_text'] as String,
               unitPriceMinor: l['unit_price_minor'] as int?,
+              paymentParts: List.unmodifiable(
+                (jsonDecode(l['payment_split_json'] as String) as List).map(
+                  (p) => QuickLinePaymentPart(
+                    p['paymentOptionId'] as String,
+                    p['amountMinor'] as int,
+                  ),
+                ),
+              ),
               paymentOptionId: l['is_credit'] == 1
                   ? QuickPaymentOption.creditId
                   : l['payment_option_id'] as String?,
@@ -1217,7 +1442,9 @@ WHERE line.account_id='system:legacy-customer-receivables'
             a[i].productId == b[i].productId &&
             a[i].quantityText == b[i].quantityText &&
             a[i].unitPriceMinor == b[i].unitPriceMinor &&
-            a[i].paymentOptionId == b[i].paymentOptionId,
+            a[i].paymentOptionId == b[i].paymentOptionId &&
+            jsonEncode(a[i].paymentParts.map((p) => p.toJson()).toList()) ==
+                jsonEncode(b[i].paymentParts.map((p) => p.toJson()).toList()),
       ).every((v) => v);
   static int _int(BigInt value, String label) {
     if (value < BigInt.zero || value > Money.maxMinorUnits) {
