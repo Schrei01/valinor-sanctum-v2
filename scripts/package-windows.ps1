@@ -85,7 +85,7 @@ foreach ($file in Get-BundleFiles $releaseDirectory) {
     $copiedFiles++
 }
 $instructions = @'
-Valinor Sanctum 2.0 - Versión de desarrollo
+Valinor Sanctum 2.0 - Edición para Windows x64
 
 Extrae la carpeta completa y abre valinor_sanctum_2.exe.
 Conserva las DLL y la carpeta data junto al ejecutable.
@@ -169,10 +169,16 @@ se identifican como estimadas. Los valores parciales excluyen registros sin
 producto o precio válido y muestran cuántos siguen Sin información.
 Si la base fue convertida, Reportes usa sus saldos históricos antes de la apertura,
 sin sumar de nuevo inventario ni dinero. Las fechas antiguas se interpretan en Bogotá.
-Caja/arqueo y ajustes de inventario siguen pendientes.
-El paquete no contiene datos privados ni está habilitado para producción.
-El almacenamiento de desarrollo permanece limitado al repositorio autorizado
-C:\proyectos\valinor_sanctum_2; ejecuta el bundle dentro de ese proyecto.
+El paquete no contiene bases de datos ni datos de ejemplo.
+La edición instalada usa Documents\sanctum2.sqlite3 dentro de la carpeta del
+usuario de Windows (por ejemplo C:\Users\ValinorPC\Documents\sanctum2.sqlite3).
+Si no existe, crea una base vacía y configura Valinor, COP y 0 decimales.
+Si existe, la valida y continúa sobre ella; no la reemplaza ni la reinicia.
+Una base incompatible o dañada produce un error y debe conservarse para revisión.
+No se copian automáticamente los datos del proyecto de desarrollo.
+Los respaldos previos a migraciones se guardan en Documents\ValinorSanctum2-backups.
+El instalador crea accesos en Inicio y escritorio para el usuario actual.
+La desinstalación conserva la base de Documentos y sus respaldos.
 '@
 $instructions | Set-Content -LiteralPath (Join-Path $bundleDirectory 'LEEME.txt') -Encoding utf8
 $zipPath = Join-Path $distributionDirectory ('valinor-sanctum-2-' + $Version + '-windows-x64.zip')

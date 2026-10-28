@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-enum AppEnvironment { development, test }
+enum AppEnvironment { development, test, installed }
 
-/// Configuration for the isolated bootstrap. Production is deliberately absent.
+/// Development/test remain isolated; installed releases use the user's Documents.
 class AppConfig {
   const AppConfig({
     required this.environment,
@@ -21,6 +21,30 @@ class AppConfig {
   final AppEnvironment environment;
   final String dataRoot;
   final String profileId;
+
+  static String? get installedDocumentsDirectory {
+    final home = Platform.environment['USERPROFILE'];
+    if (home == null || !p.isAbsolute(home)) return null;
+    return p.normalize(p.join(home, 'Documents'));
+  }
+
+  /// Only this app's database and its migration backups may leave the checkout.
+  static bool isInstalledDatabasePath(
+    String path, {
+    String? documentsDirectory,
+  }) {
+    final documents = documentsDirectory ?? installedDocumentsDirectory;
+    if (documents == null || !p.isAbsolute(documents)) return false;
+    final normalized = p.normalize(path);
+    return p.equals(normalized, p.join(documents, 'sanctum2.sqlite3')) ||
+        (p.equals(
+              p.dirname(normalized),
+              p.join(documents, 'ValinorSanctum2-backups'),
+            ) &&
+            RegExp(
+              r'^sanctum2\.v\d+\.\d+-[a-f0-9]+\.sqlite3$',
+            ).hasMatch(p.basename(normalized)));
+  }
 
   factory AppConfig.fromEnvironment() => AppConfig.fromDefines(
     environment: const String.fromEnvironment(
@@ -44,16 +68,37 @@ class AppConfig {
     String dataRoot = '',
     String profileId = 'development',
     String? executablePath,
+    String? userProfileDirectory,
   }) {
     final parsedEnvironment = switch (environment) {
       'development' => AppEnvironment.development,
       'test' => AppEnvironment.test,
+      'installed' => AppEnvironment.installed,
       _ => throw ArgumentError.value(
         environment,
         'SANCTUM_ENV',
-        'Only development and test are enabled.',
+        'Use development, test or installed.',
       ),
     };
+
+    if (parsedEnvironment == AppEnvironment.installed) {
+      final home = userProfileDirectory ?? Platform.environment['USERPROFILE'];
+      if (home == null || !p.isAbsolute(home)) {
+        throw StateError(
+          'No se pudo localizar la carpeta Documentos del usuario.',
+        );
+      }
+      if (dataRoot.isNotEmpty || profileId != 'development') {
+        throw ArgumentError(
+          'La edición instalada usa Documentos y el perfil Valinor.',
+        );
+      }
+      return AppConfig(
+        environment: parsedEnvironment,
+        dataRoot: p.normalize(p.join(home, 'Documents')),
+        profileId: 'valinor',
+      );
+    }
 
     if (dataRoot.isNotEmpty) {
       return AppConfig(

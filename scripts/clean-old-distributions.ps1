@@ -37,6 +37,7 @@ $candidates = @(
         $candidateVersion = $null
         if ($item.PSIsContainer -and $item.Name -match '^\d+\.\d+\.\d+$') { $candidateVersion = [version]$item.Name }
         elseif (-not $item.PSIsContainer -and $item.Name -match '^valinor-sanctum-2-(\d+\.\d+\.\d+)-windows-x64\.zip$') { $candidateVersion = [version]$Matches[1] }
+        elseif (-not $item.PSIsContainer -and $item.Name -match '^Valinor-Sanctum-(\d+\.\d+\.\d+)-Instalar\.exe$') { $candidateVersion = [version]$Matches[1] }
         if ($null -ne $candidateVersion -and $candidateVersion -lt $currentVersion) { $item }
     }
 )
@@ -61,9 +62,11 @@ foreach ($candidate in $candidates) {
                 if ($child.PSIsContainer) { $pending.Enqueue($child.FullName) } else { $bytes += $child.Length }
             }
         }
-    } else {
+    } elseif ($candidate.Extension -eq '.zip') {
         $zip = [IO.Compression.ZipFile]::OpenRead($candidate.FullName)
         try { foreach ($entry in $zip.Entries) { Assert-NoRuntimeData $entry.FullName } } finally { $zip.Dispose() }
+        $bytes += $candidate.Length
+    } else {
         $bytes += $candidate.Length
     }
 }

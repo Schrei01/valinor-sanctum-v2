@@ -44,11 +44,16 @@ class StoragePaths {
         'The checkout boundary must be absolute and separate from the original project.',
       );
     }
-    if (!_isInside(repositoryRoot, root)) {
+    final installed = config.environment == AppEnvironment.installed;
+    final approvedDocuments = AppConfig.installedDocumentsDirectory;
+    if (!_isInside(repositoryRoot, root) &&
+        !(installed &&
+            approvedDocuments != null &&
+            p.equals(root, approvedDocuments))) {
       throw ArgumentError.value(
         config.dataRoot,
         'dataRoot',
-        'Data must remain inside the new repository for this increment.',
+        'Use the new repository or the installed app Documents directory.',
       );
     }
     if (p.split(root).any((part) => part.toLowerCase() == 'valinor.db')) {
@@ -59,7 +64,10 @@ class StoragePaths {
       );
     }
 
-    final profile = p.join(root, config.profileId);
+    if (installed && config.profileId != 'valinor') {
+      throw ArgumentError('La edición instalada usa el perfil Valinor.');
+    }
+    final profile = installed ? root : p.join(root, config.profileId);
     final database = p.join(profile, 'sanctum2.sqlite3');
 
     // Preflight every existing component before creating any directory.
@@ -68,7 +76,7 @@ class StoragePaths {
 
     await Directory(root).create(recursive: true);
     await _verifyDirectoryChain(repositoryRoot, root);
-    await Directory(profile).create();
+    await Directory(profile).create(recursive: true);
     await _verifyDirectoryChain(repositoryRoot, profile);
     await _verifyDatabasePath(database);
 

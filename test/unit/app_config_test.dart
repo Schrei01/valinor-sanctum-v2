@@ -96,6 +96,75 @@ void main() {
   });
 
   test(
+    'installed release uses the current user Documents and fixed Valinor profile',
+    () {
+      final home = p.join(repository, 'tmp', 'synthetic-user');
+      final config = AppConfig.fromDefines(
+        environment: 'installed',
+        userProfileDirectory: home,
+        executablePath: p.join(repository, 'unrelated', 'app.exe'),
+      );
+      expect(config.environment, AppEnvironment.installed);
+      expect(config.dataRoot, p.join(home, 'Documents'));
+      expect(config.profileId, 'valinor');
+    },
+  );
+
+  test(
+    'installed release cannot silently redirect storage using development defines',
+    () {
+      for (final override in [
+        () => AppConfig.fromDefines(
+          environment: 'installed',
+          userProfileDirectory: repository,
+          dataRoot: repository,
+        ),
+        () => AppConfig.fromDefines(
+          environment: 'installed',
+          userProfileDirectory: repository,
+          profileId: 'other',
+        ),
+      ]) {
+        expect(override, throwsArgumentError);
+      }
+      expect(
+        () => AppConfig.fromDefines(
+          environment: 'installed',
+          userProfileDirectory: 'relative',
+        ),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
+    'only the installed database and named migration backups are allowed in Documents',
+    () {
+      final docs = p.join(repository, 'tmp', 'Documents');
+      bool allowed(String name) => AppConfig.isInstalledDatabasePath(
+        p.join(docs, name),
+        documentsDirectory: docs,
+      );
+      expect(allowed('sanctum2.sqlite3'), isTrue);
+      expect(
+        allowed(
+          p.join('ValinorSanctum2-backups', 'sanctum2.v15.123456-abc.sqlite3'),
+        ),
+        isTrue,
+      );
+      for (final name in [
+        'valinor.db',
+        'other.sqlite3',
+        p.join('subdir', 'sanctum2.sqlite3'),
+        p.join('ValinorSanctum2-backups', 'other.sqlite3'),
+        p.join('..', 'sanctum2.sqlite3'),
+      ]) {
+        expect(allowed(name), isFalse, reason: name);
+      }
+    },
+  );
+
+  test(
     'compile-time configuration uses only the supported environment factory',
     () {
       const environment = String.fromEnvironment(

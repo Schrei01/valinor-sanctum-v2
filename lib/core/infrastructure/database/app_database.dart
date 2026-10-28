@@ -76,12 +76,12 @@ class AppDatabase {
     if (!p.isAbsolute(boundary) ||
         inside(original, boundary) ||
         inside(original, path) ||
-        !inside(boundary, path) ||
+        (!inside(boundary, path) && !AppConfig.isInstalledDatabasePath(path)) ||
         p.split(path).any((part) => part.toLowerCase() == 'valinor.db')) {
       throw ArgumentError.value(
         path,
         'path',
-        'Only independent databases inside the approved new repository are allowed',
+        'Use an independent checkout database or sanctum2.sqlite3 in Documents',
       );
     }
 
@@ -241,7 +241,14 @@ class AppDatabase {
         'An existing schema needs a file-backed backup before migration',
       );
     }
-    final backupDirectory = Directory(p.join(p.dirname(_path), 'backups'));
+    final backupDirectory = Directory(
+      p.join(
+        p.dirname(_path),
+        AppConfig.isInstalledDatabasePath(_path)
+            ? 'ValinorSanctum2-backups'
+            : 'backups',
+      ),
+    );
     final suffix = Random.secure().nextInt(0x7fffffff).toRadixString(16);
     final backupPath = p.join(
       backupDirectory.path,
