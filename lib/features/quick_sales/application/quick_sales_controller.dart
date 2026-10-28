@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../inventory/domain/inventory_store.dart';
 import '../domain/quick_sales_store.dart';
+import '../domain/account_payment_split.dart';
 
 /// Each card saves and recovers independently. Unknown writes retain their
 /// exact input so later edits cannot change an operation being retried.
@@ -223,6 +224,43 @@ class QuickSalesController extends ChangeNotifier {
           if (current.id == line.id) line else current,
       ],
     );
+  }
+
+  bool divideAccount(String id, List<QuickLinePaymentPart> parts) {
+    final card = _cards[id];
+    if (_disposed || card == null || isLocked(id)) return false;
+    try {
+      for (final part in parts) {
+        if (!(snapshot?.paymentOptions.any(
+              (p) => p.id == part.paymentOptionId && p.isActive,
+            ) ??
+            false)) {
+          throw const QuickSalesValidationException(
+            'Retira del reparto las formas de pago inactivas.',
+          );
+        }
+      }
+      if (parts.any(
+            (p) =>
+                p.paymentOptionId == QuickPaymentOption.creditId &&
+                p.amountMinor > 0,
+          ) &&
+          !(snapshot?.debtors.any(
+                (p) => p.id == card.account.debtorId && p.isActive,
+              ) ??
+              false)) {
+        throw const QuickSalesValidationException(
+          'Asocia la cuenta a una persona en el encabezado de Ventas para registrar deuda.',
+        );
+      }
+      final lines = allocateAccountPayments(card.account, parts);
+      _change(id, lines: lines);
+      return true;
+    } on QuickSalesValidationException catch (e) {
+      card.error = e.message;
+      _emit();
+      return false;
+    }
   }
 
   void _change(

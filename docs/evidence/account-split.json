@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-28",
+  "version": "0.29.0+44",
+  "edition": "Development",
+  "schemaVersion": 17,
+  "schemaChanged": false,
+  "scope": {
+    "splitWholeAccount": true,
+    "splitActionBesideTotal": true,
+    "perLineSelectorsPreserved": true,
+    "perLineSplitButtonsRemoved": true,
+    "inheritsHeaderPerson": true,
+    "personSelectorInDialog": false,
+    "debtWithoutHeaderPersonRejected": true,
+    "monetaryPaymentsWithoutPersonAllowed": true,
+    "existingStorageAndConfirmationsReused": true,
+    "exactProportionalAllocationWithLargestRemainders": true
+  },
+  "validation": {
+    "initialFocusedPassed": 33,
+    "allocationPaymentNavigationCreditRunPassed": 26,
+    "finalApplicationCasesPassed": 13,
+    "finalSyntheticRendersPassedAndInspected": 2,
+    "countsContainRepeatedCases": true,
+    "newAlgorithmControllerCases": 5,
+    "roundingScenarios": 40,
+    "linesPerRoundingScenario": 20,
+    "maximumIntegerMoneyChecked": true,
+    "realSqliteAccountWidgetChecked": true,
+    "draftRecoveryChecked": true,
+    "laterLineSelectorChangeChecked": true,
+    "analysis": "No issues found",
+    "formattedDartFiles": 200,
+    "fullSuiteRepeated": false,
+    "previousDeliveryCi": "success",
+    "releaseBuild": "passed",
+    "nativeProcessResponding": true,
+    "nativeVisualInspection": false
+  },
+  "preservation": {
+    "manualBackupVerified": true,
+    "tablesPreserved": 69,
+    "allRowsAndDefinitionsPreserved": true,
+    "developmentDatabaseBytesUnchanged": true,
+    "documentsDatabaseBytesUnchanged": true,
+    "sqliteIntegrityOk": true,
+    "foreignKeyViolations": 0,
+    "initialVerificationRead": "Transient startup lock; read-only retry with busy_timeout passed",
+    "businessTestOperationsOnActive": false,
+    "originalProjectUntouched": true
+  },
+  "delivery": {
+    "archive": "valinor-sanctum-2-0.29.0-development-windows-x64.zip",
+    "bytes": 15296347,
+    "sha256": "4FD12B07B1CEFC08018D09CE1901EE3B40629AE2277A870A510953B660DA4E4A",
+    "bundleFilesVerified": 18,
+    "includesPrivateData": false,
+    "previousDistributionsCleaned": true,
+    "appLeftOpen": true
+  }
+}

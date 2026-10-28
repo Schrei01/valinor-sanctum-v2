@@ -470,8 +470,6 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                   profile: widget.profile,
                   locked: locked,
                   onChanged: (value) => controller.editLine(account.id, value),
-                  onSelectDebtor: (id) =>
-                      controller.selectDebtor(account.id, id),
                   onRemove: () => controller.removeLine(account.id, line.id),
                 ),
               ),
@@ -506,6 +504,35 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                   value: _money(total),
                   valueKey: ValueKey('quick-total-${account.id}'),
                 ),
+                if (pending == null)
+                  OutlinedButton.icon(
+                    key: ValueKey('quick-split-account-${account.id}'),
+                    icon: const Icon(Icons.call_split, size: 18),
+                    label: Text(
+                      account.lines.any((l) => l.isSplit)
+                          ? 'Editar división'
+                          : 'Dividir cuenta',
+                    ),
+                    onPressed:
+                        locked ||
+                            controller.loadError != null ||
+                            total <= BigInt.zero ||
+                            total > BigInt.from(0x7fffffffffffffff)
+                        ? null
+                        : () async {
+                            final result =
+                                await showDialog<SplitPaymentSelection>(
+                                  context: context,
+                                  builder: (_) => SplitPaymentDialog(
+                                    account: account,
+                                    data: widget.data,
+                                    profile: widget.profile,
+                                  ),
+                                );
+                            if (!mounted || result == null) return;
+                            controller.divideAccount(account.id, result.parts);
+                          },
+                  ),
                 if (hasCredit)
                   Text(
                     'Cobrado: ${_money(total - credit)} · Deudas: ${_money(credit)}',
@@ -587,7 +614,6 @@ class _QuickLineEditor extends StatefulWidget {
     required this.locked,
     required this.onChanged,
     required this.onRemove,
-    required this.onSelectDebtor,
   });
   final QuickSaleAccount account;
   final QuickSaleLine line;
@@ -596,7 +622,6 @@ class _QuickLineEditor extends StatefulWidget {
   final bool locked;
   final ValueChanged<QuickSaleLine> onChanged;
   final VoidCallback onRemove;
-  final ValueChanged<String> onSelectDebtor;
   @override
   State<_QuickLineEditor> createState() => _QuickLineEditorState();
 }
@@ -792,14 +817,14 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
     final options = widget.data.paymentOptions
         .where((option) => option.isActive || option.id == line.paymentOptionId)
         .toList();
-    final paymentSelector = DropdownButtonFormField<String>(
+    final paymentField = DropdownButtonFormField<String>(
       key: ValueKey('quick-payment-${line.id}'),
       initialValue: options.any((item) => item.id == line.paymentOptionId)
           ? line.paymentOptionId
           : null,
       isExpanded: true,
       decoration: InputDecoration(
-        labelText: line.isSplit ? 'Pago dividido' : 'Forma de pago',
+        labelText: line.isSplit ? 'Pago repartido' : 'Forma de pago',
         isDense: true,
         helperText: ' ',
       ),
@@ -830,62 +855,6 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
     final amount =
         BigInt.from(line.unitPriceMinor ?? 0) *
         BigInt.from(int.tryParse(line.quantityText) ?? 0);
-    final paymentField = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        paymentSelector,
-        if (line.isSplit)
-          Text(
-            line.paymentParts
-                .map((part) {
-                  final label =
-                      widget.data.paymentOptions
-                          .where((p) => p.id == part.paymentOptionId)
-                          .firstOrNull
-                          ?.displayLabel ??
-                      'Pago';
-                  return '$label ${inventoryMoney(part.amountMinor, widget.profile)}';
-                })
-                .join(' · '),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        TextButton(
-          key: ValueKey('quick-split-${line.id}'),
-          onPressed:
-              widget.locked ||
-                  line.productId == null ||
-                  amount <= BigInt.zero ||
-                  amount > BigInt.from(0x7fffffffffffffff)
-              ? null
-              : () async {
-                  final result = await showDialog<SplitPaymentSelection>(
-                    context: context,
-                    builder: (_) => SplitPaymentDialog(
-                      line: line,
-                      account: widget.account,
-                      data: widget.data,
-                      profile: widget.profile,
-                    ),
-                  );
-                  if (!mounted || result == null || widget.locked) return;
-                  if (result.debtorId != null &&
-                      result.debtorId != widget.account.debtorId) {
-                    widget.onSelectDebtor(result.debtorId!);
-                  }
-                  widget.onChanged(
-                    QuickSaleLine(
-                      id: line.id,
-                      productId: line.productId,
-                      quantityText: line.quantityText,
-                      unitPriceMinor: line.unitPriceMinor,
-                      paymentParts: result.parts,
-                    ),
-                  );
-                },
-          child: Text(line.isSplit ? 'Editar reparto' : 'Dividir pago'),
-        ),
-      ],
-    );
     final subtotal = Text(
       amount > BigInt.from(0x7fffffffffffffff)
           ? 'Revisa cantidad'

@@ -4,22 +4,20 @@ import '../../../core/presentation/grouped_number_formatter.dart';
 import '../../inventory/presentation/inventory_widgets.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../domain/quick_sales_store.dart';
+import '../domain/account_payment_split.dart';
 
 class SplitPaymentSelection {
-  const SplitPaymentSelection(this.parts, this.debtorId);
+  const SplitPaymentSelection(this.parts);
   final List<QuickLinePaymentPart> parts;
-  final String? debtorId;
 }
 
 class SplitPaymentDialog extends StatefulWidget {
   const SplitPaymentDialog({
     super.key,
-    required this.line,
     required this.account,
     required this.data,
     required this.profile,
   });
-  final QuickSaleLine line;
   final QuickSaleAccount account;
   final QuickSalesSnapshot data;
   final BusinessProfile profile;
@@ -28,6 +26,7 @@ class SplitPaymentDialog extends StatefulWidget {
 }
 
 class _SplitPaymentDialogState extends State<SplitPaymentDialog> {
+  late final totals = accountPaymentTotals(widget.account);
   late final options = widget.data.paymentOptions
       .where(
         (p) =>
@@ -42,20 +41,19 @@ class _SplitPaymentDialogState extends State<SplitPaymentDialog> {
   late final fields = {
     for (final p in options)
       p.id: TextEditingController(
-        text: _text(
-          widget.line.paymentParts
-                  .where((s) => s.paymentOptionId == p.id)
-                  .firstOrNull
-                  ?.amountMinor ??
-              0,
-        ),
+        text: (totals[p.id] ?? BigInt.zero).abs() > Money.maxMinorUnits
+            ? ''
+            : _text((totals[p.id] ?? BigInt.zero).toInt()),
       ),
   };
-  late String? debtorId = widget.account.debtorId;
   String? error;
-  BigInt get total =>
-      BigInt.from(widget.line.unitPriceMinor ?? 0) *
-      BigInt.from(int.tryParse(widget.line.quantityText) ?? 0);
+  BigInt get total => widget.account.lines.fold(
+    BigInt.zero,
+    (sum, line) =>
+        sum +
+        BigInt.from(line.unitPriceMinor ?? 0) *
+            (BigInt.tryParse(line.quantityText.trim()) ?? BigInt.zero),
+  );
   String _text(int minor) => Money.fromMinorUnits(
     minor,
     currency: widget.profile.currencyCode,
@@ -97,7 +95,7 @@ class _SplitPaymentDialogState extends State<SplitPaymentDialog> {
               ) !=
               total) {
         throw const FormatException(
-          'La suma debe coincidir exactamente con el total de la línea.',
+          'La suma debe coincidir exactamente con el total de la cuenta.',
         );
       }
       if (selected.any(
@@ -111,14 +109,16 @@ class _SplitPaymentDialogState extends State<SplitPaymentDialog> {
       if (selected.any(
             (p) => p.paymentOptionId == QuickPaymentOption.creditId,
           ) &&
-          !widget.data.debtors.any((p) => p.id == debtorId && p.isActive)) {
+          !widget.data.debtors.any(
+            (p) => p.id == widget.account.debtorId && p.isActive,
+          )) {
         throw const FormatException(
-          'Selecciona una persona para asignar la deuda.',
+          'Asocia la cuenta a una persona en el encabezado de Ventas para registrar deuda.',
         );
       }
       Navigator.pop(
         context,
-        SplitPaymentSelection(List.unmodifiable(selected), debtorId),
+        SplitPaymentSelection(List.unmodifiable(selected)),
       );
     } catch (e) {
       setState(
@@ -146,10 +146,12 @@ class _SplitPaymentDialogState extends State<SplitPaymentDialog> {
     } catch (_) {
       assigned = null;
     }
-    final people = widget.data.debtors.where((p) => p.isActive).toList();
+    final person = widget.data.debtors
+        .where((p) => p.id == widget.account.debtorId)
+        .firstOrNull;
     return AlertDialog(
       key: const Key('split-payment-dialog'),
-      title: const Text('Dividir pago'),
+      title: const Text('Dividir cuenta'),
       content: SizedBox(
         width: 440,
         child: SingleChildScrollView(
@@ -158,7 +160,7 @@ class _SplitPaymentDialogState extends State<SplitPaymentDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Total de la línea: ${inventoryMoney(total.toInt(), widget.profile)}',
+                'Total de la cuenta: ${inventoryMoney(total.toInt(), widget.profile)}',
               ),
               const SizedBox(height: 16),
               for (final p in options)
@@ -183,27 +185,12 @@ class _SplitPaymentDialogState extends State<SplitPaymentDialog> {
                   child: const Text('Enviar restante a Deudas'),
                 ),
               const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                key: const Key('split-debtor'),
-                initialValue: people.any((p) => p.id == debtorId)
-                    ? debtorId
-                    : null,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Persona para la deuda',
-                ),
-                items: [
-                  for (final p in people)
-                    DropdownMenuItem(
-                      value: p.id,
-                      child: Text(p.name, overflow: TextOverflow.ellipsis),
-                    ),
-                ],
-                onChanged: (id) => setState(() => debtorId = id),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'La persona se aplica a todas las deudas de esta cuenta.',
+              Text(
+                person == null
+                    ? 'Para fiar, asocia esta cuenta a una persona en el encabezado de Ventas.'
+                    : person.isActive
+                    ? 'La deuda se asignará a ${person.name}.'
+                    : '${person.name} tiene bloqueado el fiado.',
               ),
               const SizedBox(height: 12),
               Text(

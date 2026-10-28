@@ -1070,6 +1070,11 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         ? account.customerName.trim()
         : 'Consumidor final';
     if (creditMinor > 0) {
+      if (account.debtorId == null || customer.isEmpty) {
+        throw const QuickSalesValidationException(
+          'Asigna la cuenta a una persona registrada en Deudores.',
+        );
+      }
       final person = await txn.query(
         'debtors',
         where: 'id=? AND is_active=1',

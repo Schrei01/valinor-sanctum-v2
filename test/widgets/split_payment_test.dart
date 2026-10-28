@@ -13,7 +13,7 @@ import '../support/register_debtor.dart';
 
 void main() {
   testWidgets(
-    'split dialog validates, assigns a person, formats money, saves and recovers one physical sale',
+    'whole account split inherits header person, preserves line selectors, saves and recovers exact payments',
     (t) async {
       await t.runAsync(() async {
         await t.binding.setSurfaceSize(const Size(1300, 1000));
@@ -34,7 +34,18 @@ void main() {
             QuickSaleLine(
               id: line,
               productId: 'product',
-              unitPriceMinor: 30000,
+              quantityText: '2',
+              unitPriceMinor: 10000,
+            ),
+          );
+          c.addLine(account);
+          final second = c.accounts.single.lines.last.id;
+          c.editLine(
+            account,
+            QuickSaleLine(
+              id: second,
+              productId: 'product',
+              unitPriceMinor: 10000,
             ),
           );
           await c.flushAll();
@@ -57,7 +68,7 @@ void main() {
           }
 
           await mount();
-          final split = find.byKey(ValueKey('quick-split-$line'));
+          final split = find.byKey(ValueKey('quick-split-account-$account'));
           await t.ensureVisible(split);
           await t.tap(split);
           await settle();
@@ -83,12 +94,33 @@ void main() {
           await t.tap(find.byKey(const Key('split-save')));
           await settle();
           expect(
-            find.text('Selecciona una persona para asignar la deuda.'),
+            find.text(
+              'Asocia la cuenta a una persona en el encabezado de Ventas para registrar deuda.',
+            ),
             findsOneWidget,
           );
-          await t.tap(find.byKey(const Key('split-debtor')));
+          expect(find.byKey(const Key('split-debtor')), findsNothing);
+          await t.tap(find.text('Cancelar'));
+          await settle();
+          await t.tap(find.byKey(ValueKey('quick-person-picker-$account')));
           await settle();
           await t.tap(find.text('Persona de prueba').last);
+          await settle();
+          await t.tap(split);
+          await settle();
+          expect(
+            find.text('La deuda se asignará a Persona de prueba.'),
+            findsOneWidget,
+          );
+          await t.enterText(
+            find.byKey(const ValueKey('split-amount-quick-default:EFECTIVO')),
+            '10000',
+          );
+          await t.enterText(
+            find.byKey(const ValueKey('split-amount-quick-default:NEQUI')),
+            '5000',
+          );
+          await t.tap(find.text('Enviar restante a Deudas'));
           await settle();
           await t.tap(find.byKey(const Key('split-save')));
           await settle();
@@ -102,8 +134,12 @@ void main() {
           c = QuickSalesController(store: store);
           await c.load();
           await mount();
-          expect(c.accounts.single.lines.single.paymentParts.length, 3);
-          await t.tap(find.byKey(ValueKey('quick-split-$line')));
+          expect(c.accounts.single.lines.first.paymentParts.length, 3);
+          expect(c.accounts.single.lines.last.paymentParts.length, 3);
+          expect(find.byKey(ValueKey('quick-payment-$line')), findsOneWidget);
+          expect(find.byKey(ValueKey('quick-payment-$second')), findsOneWidget);
+          expect(find.byKey(ValueKey('quick-split-$line')), findsNothing);
+          await t.tap(find.byKey(ValueKey('quick-split-account-$account')));
           await settle();
           await t.enterText(
             find.byKey(const ValueKey('split-amount-quick-default:EFECTIVO')),
@@ -113,7 +149,7 @@ void main() {
           await settle();
           expect(
             find.text(
-              'La suma debe coincidir exactamente con el total de la línea.',
+              'La suma debe coincidir exactamente con el total de la cuenta.',
             ),
             findsOneWidget,
           );
@@ -123,12 +159,18 @@ void main() {
           await t.ensureVisible(register);
           await t.tap(register);
           await settle();
-          expect((await store.load()).sales.single.lines.single.quantity, 1);
+          expect(
+            (await store.load()).sales.single.lines.fold(
+              0,
+              (sum, l) => sum + l.quantity,
+            ),
+            3,
+          );
           final money = await SqliteTreasuryStore(app).load();
           expect(money.cashMinor, 10000);
           expect(money.nequiMinor, 5000);
           expect(money.receivablesMinor, 15000);
-          expect((await store.load()).stock.single.quantity, 9);
+          expect((await store.load()).stock.single.quantity, 7);
           expect(t.takeException(), isNull);
         } finally {
           await t.pumpWidget(const SizedBox());
