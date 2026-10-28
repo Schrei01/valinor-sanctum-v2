@@ -141,13 +141,16 @@ class QuickSalesController extends ChangeNotifier {
       number++;
     }
     final id = InventoryIds.next();
+    final firstLine = _emptyLine();
     final account = QuickSaleAccount(
       id: id,
       label: 'Cuenta $number',
       revision: 0,
       status: 'open',
       updatedAtUtc: DateTime.now().toUtc(),
-      lines: [_emptyLine()],
+      lines: [firstLine],
+      paymentMode: 'single',
+      accountPaymentOptionId: firstLine.paymentOptionId,
     );
     _cards[id] = _CardState(account)..generation = 1;
     _schedule(id);
@@ -156,13 +159,16 @@ class QuickSalesController extends ChangeNotifier {
     return id;
   }
 
-  QuickSaleLine _emptyLine() => QuickSaleLine(
-    id: InventoryIds.next(),
-    paymentOptionId: snapshot?.paymentOptions
-        .where((item) => item.isActive)
-        .firstOrNull
-        ?.id,
-  );
+  QuickSaleLine _emptyLine({bool inherit = false, String? paymentOptionId}) =>
+      QuickSaleLine(
+        id: InventoryIds.next(),
+        paymentOptionId: inherit
+            ? paymentOptionId
+            : snapshot?.paymentOptions
+                  .where((item) => item.isActive)
+                  .firstOrNull
+                  ?.id,
+      );
 
   void rename(String id, String label) {
     final current = _cards[id]?.account;
@@ -202,7 +208,16 @@ class QuickSalesController extends ChangeNotifier {
       _emit();
       return;
     }
-    _change(id, lines: [...card.account.lines, _emptyLine()]);
+    _change(
+      id,
+      lines: [
+        ...card.account.lines,
+        _emptyLine(
+          inherit: true,
+          paymentOptionId: card.account.singlePaymentOptionId,
+        ),
+      ],
+    );
   }
 
   void removeLine(String id, String lineId) {
@@ -211,14 +226,35 @@ class QuickSalesController extends ChangeNotifier {
     final lines = card.account.lines
         .where((line) => line.id != lineId)
         .toList();
-    _change(id, lines: lines.isEmpty ? [_emptyLine()] : lines);
+    _change(
+      id,
+      lines: lines.isEmpty
+          ? [
+              _emptyLine(
+                inherit: true,
+                paymentOptionId: card.account.singlePaymentOptionId,
+              ),
+            ]
+          : lines,
+    );
   }
 
   void editLine(String id, QuickSaleLine line) {
     final card = _cards[id];
     if (card == null) return;
+    // Retain compatibility for callers restoring old per-line drafts. The UI
+    // now changes payment only through the account selector.
+    final prior = card.account.lines.where((l) => l.id == line.id).firstOrNull;
+    final legacyPaymentEdit =
+        prior != null &&
+        (prior.paymentOptionId != line.paymentOptionId ||
+            (quickConsumptionKey([prior]) == quickConsumptionKey([line]) &&
+                prior.isSplit != line.isSplit));
     _change(
       id,
+      paymentMode: legacyPaymentEdit ? 'legacy' : null,
+      clearAccountPayment: legacyPaymentEdit,
+      paymentSplitBasis: legacyPaymentEdit ? '' : null,
       lines: [
         for (final current in card.account.lines)
           if (current.id == line.id) line else current,
@@ -254,13 +290,55 @@ class QuickSalesController extends ChangeNotifier {
         );
       }
       final lines = allocateAccountPayments(card.account, parts);
-      _change(id, lines: lines);
+      _change(
+        id,
+        lines: lines,
+        paymentMode: 'split',
+        clearAccountPayment: true,
+        paymentSplitBasis: quickConsumptionKey(lines),
+      );
       return true;
     } on QuickSalesValidationException catch (e) {
       card.error = e.message;
       _emit();
       return false;
     }
+  }
+
+  void selectAccountPayment(String id, String? optionId) {
+    final card = _cards[id];
+    if (card == null || isLocked(id) || card.account.isPaymentSplit) return;
+    if (!(snapshot?.paymentOptions.any((p) => p.id == optionId && p.isActive) ??
+        false)) {
+      return;
+    }
+    _setSinglePayment(id, optionId);
+  }
+
+  void returnToSinglePayment(String id) {
+    if (_cards[id] == null || isLocked(id)) return;
+    _setSinglePayment(id, null);
+  }
+
+  void _setSinglePayment(String id, String? optionId) {
+    final lines = [
+      for (final l in _cards[id]!.account.lines)
+        QuickSaleLine(
+          id: l.id,
+          productId: l.productId,
+          quantityText: l.quantityText,
+          unitPriceMinor: l.unitPriceMinor,
+          paymentOptionId: optionId,
+        ),
+    ];
+    _change(
+      id,
+      lines: lines,
+      paymentMode: 'single',
+      accountPaymentOptionId: optionId,
+      clearAccountPayment: optionId == null,
+      paymentSplitBasis: '',
+    );
   }
 
   void _change(
@@ -270,9 +348,17 @@ class QuickSalesController extends ChangeNotifier {
     String? debtorId,
     bool clearDebtor = false,
     List<QuickSaleLine>? lines,
+    String? paymentMode,
+    String? accountPaymentOptionId,
+    bool clearAccountPayment = false,
+    String? paymentSplitBasis,
   }) {
     final card = _cards[id];
     if (_disposed || card == null || isLocked(id)) return;
+    final changedConsumption =
+        lines != null &&
+        quickConsumptionKey(lines) != card.account.consumptionKey;
+    final invalidateSplit = card.account.isPaymentSplit && changedConsumption;
     card.account = _copy(
       card.account,
       label: label,
@@ -280,6 +366,14 @@ class QuickSalesController extends ChangeNotifier {
       debtorId: debtorId,
       clearDebtor: clearDebtor,
       lines: lines,
+      paymentMode: paymentMode ?? (invalidateSplit ? 'split' : null),
+      accountPaymentOptionId: accountPaymentOptionId,
+      clearAccountPayment: clearAccountPayment || invalidateSplit,
+      paymentSplitBasis:
+          paymentSplitBasis ??
+          (invalidateSplit && card.account.paymentMode == 'legacy'
+              ? card.account.consumptionKey
+              : null),
     );
     card.generation++;
     card.error = null;
@@ -322,6 +416,9 @@ class QuickSalesController extends ChangeNotifier {
             label: card.account.label,
             customerName: card.account.customerName,
             debtorId: card.account.debtorId,
+            paymentMode: card.account.paymentMode,
+            accountPaymentOptionId: card.account.accountPaymentOptionId,
+            paymentSplitBasis: card.account.paymentSplitBasis,
             expectedRevision: card.account.revision,
             lines: card.account.lines,
           );
@@ -387,6 +484,15 @@ class QuickSalesController extends ChangeNotifier {
   Future<bool> register(String id) async {
     final card = _cards[id];
     if (_disposed || card == null || isLocked(id)) return false;
+    if (card.account.needsPaymentReview ||
+        (card.account.paymentMode == 'single' &&
+            card.account.accountPaymentOptionId == null)) {
+      card.error = card.account.needsPaymentReview
+          ? 'El consumo cambió. Revisa y guarda de nuevo la división antes de registrar.'
+          : 'Selecciona la forma de pago de la cuenta.';
+      _emit();
+      return false;
+    }
     card.acting = true;
     card.error = null;
     _emit();
@@ -622,6 +728,10 @@ class QuickSalesController extends ChangeNotifier {
     bool clearDebtor = false,
     List<QuickSaleLine>? lines,
     int? revision,
+    String? paymentMode,
+    String? accountPaymentOptionId,
+    bool clearAccountPayment = false,
+    String? paymentSplitBasis,
   }) => QuickSaleAccount(
     id: current.id,
     label: label ?? current.label,
@@ -632,6 +742,11 @@ class QuickSalesController extends ChangeNotifier {
     updatedAtUtc: current.updatedAtUtc,
     lines: lines ?? current.lines,
     confirmedDocumentId: current.confirmedDocumentId,
+    paymentMode: paymentMode ?? current.paymentMode,
+    accountPaymentOptionId: clearAccountPayment
+        ? null
+        : accountPaymentOptionId ?? current.accountPaymentOptionId,
+    paymentSplitBasis: paymentSplitBasis ?? current.paymentSplitBasis,
   );
 
   void _emit() {

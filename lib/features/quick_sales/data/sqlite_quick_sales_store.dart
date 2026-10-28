@@ -237,6 +237,21 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
   @override
   Future<QuickSaleAccount> saveAccount(SaveQuickSaleAccount input) async {
     _id(input.id);
+    if (!['legacy', 'single', 'split'].contains(input.paymentMode) ||
+        (input.paymentMode != 'single' &&
+            input.accountPaymentOptionId != null)) {
+      throw const QuickSalesValidationException(
+        'Revisa la forma de pago de la cuenta.',
+      );
+    }
+    if (input.paymentMode == 'single' &&
+        input.lines.any(
+          (l) => l.isSplit || l.paymentOptionId != input.accountPaymentOptionId,
+        )) {
+      throw const QuickSalesValidationException(
+        'El pago único debe aplicarse a toda la cuenta.',
+      );
+    }
     var customer = input.customerName.trim();
     if (input.expectedRevision < 0 ||
         input.label.length > 120 ||
@@ -313,6 +328,9 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
             old.label == input.label &&
             old.customerName == customer &&
             old.debtorId == input.debtorId &&
+            old.paymentMode == input.paymentMode &&
+            old.accountPaymentOptionId == input.accountPaymentOptionId &&
+            old.paymentSplitBasis == input.paymentSplitBasis &&
             _sameLines(old.lines, input.lines)) {
           return old;
         }
@@ -333,6 +351,9 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
           'label': input.label,
           'customer_name': customer,
           'debtor_id': input.debtorId,
+          'payment_mode': input.paymentMode,
+          'account_payment_option_id': input.accountPaymentOptionId,
+          'payment_split_basis': input.paymentSplitBasis,
           'revision': revision,
           'status': 'open',
           'updated_at_utc': now.toIso8601String(),
@@ -344,6 +365,9 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
             'label': input.label,
             'customer_name': customer,
             'debtor_id': input.debtorId,
+            'payment_mode': input.paymentMode,
+            'account_payment_option_id': input.accountPaymentOptionId,
+            'payment_split_basis': input.paymentSplitBasis,
             'revision': revision,
             'updated_at_utc': now.toIso8601String(),
           },
@@ -382,6 +406,9 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         label: input.label,
         customerName: customer,
         debtorId: input.debtorId,
+        paymentMode: input.paymentMode,
+        accountPaymentOptionId: input.accountPaymentOptionId,
+        paymentSplitBasis: input.paymentSplitBasis,
         revision: revision,
         status: 'open',
         updatedAtUtc: now,
@@ -465,6 +492,17 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         throw const QuickSalesValidationException('La cuenta no existe.');
       }
       final account = await _account(txn, rows.single);
+      if (account.needsPaymentReview) {
+        throw const QuickSalesValidationException(
+          'El consumo cambió. Revisa y guarda de nuevo la división antes de registrar.',
+        );
+      }
+      if (account.paymentMode == 'single' &&
+          account.accountPaymentOptionId == null) {
+        throw const QuickSalesValidationException(
+          'Selecciona la forma de pago de la cuenta.',
+        );
+      }
       if (account.status != 'open' || account.revision != expectedRevision) {
         throw const QuickSalesValidationException(
           'La cuenta cambió o tiene una venta pendiente. Actualiza la vista.',
@@ -1367,6 +1405,9 @@ WHERE line.account_id='system:legacy-customer-receivables'
       label: row['label'] as String,
       customerName: row['customer_name'] as String? ?? '',
       debtorId: row['debtor_id'] as String?,
+      paymentMode: row['payment_mode'] as String,
+      accountPaymentOptionId: row['account_payment_option_id'] as String?,
+      paymentSplitBasis: row['payment_split_basis'] as String,
       revision: row['revision'] as int,
       status: row['status'] as String,
       updatedAtUtc: DateTime.parse(row['updated_at_utc'] as String).toUtc(),

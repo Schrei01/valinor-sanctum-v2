@@ -13,7 +13,7 @@ import '../support/register_debtor.dart';
 
 void main() {
   testWidgets(
-    'whole account split inherits header person, preserves line selectors, saves and recovers exact payments',
+    'whole account split inherits header person, locks its selector and recovers exact payments',
     (t) async {
       await t.runAsync(() async {
         await t.binding.setSurfaceSize(const Size(1300, 1000));
@@ -136,8 +136,16 @@ void main() {
           await mount();
           expect(c.accounts.single.lines.first.paymentParts.length, 3);
           expect(c.accounts.single.lines.last.paymentParts.length, 3);
-          expect(find.byKey(ValueKey('quick-payment-$line')), findsOneWidget);
-          expect(find.byKey(ValueKey('quick-payment-$second')), findsOneWidget);
+          expect(find.byKey(ValueKey('quick-payment-$line')), findsNothing);
+          expect(find.byKey(ValueKey('quick-payment-$second')), findsNothing);
+          expect(
+            t
+                .widget<DropdownButtonFormField<String>>(
+                  find.byKey(ValueKey('quick-account-payment-$account')),
+                )
+                .onChanged,
+            isNull,
+          );
           expect(find.byKey(ValueKey('quick-split-$line')), findsNothing);
           await t.tap(find.byKey(ValueKey('quick-split-account-$account')));
           await settle();
@@ -156,6 +164,81 @@ void main() {
           await t.tap(find.text('Cancelar'));
           await settle();
           final register = find.byKey(ValueKey('quick-register-$account'));
+          await t.enterText(
+            find.byKey(ValueKey('quick-product-$line')),
+            'Producto',
+          );
+          await settle();
+          expect(c.accounts.single.needsPaymentReview, isTrue);
+          expect(t.widget<FilledButton>(register).onPressed, isNull);
+          await t.tap(
+            find.descendant(
+              of: find.byKey(ValueKey('quick-options-$line')),
+              matching: find.text('Producto sintético'),
+            ),
+          );
+          await settle();
+          expect(c.accounts.single.needsPaymentReview, isFalse);
+          expect(c.accounts.single.lines.first.paymentParts.length, 3);
+          await t.enterText(find.byKey(ValueKey('quick-quantity-$line')), '3');
+          await settle();
+          expect(c.accounts.single.needsPaymentReview, isTrue);
+          expect(
+            find.byKey(ValueKey('quick-credit-summary-$account')),
+            findsNothing,
+          );
+          expect(
+            find.text(
+              'El consumo cambió. Revisa y guarda de nuevo la división antes de registrar.',
+            ),
+            findsOneWidget,
+          );
+          expect(t.widget<FilledButton>(register).onPressed, isNull);
+          await t.ensureVisible(
+            find.byKey(ValueKey('quick-single-payment-$account')),
+          );
+          await t.tap(find.byKey(ValueKey('quick-single-payment-$account')));
+          await settle();
+          final method = find.byKey(ValueKey('quick-account-payment-$account'));
+          expect(
+            t.widget<DropdownButtonFormField<String>>(method).onChanged,
+            isNotNull,
+          );
+          expect(c.accounts.single.singlePaymentOptionId, isNull);
+          expect(t.widget<FilledButton>(register).onPressed, isNull);
+          expect(
+            c.accounts.single.lines.every((l) => l.paymentParts.isEmpty),
+            isTrue,
+          );
+          expect(c.accounts.single.debtorId, person);
+          await t.tap(method);
+          await settle();
+          await t.tap(find.text('Transferencia').last);
+          await settle();
+          expect(
+            c.accounts.single.lines.every(
+              (l) => l.paymentOptionId == 'quick-default:NEQUI',
+            ),
+            isTrue,
+          );
+          expect(t.widget<FilledButton>(register).onPressed, isNotNull);
+          await t.enterText(find.byKey(ValueKey('quick-quantity-$line')), '2');
+          await settle();
+          await t.tap(split);
+          await settle();
+          await t.enterText(
+            find.byKey(const ValueKey('split-amount-quick-default:EFECTIVO')),
+            '10000',
+          );
+          await t.enterText(
+            find.byKey(const ValueKey('split-amount-quick-default:NEQUI')),
+            '5000',
+          );
+          await t.tap(find.text('Enviar restante a Deudas'));
+          await settle();
+          await t.tap(find.byKey(const Key('split-save')));
+          await settle();
+          expect(c.accounts.single.needsPaymentReview, isFalse);
           await t.ensureVisible(register);
           await t.tap(register);
           await settle();

@@ -59,7 +59,7 @@ class QuickSalesPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Abre cuentas, agrega productos y elige cómo se paga cada línea.',
+              'Abre cuentas, agrega productos y elige cómo pagar cada cuenta.',
             ),
             const SizedBox(height: 18),
             if (controller.loadError != null)
@@ -383,6 +383,11 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     final total = controller.totalFor(account);
     final hasCredit = controller.hasCreditFor(account);
     final credit = controller.creditTotalFor(account);
+    final isSplit = account.isPaymentSplit;
+    final singlePayment = account.singlePaymentOptionId;
+    final paymentOptions = widget.data.paymentOptions
+        .where((p) => p.isActive || p.id == singlePayment)
+        .toList();
     final groups = <String, BigInt>{};
     for (final line in account.lines) {
       if (line.isSplit) {
@@ -494,25 +499,71 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                 ),
               ),
             const Divider(),
+            if (account.needsPaymentReview)
+              const InventoryNotice(
+                text:
+                    'El consumo cambió. Revisa y guarda de nuevo la división antes de registrar.',
+              ),
             Wrap(
               spacing: 20,
               runSpacing: 12,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                FinancialTotal(
-                  label: 'Total',
-                  value: _money(total),
-                  valueKey: ValueKey('quick-total-${account.id}'),
+                SizedBox(
+                  width: 240,
+                  child: FinancialTotal(
+                    label: 'Total',
+                    value: _money(total),
+                    valueKey: ValueKey('quick-total-${account.id}'),
+                  ),
+                ),
+                SizedBox(
+                  width: 240,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('quick-account-payment-${account.id}'),
+                    initialValue: isSplit
+                        ? '__account_split__'
+                        : paymentOptions.any((p) => p.id == singlePayment)
+                        ? singlePayment
+                        : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Forma de pago',
+                      isDense: true,
+                    ),
+                    hint: const Text('Selecciona un medio'),
+                    items: isSplit
+                        ? const [
+                            DropdownMenuItem(
+                              value: '__account_split__',
+                              child: Text('Pago dividido'),
+                            ),
+                          ]
+                        : [
+                            for (final option in paymentOptions)
+                              DropdownMenuItem(
+                                value: option.id,
+                                child: Text(
+                                  option.isActive
+                                      ? option.displayLabel
+                                      : '${option.displayLabel} (inactivo)',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                    onChanged: locked || isSplit
+                        ? null
+                        : (value) => controller.selectAccountPayment(
+                            account.id,
+                            value,
+                          ),
+                  ),
                 ),
                 if (pending == null)
                   OutlinedButton.icon(
                     key: ValueKey('quick-split-account-${account.id}'),
                     icon: const Icon(Icons.call_split, size: 18),
-                    label: Text(
-                      account.lines.any((l) => l.isSplit)
-                          ? 'Editar división'
-                          : 'Dividir cuenta',
-                    ),
+                    label: Text(isSplit ? 'Editar división' : 'Dividir cuenta'),
                     onPressed:
                         locked ||
                             controller.loadError != null ||
@@ -533,13 +584,21 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                             controller.divideAccount(account.id, result.parts);
                           },
                   ),
-                if (hasCredit)
+                if (isSplit && pending == null)
+                  TextButton(
+                    key: ValueKey('quick-single-payment-${account.id}'),
+                    onPressed: locked
+                        ? null
+                        : () => controller.returnToSinglePayment(account.id),
+                    child: const Text('Volver a pago único'),
+                  ),
+                if (hasCredit && !account.needsPaymentReview)
                   Text(
                     'Cobrado: ${_money(total - credit)} · Deudas: ${_money(credit)}',
                     key: ValueKey('quick-credit-summary-${account.id}'),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                if (groups.length > 1)
+                if (groups.length > 1 && !account.needsPaymentReview)
                   Text(
                     groups.entries
                         .map((part) => '${part.key}: ${_money(part.value)}')
@@ -549,7 +608,12 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                 if (pending == null)
                   FilledButton.icon(
                     key: ValueKey('quick-register-${account.id}'),
-                    onPressed: locked || controller.loadError != null
+                    onPressed:
+                        locked ||
+                            controller.loadError != null ||
+                            account.needsPaymentReview ||
+                            (account.paymentMode == 'single' &&
+                                singlePayment == null)
                         ? null
                         : () => controller.register(account.id),
                     icon: const Icon(Icons.point_of_sale, size: 20),
@@ -670,6 +734,7 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           id: widget.line.id,
           quantityText: widget.line.quantityText,
           paymentOptionId: widget.line.paymentOptionId,
+          paymentParts: widget.line.paymentParts,
         ),
       );
     }
@@ -693,6 +758,7 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
         quantityText: widget.line.quantityText,
         unitPriceMinor: priorPrice ?? product.listPriceMinor,
         paymentOptionId: widget.line.paymentOptionId,
+        paymentParts: widget.line.paymentParts,
       ),
     );
     _quantityFocus.requestFocus();
@@ -814,44 +880,6 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
         ),
       ),
     );
-    final options = widget.data.paymentOptions
-        .where((option) => option.isActive || option.id == line.paymentOptionId)
-        .toList();
-    final paymentField = DropdownButtonFormField<String>(
-      key: ValueKey('quick-payment-${line.id}'),
-      initialValue: options.any((item) => item.id == line.paymentOptionId)
-          ? line.paymentOptionId
-          : null,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: line.isSplit ? 'Pago repartido' : 'Forma de pago',
-        isDense: true,
-        helperText: ' ',
-      ),
-      items: [
-        for (final option in options)
-          DropdownMenuItem(
-            value: option.id,
-            child: Text(
-              option.isActive
-                  ? option.displayLabel
-                  : '${option.displayLabel} (inactivo)',
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-      ],
-      onChanged: widget.locked
-          ? null
-          : (value) => widget.onChanged(
-              QuickSaleLine(
-                id: line.id,
-                productId: line.productId,
-                quantityText: line.quantityText,
-                unitPriceMinor: line.unitPriceMinor,
-                paymentOptionId: value,
-              ),
-            ),
-    );
     final amount =
         BigInt.from(line.unitPriceMinor ?? 0) *
         BigInt.from(int.tryParse(line.quantityText) ?? 0);
@@ -887,11 +915,6 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
                   children: [
                     SizedBox(width: 68, child: quantityField),
                     const SizedBox(width: 12),
-                    Expanded(child: paymentField),
-                  ],
-                ),
-                Row(
-                  children: [
                     Expanded(child: subtotal),
                     remove,
                   ],
@@ -906,8 +929,6 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
             Expanded(flex: 4, child: productField),
             const SizedBox(width: 12),
             SizedBox(width: 68, child: quantityField),
-            const SizedBox(width: 12),
-            Expanded(flex: 2, child: paymentField),
             const SizedBox(width: 12),
             SizedBox(
               width: 116,

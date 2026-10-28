@@ -346,7 +346,7 @@ void main() {
   );
 
   testWidgets(
-    'several accounts and payment rows register in one click while keeping other cards',
+    'several accounts use one payment each and register while keeping other cards',
     (tester) async {
       await open(tester);
       await tap(tester, find.byKey(const Key('quick-new-account')));
@@ -356,26 +356,23 @@ void main() {
       await enter(tester, keyed('quick-quantity-').first, '2');
       await tap(tester, keyed('quick-add-line-').first);
       await select(tester, 1, 'Snack sintético');
-      await tap(tester, keyed('quick-payment-').at(1));
+      await tap(tester, keyed('quick-account-payment-').first);
       await tap(tester, find.text('Transferencia').last);
       await select(tester, 2, 'Agua sintética');
       expect(
         controller.accounts.first.lines.map((line) => line.paymentOptionId),
-        ['cash', 'nequi'],
+        ['nequi', 'nequi'],
       );
       expect(
         tester.widget<Text>(keyed('quick-total-').first).data,
         'COP 8.000,00',
       );
-      expect(
-        find.textContaining('Transferencia: COP 2.000,00'),
-        findsOneWidget,
-      );
+      expect(find.text('Transferencia'), findsOneWidget);
       await capture(tester);
       await tap(tester, keyed('quick-register-').first);
       expect(store.sales, hasLength(1));
       expect(store.sales.single.lines.map((line) => line.paymentLabel), [
-        'Efectivo',
+        'Nequi',
         'Nequi',
       ]);
       expect(store.sales.single.result.totalMinor, 800000);
@@ -507,14 +504,14 @@ void main() {
   });
 
   testWidgets(
-    '400px layout supports several lines without overflow and keeps payments on each row',
+    '400px layout supports several lines and one account payment without overflow',
     (tester) async {
       await open(tester, size: const Size(400, 900));
       await tap(tester, find.byKey(const Key('quick-new-account')));
       await select(tester, 0, 'Agua sintética');
       await tap(tester, keyed('quick-add-line-').first);
       await select(tester, 1, 'Snack sintético');
-      await tap(tester, keyed('quick-payment-').at(1));
+      await tap(tester, keyed('quick-account-payment-').first);
       await tap(tester, find.text('Transferencia').last);
       expect(tester.takeException(), isNull);
       await tap(tester, keyed('quick-register-').first);

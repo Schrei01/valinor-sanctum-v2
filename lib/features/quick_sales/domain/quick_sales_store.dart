@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../inventory/domain/inventory_store.dart';
 import '../../debtors/domain/debtors_store.dart';
 
@@ -50,6 +51,9 @@ class QuickSaleAccount {
     this.customerName = '',
     this.debtorId,
     this.confirmedDocumentId,
+    this.paymentMode = 'legacy',
+    this.accountPaymentOptionId,
+    this.paymentSplitBasis = '',
   }) : lines = List.unmodifiable(lines);
   final String id;
   final String label;
@@ -60,7 +64,33 @@ class QuickSaleAccount {
   final DateTime updatedAtUtc;
   final List<QuickSaleLine> lines;
   final String? confirmedDocumentId;
+  final String paymentMode;
+  final String? accountPaymentOptionId;
+  final String paymentSplitBasis;
+  String get consumptionKey => quickConsumptionKey(lines);
+  bool get isPaymentSplit =>
+      paymentMode == 'split' ||
+      (paymentMode == 'legacy' &&
+          (lines.any((l) => l.isSplit) ||
+              lines
+                      .map((l) => l.paymentOptionId)
+                      .whereType<String>()
+                      .toSet()
+                      .length >
+                  1));
+  String? get singlePaymentOptionId {
+    if (isPaymentSplit) return null;
+    if (paymentMode == 'single') return accountPaymentOptionId;
+    return lines.map((l) => l.paymentOptionId).whereType<String>().firstOrNull;
+  }
+
+  bool get needsPaymentReview =>
+      paymentMode == 'split' && paymentSplitBasis != consumptionKey;
 }
+
+String quickConsumptionKey(List<QuickSaleLine> lines) => jsonEncode([
+  for (final l in lines) [l.id, l.productId, l.quantityText, l.unitPriceMinor],
+]);
 
 class SaveQuickSaleAccount {
   SaveQuickSaleAccount({
@@ -70,6 +100,9 @@ class SaveQuickSaleAccount {
     required List<QuickSaleLine> lines,
     this.customerName = '',
     this.debtorId,
+    this.paymentMode = 'legacy',
+    this.accountPaymentOptionId,
+    this.paymentSplitBasis = '',
   }) : lines = List.unmodifiable(lines);
   final String id;
   final String label;
@@ -77,6 +110,9 @@ class SaveQuickSaleAccount {
   final String? debtorId;
   final int expectedRevision;
   final List<QuickSaleLine> lines;
+  final String paymentMode;
+  final String? accountPaymentOptionId;
+  final String paymentSplitBasis;
 }
 
 class QuickPaymentOption {

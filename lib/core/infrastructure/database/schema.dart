@@ -8,7 +8,7 @@ part 'split_payment_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 17;
+  static const int version = 18;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -76,6 +76,7 @@ abstract final class DatabaseSchema {
     15 => 'total_purchase_cost_and_retail_price_history_v15',
     16 => 'catalog_stock_adjustments_and_day_pass_v16',
     17 => 'split_line_payments_v17',
+    18 => 'account_payment_mode_and_review_v18',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -97,6 +98,7 @@ abstract final class DatabaseSchema {
     15 => checksum(migration15Statements.join('\n;\n')),
     16 => checksum(migration16Statements.join('\n;\n')),
     17 => checksum(migration17Statements.join('\n;\n')),
+    18 => checksum(migration18Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -106,6 +108,30 @@ abstract final class DatabaseSchema {
   static final List<String> migration17Statements = List.unmodifiable(
     SplitPaymentSchema.build(),
   );
+  static final List<String> migration18Statements = List.unmodifiable([
+    "ALTER TABLE quick_sales_accounts ADD COLUMN payment_mode TEXT NOT NULL DEFAULT 'legacy' CHECK(payment_mode IN('legacy','single','split'))",
+    "ALTER TABLE quick_sales_accounts ADD COLUMN account_payment_option_id TEXT CHECK(account_payment_option_id IS NULL OR length(trim(account_payment_option_id)) BETWEEN 1 AND 160)",
+    "ALTER TABLE quick_sales_accounts ADD COLUMN payment_split_basis TEXT NOT NULL DEFAULT '' CHECK(payment_split_basis='' OR (json_valid(payment_split_basis) AND json_type(payment_split_basis)='array'))",
+    '''CREATE TRIGGER account_payment_settings_locked
+BEFORE UPDATE OF payment_mode,account_payment_option_id,payment_split_basis ON quick_sales_accounts
+WHEN (NEW.payment_mode IS NOT OLD.payment_mode OR NEW.account_payment_option_id IS NOT OLD.account_payment_option_id OR NEW.payment_split_basis IS NOT OLD.payment_split_basis)
+ AND (OLD.status<>'open' OR NEW.status<>'open' OR EXISTS(SELECT 1 FROM quick_sale_requests WHERE account_id=OLD.id AND status<>'cancelled'))
+BEGIN SELECT RAISE(ABORT,'Prepared account payment settings are immutable'); END''',
+    '''CREATE TRIGGER account_payment_prepare_guard BEFORE INSERT ON quick_sale_requests BEGIN
+SELECT CASE WHEN EXISTS(SELECT 1 FROM quick_sales_accounts a WHERE a.id=NEW.account_id AND (
+ (a.payment_mode='single' AND (a.account_payment_option_id IS NULL OR EXISTS(
+   SELECT 1 FROM quick_sales_lines s WHERE s.account_id=a.id AND (
+    json_array_length(s.payment_split_json)>0 OR s.is_credit<>(a.account_payment_option_id='quick-debt')
+    OR (s.is_credit=0 AND s.payment_option_id IS NOT a.account_payment_option_id)))))
+ OR (a.payment_mode='split' AND NOT (CASE WHEN json_valid(a.payment_split_basis) THEN
+  json_type(a.payment_split_basis)='array' AND json_array_length(a.payment_split_basis)=(SELECT count(*) FROM quick_sales_lines WHERE account_id=a.id)
+  AND NOT EXISTS(SELECT 1 FROM quick_sales_lines s WHERE s.account_id=a.id AND NOT EXISTS(
+    SELECT 1 FROM json_each(a.payment_split_basis) b WHERE b.key=s.sequence
+    AND json_extract(b.value,'\$[0]') IS s.id AND json_extract(b.value,'\$[1]') IS s.product_id
+    AND json_extract(b.value,'\$[2]') IS s.quantity_text AND json_extract(b.value,'\$[3]') IS s.unit_price_minor))
+  ELSE 0 END))))
+THEN RAISE(ABORT,'Choose an account payment or review the division after consumption changes') END; END''',
+  ]);
   static final List<String> migration16Statements = List.unmodifiable(
     CatalogOperationsSchema.build(
       releasedEvents: migration12Statements,

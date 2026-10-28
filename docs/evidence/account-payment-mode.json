@@ -1,0 +1,67 @@
+{
+  "date": "2026-10-28",
+  "version": "0.30.0+45",
+  "edition": "development-portable",
+  "schema": 18,
+  "tables": 69,
+  "features": [
+    "account-level payment selector",
+    "split mode locks selector",
+    "explicit return to single payment",
+    "durable consumption review",
+    "legacy and prepared compatibility"
+  ],
+  "validation": {
+    "fullSuitePassed": 783,
+    "fullSuiteSkipped": 3,
+    "fullSuiteFailedBeforeFix": 1,
+    "failure": "Product reselection discarded the prior allocation",
+    "failureFixed": true,
+    "focusedApplicationPassed": 28,
+    "focusedRenderTestsPassed": 2,
+    "finalApplicationRecheckPassed": 1,
+    "finalRenderRecheckPassed": 2,
+    "fullSuiteRepeatedAfterFix": false,
+    "analyze": "No issues found",
+    "formattedDartFiles": 201,
+    "syntheticImagesInspected": 6,
+    "nativeBusinessOperationsPerformed": false
+  },
+  "preservation": {
+    "oldTablesPreserved": 69,
+    "newTableCount": 69,
+    "oldVersion": 17,
+    "newVersion": 18,
+    "allOldColumnValuesPreserved": true,
+    "migrationMetadataPreserved": true,
+    "legacyPaymentDefaults": true,
+    "verifiedAutomaticBackup": true,
+    "integrityOk": true,
+    "foreignKeyViolations": 0
+  },
+  "delivery": {
+    "zipAndStableFiles": 18,
+    "allFilesIdentical": true,
+    "privateDataIncluded": false,
+    "peVersion": "0.30.0+45",
+    "documentsUnchanged": true,
+    "archiveSha256": "7A3497305EA444DE46904A96B3C3BCD3D9BDB84654A2AD83A36ECD82DE7E7F90"
+  },
+  "nativeWindow": {
+    "open": true,
+    "responding": true,
+    "title": "Valinor Sanctum 2.0",
+    "peVersion": "0.30.0+45",
+    "nativeVisualInspection": false
+  },
+  "original": {
+    "executed": false,
+    "written": false
+  },
+  "previousCI": {
+    "head": "105b6c130d586347720955715de41af4582ebb37",
+    "conclusion": "success",
+    "run": 40651555911
+  },
+  "newCI": "Checked after push; see GitHub Actions for the resulting revision"
+}

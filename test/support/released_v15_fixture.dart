@@ -49,6 +49,7 @@ Future<void> restoreReleasedV15ForFixture(DatabaseExecutor db) async {
 
 /// Rebuilds only an empty v17 addition in a synthetic fixture.
 Future<void> restoreReleasedV16ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV17ForFixture(db);
   for (final sql in DatabaseSchema.migration17Statements) {
     final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
     if (name != null) await db.execute('DROP TRIGGER $name');
@@ -70,4 +71,20 @@ Future<void> restoreReleasedV16ForFixture(DatabaseExecutor db) async {
   }
   await db.delete('schema_migrations', where: 'version=17');
   await db.execute('PRAGMA user_version=16');
+}
+
+Future<void> restoreReleasedV17ForFixture(DatabaseExecutor db) async {
+  for (final sql in DatabaseSchema.migration18Statements) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name != null) await db.execute('DROP TRIGGER $name');
+  }
+  for (final column in [
+    'payment_split_basis',
+    'account_payment_option_id',
+    'payment_mode',
+  ]) {
+    await db.execute('ALTER TABLE quick_sales_accounts DROP COLUMN $column');
+  }
+  await db.delete('schema_migrations', where: 'version=18');
+  await db.execute('PRAGMA user_version=17');
 }

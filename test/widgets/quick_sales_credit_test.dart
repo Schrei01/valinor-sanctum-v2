@@ -108,7 +108,7 @@ void main() {
   }
 
   Future<void> payment(WidgetTester tester, int row, String label) async {
-    await tap(tester, keyed('quick-payment-').at(row));
+    await tap(tester, keyed('quick-account-payment-').at(row));
     await tap(tester, find.text(label).last);
   }
 
@@ -215,7 +215,7 @@ void main() {
   );
 
   testWidgets(
-    'mixed account collects only cash and transfer lines and leaves the debt',
+    'legacy mixed draft opens as divided and preserves its cash transfer and debt',
     (tester) async {
       await open(tester);
       await creditAccount(tester);
@@ -224,7 +224,30 @@ void main() {
       await product(tester, 1, 'Snack sintético');
       await tap(tester, keyed('quick-add-line-').first);
       await product(tester, 2, 'Agua sintética');
-      await payment(tester, 2, 'Transferencia');
+      final id = controller.accounts.single.id;
+      final rows = controller.accounts.single.lines;
+      controller.editLine(
+        id,
+        QuickSaleLine(
+          id: rows[1].id,
+          productId: rows[1].productId,
+          quantityText: rows[1].quantityText,
+          unitPriceMinor: rows[1].unitPriceMinor,
+          paymentOptionId: 'cash',
+        ),
+      );
+      controller.editLine(
+        id,
+        QuickSaleLine(
+          id: rows[2].id,
+          productId: rows[2].productId,
+          quantityText: rows[2].quantityText,
+          unitPriceMinor: rows[2].unitPriceMinor,
+          paymentOptionId: 'nequi',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Pago dividido'), findsOneWidget);
       expect(
         find.text('Cobrado: COP 5.000,00 · Deudas: COP 3.000,00'),
         findsOneWidget,

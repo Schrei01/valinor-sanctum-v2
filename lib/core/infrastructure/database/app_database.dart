@@ -209,6 +209,7 @@ class AppDatabase {
     15 => DatabaseSchema.migration15Statements,
     16 => DatabaseSchema.migration16Statements,
     17 => DatabaseSchema.migration17Statements,
+    18 => DatabaseSchema.migration18Statements,
     _ => throw ArgumentError.value(version, 'version'),
   };
 

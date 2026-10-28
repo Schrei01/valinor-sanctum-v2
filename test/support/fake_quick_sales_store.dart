@@ -123,6 +123,9 @@ class FakeQuickSalesStore implements QuickSalesStore {
     input.label,
     input.customerName,
     input.debtorId,
+    input.paymentMode,
+    input.accountPaymentOptionId,
+    input.paymentSplitBasis,
     for (final line in input.lines)
       [
         line.id,
@@ -130,6 +133,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
         line.quantityText,
         line.unitPriceMinor,
         line.paymentOptionId,
+        line.paymentParts.map((p) => p.toJson()).toList(),
       ],
   ]);
 
@@ -154,6 +158,9 @@ class FakeQuickSalesStore implements QuickSalesStore {
         label: input.label,
         customerName: input.customerName,
         debtorId: input.debtorId,
+        paymentMode: input.paymentMode,
+        accountPaymentOptionId: input.accountPaymentOptionId,
+        paymentSplitBasis: input.paymentSplitBasis,
         revision: input.expectedRevision + 1,
         status: 'open',
         updatedAtUtc: DateTime.utc(2026, 10, 19),
@@ -364,6 +371,9 @@ class FakeQuickSalesStore implements QuickSalesStore {
         label: account.label,
         customerName: account.customerName,
         debtorId: account.debtorId,
+        paymentMode: account.paymentMode,
+        accountPaymentOptionId: account.accountPaymentOptionId,
+        paymentSplitBasis: account.paymentSplitBasis,
         revision: account.revision + 1,
         status: 'open',
         updatedAtUtc: account.updatedAtUtc,

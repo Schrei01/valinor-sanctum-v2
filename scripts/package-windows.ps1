@@ -30,6 +30,9 @@ function Get-BundleFiles([string]$BundleRoot) {
             $relative = $item.FullName.Substring($BundleRoot.Length + 1)
             if ($relative -match '^data[\\/](development|test)([\\/]|$)') { continue }
             if ($item.Name -in @('reference-inventory.json', 'active-workspace.json', 'legacy-treasury.json')) { throw 'Un snapshot o selector privado está fuera de las rutas runtime excluidas.' }
+            # Dart CLI hooks can leave an absolute-path development manifest.
+            # Flutter Release uses data/flutter_assets/NativeAssetsManifest.json.
+            if ($relative -eq 'native_assets.json') { continue }
             # A prior `build bundle --debug` can leave these in shared assets.
             # The Release engine uses data/app.so instead of JIT snapshots.
             if ($relative -match '^data[\\/]flutter_assets[\\/](kernel_blob\.bin|isolate_snapshot_data|vm_snapshot_data|\.last_build_id)$') { continue }
@@ -121,18 +124,21 @@ para reponerlos desde Compras. Un inventario inicial confirmado está disponible
 Si hay una copia de inventario cargada localmente, Catálogo permite consultarla
 en Inventario de la copia y volver al Catálogo de esta app con el selector de origen.
 La copia muestra su corte, cantidades, PVP y lotes; no está disponible para vender.
-En Ventas crea varias cuentas, agrega productos y elige la forma de pago por línea.
+En Ventas crea varias cuentas, agrega productos y elige la forma de pago junto al total.
 El selector muestra existencias y ofrece productos físicos activos con unidades;
 los agotados se ocultan. Pasadía y eventos activos se muestran como Ilimitado.
 Elige Efectivo, Transferencia o Deudas. Transferencia usa la cuenta de Nequi;
-ese nombre aparece en las líneas, resumen e historial de Ventas.
+ese nombre aparece en el selector, resumen e historial de Ventas.
 Registrar venta guarda entrega, stock, costo y cobro en una sola operación.
 En Cuenta puedes escribir un nombre libre, buscar una persona registrada o
 abrir el selector de Deudores. Elegirla llena el nombre y vincula la cuenta.
 Para fiar, registra primero la persona en Deudores y selecciónala en Cuenta.
 Editar el nombre manualmente retira esa vinculación; vuelve a elegir la persona.
-Todas las líneas Deudas de una cuenta pertenecen a esa persona.
-Puedes combinar líneas pagadas y fiadas: solo lo pagado entra a Caja o Nequi.
+La parte a Deudas de una cuenta pertenece a esa persona.
+Dividir cuenta reparte el total entre los medios y bloquea el selector con Pago dividido.
+Editar división permite revisar los importes; Volver a pago único limpia el reparto
+y exige seleccionar un medio. Si cambia el consumo, revisa y guarda de nuevo la división.
+Puedes combinar pagos y deuda: solo lo pagado entra a Caja o Nequi.
 Lo fiado aumenta la deuda de esa persona y Deudas en Tesorería.
 En Deudores selecciona la persona, valor del abono y Efectivo o Transferencia.
 Puedes pagar parcial o totalmente. El abono reduce su deuda y aumenta Caja o Nequi juntos.

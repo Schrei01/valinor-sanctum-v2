@@ -196,6 +196,9 @@ void main() {
           final copy = Map<String, Object?>.from(row);
           if (table == 'quick_sales_accounts') {
             copy.remove('debtor_id');
+            copy.remove('payment_mode');
+            copy.remove('account_payment_option_id');
+            copy.remove('payment_split_basis');
             copy['status'] = 'open';
           }
           if (table == 'quick_sales_lines') {
