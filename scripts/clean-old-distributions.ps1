@@ -36,7 +36,7 @@ $candidates = @(
     foreach ($item in Get-ChildItem -LiteralPath $distribution -Force) {
         $candidateVersion = $null
         if ($item.PSIsContainer -and $item.Name -match '^\d+\.\d+\.\d+$') { $candidateVersion = [version]$item.Name }
-        elseif (-not $item.PSIsContainer -and $item.Name -match '^valinor-sanctum-2-(\d+\.\d+\.\d+)-windows-x64\.zip$') { $candidateVersion = [version]$Matches[1] }
+        elseif (-not $item.PSIsContainer -and $item.Name -match '^valinor-sanctum-2-(\d+\.\d+\.\d+)(?:-development)?-windows-x64\.zip$') { $candidateVersion = [version]$Matches[1] }
         elseif (-not $item.PSIsContainer -and $item.Name -match '^Valinor-Sanctum-(\d+\.\d+\.\d+)-Instalar\.exe$') { $candidateVersion = [version]$Matches[1] }
         if ($null -ne $candidateVersion -and $candidateVersion -lt $currentVersion) { $item }
     }

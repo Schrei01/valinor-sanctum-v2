@@ -20,7 +20,9 @@ El ajuste 0.7.2 se describe en [Filtros del catálogo](docs/25-filtros-catalogo.
 
 Para instalar **0.27.0**, ejecuta `dist/Valinor-Sanctum-0.27.0-Instalar.exe`; crea accesos de Valinor en escritorio e Inicio. La edición instalada abre directamente **Ventas** y usa `%USERPROFILE%\Documents\sanctum2.sqlite3`. Si no existe, crea una base vacía con Valinor, COP, 0 decimales y Bogotá, sin formulario de alta. Si existe, la valida y continúa sin reiniciarla. No incluye datos ni copia automáticamente la base de desarrollo. Actualizar o desinstalar conserva la base y sus respaldos en Documentos. [Guía del instalador y validación](docs/60-instalador-windows.md).
 
-El bundle completo también está en `dist/ValinorSanctum2`, con su ZIP `dist/valinor-sanctum-2-0.27.0-windows-x64.zip`. **Iniciar Valinor Sanctum.cmd** abre esa edición, que ahora usa Documentos. Conserva DLL y carpeta data junto al ejecutable. Los modos de desarrollo/prueba siguen aislados dentro del repositorio y mantienen su selector de perfil anterior. Las bases propias v1–v15 se actualizan con respaldo SQLite previo; las versiones anteriores no pueden abrir v16. El original permanece solo lectura y no comparte base con esta app.
+La **edición de desarrollo portable 0.27.0** está en `dist/ValinorSanctum2` y en `dist/valinor-sanctum-2-0.27.0-development-windows-x64.zip`. **Iniciar Valinor Sanctum.cmd** abre esta edición y usa la base `data/development/valinor/sanctum2.sqlite3`, seleccionada por `data/development/active-workspace.json`. Conserva DLL y carpeta data junto al ejecutable; el ZIP no incluye la base. [Desarrollo 0.27.0](docs/61-desarrollo-027.md).
+
+El instalador y su ZIP `dist/valinor-sanctum-2-0.27.0-windows-x64.zip` corresponden a la edición que usa Documentos. Ambas ediciones se compilan por separado y conservan sus datos en ubicaciones distintas. Las bases propias v1–v15 se actualizan con respaldo SQLite previo; las versiones anteriores no pueden abrir v16. El original permanece solo lectura y no comparte base con esta app.
 
 Si aparece `database v10 is newer than supported v9` u otro aviso de base más nueva, se ha abierto un bundle antiguo. Cierra esa ventana e inicia el programa con el archivo de la raíz; no borres ni reinicies la base para resolver un ejecutable antiguo.
 
@@ -95,6 +97,7 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 58. [Existencias en el selector de Ventas 0.26.1](docs/58-ventas-existencias.md).
 59. [Pruebas de jornada comercial: cuentas, pagos, deudas y navegación](docs/59-pruebas-jornada-comercial.md).
 60. [Instalador Windows y base en Documentos 0.27.0](docs/60-instalador-windows.md).
+61. [Edición de desarrollo portable 0.27.0](docs/61-desarrollo-027.md).
 
 ## Decisiones aprobadas
 

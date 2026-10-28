@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-28",
+  "version": "0.27.0+42",
+  "edition": "Development",
+  "schemaVersion": 16,
+  "applicationSourceChanged": false,
+  "compiledWithoutSanctumDefines": true,
+  "activeProfile": "valinor",
+  "database": "data/development/valinor/sanctum2.sqlite3",
+  "documentsDatabaseUsed": false,
+  "backupVerified": true,
+  "validation": {
+    "configurationPathsSelectionPassed": 25,
+    "skippedSymbolicLinkTests": 3,
+    "releaseBuild": "passed",
+    "bundleFilesMatchZip": 18,
+    "nativeProcessResponding": true,
+    "nativeVisualInspection": false,
+    "tablesPreserved": 68,
+    "allRowsAndDefinitionsPreserved": true,
+    "databaseBytesPreserved": true,
+    "sqliteIntegrityOk": true,
+    "foreignKeyViolations": 0,
+    "wrongEditionPackagingRejected": true,
+    "cleanupDryRunArtifacts": 0,
+    "priorInstalledDeliveryCi": "success"
+  },
+  "delivery": {
+    "archive": "valinor-sanctum-2-0.27.0-development-windows-x64.zip",
+    "bytes": 15262372,
+    "sha256": "400885D31891ABB7CD4AC6428F6FFFEF37CBDF64800F68CFDE0924870B5D9071",
+    "stableBundle": "dist/ValinorSanctum2",
+    "launcher": "Iniciar Valinor Sanctum.cmd",
+    "appLeftOpen": true,
+    "includesPrivateData": false,
+    "priorInstallerUnchanged": true,
+    "installedZipRecoveredFromEmbeddedPayload": true,
+    "installedZipMatchesPriorSha256": true
+  }
+}

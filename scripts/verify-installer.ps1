@@ -2,12 +2,14 @@ param([string]$Version = '0.27.0')
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot)).TrimEnd('\')
 $setup = Join-Path $projectRoot ('dist\Valinor-Sanctum-' + $Version + '-Instalar.exe')
-$bundle = Join-Path $projectRoot 'dist\ValinorSanctum2'
 $sandbox = Join-Path $projectRoot ('tmp\installer-verification\' + [Guid]::NewGuid().ToString('N'))
 $target = Join-Path $sandbox 'Application'
 $homeDirectory = Join-Path $sandbox 'SyntheticUser'
 $databasePath = Join-Path $homeDirectory 'Documents\sanctum2.sqlite3'
 New-Item -ItemType Directory -Path $sandbox,$homeDirectory -Force | Out-Null
+$expectedRoot = Join-Path $sandbox 'Expected'
+Expand-Archive -LiteralPath (Join-Path $projectRoot ('dist\valinor-sanctum-2-' + $Version + '-windows-x64.zip')) -DestinationPath $expectedRoot
+$bundle = Join-Path $expectedRoot 'ValinorSanctum2'
 function Run-Setup {
     $process = Start-Process -FilePath $setup -ArgumentList @('--quiet','--test-root',('"'+$target+'"')) -PassThru -Wait -WindowStyle Hidden
     return $process.ExitCode

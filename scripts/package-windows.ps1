@@ -1,6 +1,7 @@
 param(
     [string]$Version = '',
-    [string]$ReleasePath = 'build\windows\x64\runner\Release'
+    [string]$ReleasePath = 'build\windows\x64\runner\Release',
+    [ValidateSet('Installed','Development')][string]$Edition = 'Installed'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -46,6 +47,16 @@ $releaseDirectory = $releaseDirectory.TrimEnd('\', '/')
 Assert-ProjectPath $releaseDirectory
 foreach ($required in @('valinor_sanctum_2.exe', 'flutter_windows.dll', 'sqlite3.dll', 'data\app.so', 'data\icudtl.dat', 'data\flutter_assets')) {
     if (-not (Test-Path -LiteralPath (Join-Path $releaseDirectory $required))) { throw ('Falta un archivo del bundle nativo: ' + $required) }
+}
+if ($ReleasePath -eq 'build\windows\x64\runner\Release') {
+    $generatedConfig = Join-Path $projectRoot 'windows\flutter\ephemeral\generated_config.cmake'
+    $defineMatch = [regex]::Match((Get-Content -LiteralPath $generatedConfig -Raw), '"DART_DEFINES=([^"]*)"')
+    if (-not $defineMatch.Success) { throw 'No se pudo verificar la configuración de la compilación.' }
+    $definedConstants = @($defineMatch.Groups[1].Value.Split(',') | Where-Object { $_ } | ForEach-Object {
+        [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
+    })
+    if ($Edition -eq 'Installed' -and 'SANCTUM_ENV=installed' -notin $definedConstants) { throw 'La compilación no es installed. Compila con --dart-define=SANCTUM_ENV=installed o elige Development.' }
+    if ($Edition -eq 'Development' -and @($definedConstants | Where-Object { $_ -match '^SANCTUM_(ENV|PROFILE|DATA_ROOT|WORKSPACE_ROOT)=' }).Count -gt 0) { throw 'La edición Development requiere una compilación sin overrides de Sanctum para usar el selector local.' }
 }
 if (-not $Version) {
     $versionLine = Get-Content -LiteralPath (Join-Path $projectRoot 'pubspec.yaml') | Where-Object { $_ -match '^version:\s*' } | Select-Object -First 1
@@ -180,8 +191,23 @@ Los respaldos previos a migraciones se guardan en Documents\ValinorSanctum2-back
 El instalador crea accesos en Inicio y escritorio para el usuario actual.
 La desinstalación conserva la base de Documentos y sus respaldos.
 '@
+if ($Edition -eq 'Development') {
+    $installedInstructions = $instructions.IndexOf('La edición instalada usa Documents')
+    if ($installedInstructions -lt 0) { throw 'No se encontró la sección de almacenamiento para preparar las instrucciones.' }
+    $instructions = $instructions.Substring(0, $installedInstructions) + @'
+Edición de desarrollo portable: no instala accesos ni usa la base de Documentos.
+Conserva la carpeta completa dentro de C:\proyectos\valinor_sanctum_2.
+Abre Iniciar Valinor Sanctum.cmd desde la raíz del proyecto.
+El selector data\development\active-workspace.json elige el perfil de desarrollo.
+El perfil activo valinor usa data\development\valinor\sanctum2.sqlite3.
+La base existente permanece en su ubicación; no va incluida en el ZIP.
+No abras el ejecutable directamente desde build: ese directorio usa un perfil
+aislado junto a la compilación. Usa siempre el acceso de la raíz o dist.
+'@
+}
 $instructions | Set-Content -LiteralPath (Join-Path $bundleDirectory 'LEEME.txt') -Encoding utf8
-$zipPath = Join-Path $distributionDirectory ('valinor-sanctum-2-' + $Version + '-windows-x64.zip')
+$editionSuffix = if ($Edition -eq 'Development') { '-development' } else { '' }
+$zipPath = Join-Path $distributionDirectory ('valinor-sanctum-2-' + $Version + $editionSuffix + '-windows-x64.zip')
 Assert-ProjectPath $zipPath
 if (Test-Path -LiteralPath $zipPath) { throw 'El ZIP ya existe; usa otra versión o conserva la entrega previa.' }
 Compress-Archive -LiteralPath $bundleDirectory -DestinationPath $zipPath -CompressionLevel Optimal
@@ -190,6 +216,7 @@ Assert-ProjectPath $stagingDirectory
 Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
 [pscustomobject]@{
     archive = $zipPath
+    edition = $Edition
     files = $copiedFiles + 1
     bytes = (Get-Item -LiteralPath $zipPath).Length
     sha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
