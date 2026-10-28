@@ -46,17 +46,17 @@ jobs:
       - name: Test isolated workspace
         shell: pwsh
         run: ./scripts/flutter.ps1 test --reporter expanded --dart-define="SANCTUM_WORKSPACE_ROOT=$pwd"
-      - name: Build Windows installed bundle
+      - name: Build Windows production bundle
         shell: pwsh
         run: ./scripts/flutter.ps1 build windows --release --no-pub --dart-define=SANCTUM_ENV=installed --dart-define="SANCTUM_WORKSPACE_ROOT=$pwd"
       - name: Package Windows and build installer
         shell: pwsh
         run: |
-          ./scripts/package-windows.ps1
+          ./scripts/package-windows.ps1 -Edition Installed
           ./scripts/build-installer.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: valinor-sanctum-2-windows
+          name: valinor-sanctum-produccion-windows
           path: |
             dist/valinor-sanctum-2-*-windows-x64.zip
             dist/Valinor-Sanctum-*-Instalar.exe

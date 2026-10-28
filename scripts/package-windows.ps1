@@ -189,6 +189,8 @@ sin sumar de nuevo inventario ni dinero. Las fechas antiguas se interpretan en B
 El paquete no contiene bases de datos ni datos de ejemplo.
 La edición instalada usa Documents\sanctum2.sqlite3 dentro de la carpeta del
 usuario de Windows (por ejemplo C:\Users\ValinorPC\Documents\sanctum2.sqlite3).
+Su nombre visible es Valinor Sanctum - Producción. El historial de Tesorería
+se lee de Documents\legacy-treasury.json, que debe corresponder a esa base.
 Si no existe, crea una base vacía y configura Valinor, COP y 0 decimales.
 Si existe, la valida y continúa sobre ella; no la reemplaza ni la reinicia.
 Una base incompatible o dañada produce un error y debe conservarse para revisión.
@@ -212,21 +214,28 @@ aislado junto a la compilación. Usa siempre el acceso de la raíz o dist.
 '@
 }
 $instructions | Set-Content -LiteralPath (Join-Path $bundleDirectory 'LEEME.txt') -Encoding utf8
-$editionSuffix = if ($Edition -eq 'Development') { '-development' } else { '' }
+[ordered]@{
+    version = $Version
+    environment = if ($Edition -eq 'Installed') { 'installed' } else { 'development' }
+    label = if ($Edition -eq 'Installed') { 'Producción' } else { 'Desarrollo' }
+    databaseLocation = if ($Edition -eq 'Installed') { 'Documents/sanctum2.sqlite3' } else { 'data/development/<perfil>/sanctum2.sqlite3' }
+    historyLocation = if ($Edition -eq 'Installed') { 'Documents/legacy-treasury.json' } else { 'data/development/<perfil>/legacy-treasury.json' }
+} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $bundleDirectory 'EDICION.json') -Encoding utf8
+$editionSuffix = if ($Edition -eq 'Development') { '-development' } else { '-production' }
 $zipPath = Join-Path $distributionDirectory ('valinor-sanctum-2-' + $Version + $editionSuffix + '-windows-x64.zip')
 Assert-ProjectPath $zipPath
 if (Test-Path -LiteralPath $zipPath) { throw 'El ZIP ya existe; usa otra versión o conserva la entrega previa.' }
 Compress-Archive -LiteralPath $bundleDirectory -DestinationPath $zipPath -CompressionLevel Optimal
-& (Join-Path $PSScriptRoot 'publish-local-bundle.ps1') -ArchivePath $zipPath | Out-Null
+& (Join-Path $PSScriptRoot 'publish-local-bundle.ps1') -ArchivePath $zipPath -Edition $Edition | Out-Null
 Assert-ProjectPath $stagingDirectory
 Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
 [pscustomobject]@{
     archive = $zipPath
     edition = $Edition
-    files = $copiedFiles + 1
+    files = $copiedFiles + 2
     bytes = (Get-Item -LiteralPath $zipPath).Length
     sha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
     includes_synthetic_profiles = $false
     excludes_flutter_debug_artifacts = $true
-    current_executable = (Join-Path $distributionDirectory 'ValinorSanctum2\valinor_sanctum_2.exe')
+    current_executable = (Join-Path $distributionDirectory ($(if ($Edition -eq 'Installed') { 'ValinorSanctum2-Produccion' } else { 'ValinorSanctum2' }) + '\valinor_sanctum_2.exe'))
 } | ConvertTo-Json

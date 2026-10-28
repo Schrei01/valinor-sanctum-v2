@@ -27,7 +27,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"Valinor Sanctum 2.0", origin, size)) {
+#ifdef SANCTUM_PRODUCTION
+  const wchar_t* title = L"Valinor Sanctum - Producci\u00f3n";
+#else
+  const wchar_t* title = L"Valinor Sanctum - Desarrollo";
+#endif
+  if (!window.Create(title, origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

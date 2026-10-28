@@ -14,6 +14,57 @@ import '../support/fake_quick_sales_store.dart';
 import '../support/fake_workspace_store.dart';
 
 void main() {
+  for (final production in [false, true]) {
+    for (final width in [1280.0, 400.0]) {
+      testWidgets(
+        'edition labels stay distinct: production=$production width=$width',
+        (tester) async {
+          await tester.binding.setSurfaceSize(Size(width, 900));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          final store = FakeWorkspaceStore();
+          final controller = WorkspaceController(
+            openSession: () async => WorkspaceSession(
+              store: store,
+              databasePath: 'synthetic',
+              profileId: 'test',
+              quickSalesStore: FakeQuickSalesStore(),
+            ),
+          );
+          await controller.initialize();
+          await tester.pumpWidget(
+            SanctumApp(controller: controller, isProduction: production),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.text(production ? 'Producción' : 'Desarrollo'),
+            findsOneWidget,
+          );
+          expect(
+            find.text(production ? 'Desarrollo' : 'Producción'),
+            findsNothing,
+          );
+          expect(
+            find.text('EN DESARROLLO'),
+            production || width < 840 ? findsNothing : findsOneWidget,
+          );
+          if (width >= 840) {
+            expect(
+              find.text(production ? 'PRODUCCIÓN' : 'EN DESARROLLO'),
+              findsOneWidget,
+            );
+            expect(find.text('Versión 1.0.0'), findsOneWidget);
+          }
+          expect(
+            tester.widget<MaterialApp>(find.byType(MaterialApp)).title,
+            contains(production ? 'Producción' : 'Desarrollo'),
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+          controller.dispose();
+        },
+      );
+    }
+  }
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final fonts = p.join(

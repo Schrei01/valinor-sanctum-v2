@@ -1,6 +1,7 @@
 param(
     [string]$Version = '',
     [string]$DistributionPath = 'dist',
+    [ValidateSet('Installed','Development')][string]$Edition = 'Development',
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
@@ -25,7 +26,8 @@ $distribution = if ([IO.Path]::IsPathRooted($DistributionPath)) { [IO.Path]::Get
 $distribution = $distribution.TrimEnd('\')
 Assert-CleanupPath $distribution
 if ($distribution -ne (Join-Path $projectRoot 'dist') -and -not $distribution.StartsWith((Join-Path $projectRoot 'tmp') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Solo se limpia dist o una carpeta sintética dentro de tmp.' }
-$currentExecutable = Join-Path $distribution 'ValinorSanctum2\valinor_sanctum_2.exe'
+$bundleName = if ($Edition -eq 'Installed') { 'ValinorSanctum2-Produccion' } else { 'ValinorSanctum2' }
+$currentExecutable = Join-Path $distribution ($bundleName + '\valinor_sanctum_2.exe')
 Assert-CleanupPath $currentExecutable
 if (-not (Test-Path -LiteralPath $currentExecutable -PathType Leaf)) { throw 'Falta la entrega estable; no se elimina ninguna versión.' }
 $installedVersion = ((Get-Item -LiteralPath $currentExecutable).VersionInfo.ProductVersion).Split('+')[0]
@@ -35,9 +37,12 @@ $currentVersion = [version]$Version
 $candidates = @(
     foreach ($item in Get-ChildItem -LiteralPath $distribution -Force) {
         $candidateVersion = $null
-        if ($item.PSIsContainer -and $item.Name -match '^\d+\.\d+\.\d+$') { $candidateVersion = [version]$item.Name }
-        elseif (-not $item.PSIsContainer -and $item.Name -match '^valinor-sanctum-2-(\d+\.\d+\.\d+)(?:-development)?-windows-x64\.zip$') { $candidateVersion = [version]$Matches[1] }
-        elseif (-not $item.PSIsContainer -and $item.Name -match '^Valinor-Sanctum-(\d+\.\d+\.\d+)-Instalar\.exe$') { $candidateVersion = [version]$Matches[1] }
+        if ($Edition -eq 'Development' -and $item.PSIsContainer -and $item.Name -match '^\d+\.\d+\.\d+$') { $candidateVersion = [version]$item.Name }
+        elseif ($Edition -eq 'Development' -and -not $item.PSIsContainer -and $item.Name -match '^valinor-sanctum-2-(\d+\.\d+\.\d+)-development-windows-x64\.zip$') { $candidateVersion = [version]$Matches[1] }
+        elseif ($Edition -eq 'Installed' -and -not $item.PSIsContainer -and $item.Name -match '^valinor-sanctum-2-(\d+\.\d+\.\d+)-production-windows-x64\.zip$') { $candidateVersion = [version]$Matches[1] }
+        elseif ($Edition -eq 'Installed' -and -not $item.PSIsContainer -and $item.Name -match '^Valinor-Sanctum-(\d+\.\d+\.\d+)(?:-Produccion)?-Instalar\.exe$') { $candidateVersion = [version]$Matches[1] }
+        # The owner explicitly asked to retain the 0.30.0 development release.
+        if ($Edition -eq 'Development' -and $candidateVersion -eq [version]'0.30.0') { continue }
         if ($null -ne $candidateVersion -and $candidateVersion -lt $currentVersion) { $item }
     }
 )
@@ -76,6 +81,7 @@ foreach ($candidate in $candidates) {
 }
 [pscustomobject]@{
     currentVersion = $Version
+    edition = $Edition
     dryRun = [bool]$DryRun
     artifacts = $candidates.Count
     bytes = $bytes

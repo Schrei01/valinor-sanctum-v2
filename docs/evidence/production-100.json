@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-28",
+  "productionVersion": "1.0.0+46",
+  "developmentVersionPreserved": "0.30.0+45",
+  "schema": 18,
+  "documentsVerifiedReadOnly": true,
+  "documentsDatasetMatchesPreparedDatabase": true,
+  "onlyExtraRow": "internal operating expense account created at startup",
+  "treasuryJsonFingerprintMatches": true,
+  "installedAgainstOperationalData": false,
+  "privateDataIncluded": false,
+  "testing": {
+    "focusedApplicationTestsPassed": 24,
+    "renderTestsPassed": 2,
+    "pathAndControllerTestsPassed": 24,
+    "pathTestsSkipped": 3,
+    "initialTestSelectionPathCorrected": true,
+    "fullSuiteRepeated": false,
+    "analyze": "No issues found",
+    "syntheticRendersInspected": 2
+  },
+  "distributionSeparation": {
+    "productionCleanupPreservesDevelopment": true,
+    "developmentCleanupPreservesProduction": true,
+    "productionPublicationPreservesDevelopment": true,
+    "wrongEditionPublicationRejected": true,
+    "development030Preserved": true,
+    "development030PinnedForFutureCleanup": true
+  },
+  "finalArtifactAndPreservation": {
+    "development030BundleFilesUnchanged": 18,
+    "development030ArchiveUnchanged": true,
+    "developmentLauncherUnchanged": true,
+    "documentsDatabaseAndHistoryUnchanged": true,
+    "productionPackageFiles": 19,
+    "productionBundleMatchesArchive": true,
+    "installerPayloadMatchesArchive": true,
+    "privateDataIncluded": false,
+    "productionPeVersion": "1.0.0+46",
+    "productionPeName": "Valinor Sanctum - Produccion"
+  },
+  "isolatedInstallerChecks": {
+    "installedFilesVerified": 19,
+    "nativeStartup": true,
+    "updateWhileRunningRejected": true,
+    "reinstallPreservesDatabase": true,
+    "nativeReopen": true,
+    "existingDatabaseAndHistoryVerified": true,
+    "productionWindowTitleVerified": true,
+    "uninstallRemovesProgram": true,
+    "uninstallPreservesDatabase": true,
+    "testRegistryAndShortcutsSkipped": true
+  },
+  "archiveSha256": "52D6A663744A5D59AA8C973F7169C04ECE90A048795FA828484E636D87C0E589",
+  "installerSha256": "C0E12D322559F720BE368229330BAA9806183977686F5F69F91CA64833295630",
+  "installerFilename": "Valinor-Sanctum-1.0.0-Produccion-Instalar.exe",
+  "operationalInstallPerformed": false
+}

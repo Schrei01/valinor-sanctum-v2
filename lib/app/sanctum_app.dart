@@ -25,6 +25,7 @@ import '../features/treasury/presentation/treasury_page.dart';
 const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
 const _paper = Color(0xFFF5F5F0);
+const _productionBuild = String.fromEnvironment('SANCTUM_ENV') == 'installed';
 const _destinations = [
   (Icons.inventory_2_outlined, 'Catálogo'),
   (Icons.local_shipping_outlined, 'Compras'),
@@ -36,13 +37,18 @@ const _destinations = [
 ];
 
 class SanctumApp extends StatelessWidget {
-  const SanctumApp({super.key, required this.controller});
+  const SanctumApp({
+    super.key,
+    required this.controller,
+    this.isProduction = _productionBuild,
+  });
   final WorkspaceController controller;
+  final bool isProduction;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    title: 'Valinor Sanctum 2.0',
+    title: 'Valinor Sanctum — ${isProduction ? 'Producción' : 'Desarrollo'}',
     theme: ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: _forest),
@@ -58,13 +64,14 @@ class SanctumApp extends StatelessWidget {
         color: Colors.white,
       ),
     ),
-    home: _WorkspaceShell(controller: controller),
+    home: _WorkspaceShell(controller: controller, isProduction: isProduction),
   );
 }
 
 class _WorkspaceShell extends StatefulWidget {
-  const _WorkspaceShell({required this.controller});
+  const _WorkspaceShell({required this.controller, required this.isProduction});
   final WorkspaceController controller;
+  final bool isProduction;
   @override
   State<_WorkspaceShell> createState() => _WorkspaceShellState();
 }
@@ -345,6 +352,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                     width: 230,
                     child: _Sidebar(
                       selected: _section,
+                      isProduction: widget.isProduction,
                       onSelected: _selectSection,
                     ),
                   ),
@@ -352,7 +360,10 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                   child: SafeArea(
                     child: Column(
                       children: [
-                        _Header(businessName: controller.profile?.businessName),
+                        _Header(
+                          businessName: controller.profile?.businessName,
+                          isProduction: widget.isProduction,
+                        ),
                         Expanded(
                           child: IndexedStack(
                             index: _section,
@@ -561,8 +572,13 @@ class _CompactNavigation extends StatelessWidget {
 }
 
 class _Sidebar extends StatelessWidget {
-  const _Sidebar({required this.selected, required this.onSelected});
+  const _Sidebar({
+    required this.selected,
+    required this.onSelected,
+    required this.isProduction,
+  });
   final int selected;
+  final bool isProduction;
   final ValueChanged<int> onSelected;
   @override
   Widget build(BuildContext context) => Material(
@@ -628,13 +644,13 @@ class _Sidebar extends StatelessWidget {
                 ),
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'EN DESARROLLO',
+                    isProduction ? 'PRODUCCIÓN' : 'EN DESARROLLO',
                     style: TextStyle(
                       color: _gold,
                       fontSize: 11,
@@ -643,7 +659,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.30.0',
+                    'Versión 1.0.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
@@ -657,8 +673,9 @@ class _Sidebar extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({this.businessName});
+  const _Header({this.businessName, required this.isProduction});
   final String? businessName;
+  final bool isProduction;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
@@ -678,7 +695,12 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        const _Tag(text: 'Desarrollo', icon: Icons.science_outlined),
+        _Tag(
+          text: isProduction ? 'Producción' : 'Desarrollo',
+          icon: isProduction
+              ? Icons.storefront_outlined
+              : Icons.science_outlined,
+        ),
       ],
     ),
   );

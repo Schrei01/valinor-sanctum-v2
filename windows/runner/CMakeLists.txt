@@ -27,6 +27,15 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MINOR=${FLUTT
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_PATCH=${FLUTTER_VERSION_PATCH}")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTTER_VERSION_BUILD}")
 
+# Use the same compile-time environment as Dart for native window branding.
+set(SANCTUM_FLUTTER_CONFIG "${FLUTTER_MANAGED_DIR}/ephemeral/generated_config.cmake")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SANCTUM_FLUTTER_CONFIG}")
+file(READ "${SANCTUM_FLUTTER_CONFIG}" SANCTUM_BUILD_CONFIGURATION)
+# Base64 for SANCTUM_ENV=installed, as emitted by the Flutter build tool.
+if(SANCTUM_BUILD_CONFIGURATION MATCHES "DART_DEFINES=[^\"]*U0FOQ1RVTV9FTlY9aW5zdGFsbGVk")
+  target_compile_definitions(${BINARY_NAME} PRIVATE "SANCTUM_PRODUCTION=1")
+endif()
+
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 

@@ -10,7 +10,7 @@ $executable = Join-Path $projectRoot 'dist\ValinorSanctum2\valinor_sanctum_2.exe
 Copy-Item -LiteralPath $executable -Destination (Join-Path $stable 'valinor_sanctum_2.exe')
 Copy-Item -LiteralPath $executable -Destination (Join-Path $old 'valinor_sanctum_2.exe')
 $keepVersion = ((Get-Item -LiteralPath $executable).VersionInfo.ProductVersion).Split('+')[0]
-$oldZip = Join-Path $fixtureRoot 'valinor-sanctum-2-0.0.1-windows-x64.zip'
+$oldZip = Join-Path $fixtureRoot 'valinor-sanctum-2-0.0.1-development-windows-x64.zip'
 Compress-Archive -LiteralPath $old -DestinationPath $oldZip
 New-Item -ItemType Directory -Path (Join-Path $fixtureRoot $keepVersion),(Join-Path $fixtureRoot '9.0.0') -Force | Out-Null
 Set-Content -LiteralPath (Join-Path $fixtureRoot 'notas.txt') -Value 'No borrar'
@@ -46,9 +46,9 @@ $publishStable = Join-Path $publishDist 'ValinorSanctum2'
 New-Item -ItemType Directory -Path $publishOld,$publishStable -Force | Out-Null
 Copy-Item -LiteralPath $executable -Destination (Join-Path $publishOld 'valinor_sanctum_2.exe')
 Copy-Item -LiteralPath $executable -Destination (Join-Path $publishStable 'valinor_sanctum_2.exe')
-Compress-Archive -LiteralPath $publishOld -DestinationPath (Join-Path $publishDist 'valinor-sanctum-2-0.0.1-windows-x64.zip')
-$archive = Join-Path $publishDist ("valinor-sanctum-2-" + $keepVersion + "-windows-x64.zip")
-Copy-Item -LiteralPath (Join-Path $projectRoot ("dist\valinor-sanctum-2-" + $keepVersion + "-windows-x64.zip")) -Destination $archive
+Compress-Archive -LiteralPath $publishOld -DestinationPath (Join-Path $publishDist 'valinor-sanctum-2-0.0.1-development-windows-x64.zip')
+$archive = Join-Path $publishDist ("valinor-sanctum-2-" + $keepVersion + "-development-windows-x64.zip")
+Copy-Item -LiteralPath (Join-Path $projectRoot ("dist\valinor-sanctum-2-" + $keepVersion + "-development-windows-x64.zip")) -Destination $archive
 $published = & (Join-Path $publishScripts 'publish-local-bundle.ps1') -ArchivePath $archive | ConvertFrom-Json
 if ($published.obsoleteArtifactsRemoved -ne 2 -or $null -ne $published.previousBundle) { throw 'La publicación no limpió las entregas anteriores.' }
 if ((Get-FileHash -LiteralPath (Join-Path $publishStable 'valinor_sanctum_2.exe')).Hash -ne (Get-FileHash -LiteralPath $executable).Hash) { throw 'La entrega publicada no coincide.' }

@@ -7,13 +7,13 @@ using System.Reflection;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("Instalar Valinor Sanctum 2.0")]
-[assembly: AssemblyProduct("Valinor Sanctum 2.0")]
+[assembly: AssemblyTitle("Instalar Valinor Sanctum - Producción")]
+[assembly: AssemblyProduct("Valinor Sanctum - Producción")]
 [assembly: AssemblyVersion("__VERSION__.0")]
 
 internal static class ValinorInstaller {
     const string Version = "__VERSION__";
-    const string AppName = "Valinor Sanctum 2.0";
+    const string AppName = "Valinor Sanctum - Producción";
     const string ExeName = "valinor_sanctum_2.exe";
     const string RegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ValinorSanctum2";
     const string TestBoundary = @"__TEST_BOUNDARY__";
@@ -75,7 +75,9 @@ internal static class ValinorInstaller {
 
             if (!quiet && MessageBox.Show("Instalar " + AppName + " " + Version + " para este usuario.\n\n" +
                 "Se crearán accesos en el escritorio y en Inicio.\n" +
-                "La app usará Documentos\\sanctum2.sqlite3. Si no existe, creará una base vacía con Valinor, COP y 0 decimales.\n\n¿Continuar?",
+                "La app usará Documentos\\sanctum2.sqlite3 y Documentos\\legacy-treasury.json.\n" +
+                "Si falta la base, creará una vacía con Valinor, COP y 0 decimales.\n" +
+                "La edición de desarrollo se conserva separada.\n\n¿Continuar?",
                 AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return 0;
             EnsureClosed(target);
             string existing = Path.Combine(target, ExeName);
@@ -197,6 +199,14 @@ internal static class ValinorInstaller {
         shortcut.IconLocation = Path.Combine(target, ExeName) + ",0";
         shortcut.Description = AppName;
         shortcut.Save();
+        // Rename only this installation's old generic shortcut, never a dev launcher.
+        string legacyPath = Path.Combine(Environment.GetFolderPath(folder), "Valinor Sanctum 2.0.lnk");
+        if (File.Exists(legacyPath)) {
+            dynamic legacyShortcut = shell.CreateShortcut(legacyPath);
+            string legacyTarget = legacyShortcut.TargetPath;
+            if (!String.IsNullOrEmpty(legacyTarget) && String.Equals(Path.GetFullPath(legacyTarget),
+                Path.Combine(target, ExeName), StringComparison.OrdinalIgnoreCase)) File.Delete(legacyPath);
+        }
     }
     static void DeleteShortcut(Environment.SpecialFolder folder) {
         string path = ShortcutPath(folder);

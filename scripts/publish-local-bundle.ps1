@@ -1,4 +1,5 @@
-param([Parameter(Mandatory = $true)][string]$ArchivePath)
+param([Parameter(Mandatory = $true)][string]$ArchivePath,
+    [ValidateSet('Installed','Development')][string]$Edition = 'Development')
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot)).TrimEnd('\')
 
@@ -32,13 +33,22 @@ Assert-ProjectPath $archive
 if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'No se encuentra el ZIP de la entrega.' }
 $stagingRoot = Join-Path $projectRoot ('tmp\local-bundles\' + [Guid]::NewGuid().ToString('N'))
 $stagedBundle = Join-Path $stagingRoot 'ValinorSanctum2'
-$currentBundle = Join-Path $projectRoot 'dist\ValinorSanctum2'
+$bundleName = if ($Edition -eq 'Installed') { 'ValinorSanctum2-Produccion' } else { 'ValinorSanctum2' }
+$currentBundle = Join-Path $projectRoot ('dist\' + $bundleName)
 $previousBundle = Join-Path $stagingRoot 'previous\ValinorSanctum2'
 foreach ($candidate in @($stagingRoot, $stagedBundle, $currentBundle, $previousBundle)) { Assert-ProjectPath $candidate }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::OpenRead($archive)
 try {
+    $editionEntry = $zip.GetEntry('ValinorSanctum2/EDICION.json')
+    if ($null -eq $editionEntry -and $Edition -eq 'Installed') { throw 'El paquete no identifica su edición de producción.' }
+    if ($null -ne $editionEntry) {
+        $editionReader = [IO.StreamReader]::new($editionEntry.Open())
+        try { $declaredEdition = $editionReader.ReadToEnd() | ConvertFrom-Json } finally { $editionReader.Dispose() }
+        $expectedEnvironment = if ($Edition -eq 'Installed') { 'installed' } else { 'development' }
+        if ($declaredEdition.environment -ne $expectedEnvironment) { throw 'La edición del paquete no coincide con el destino.' }
+    }
     foreach ($entry in $zip.Entries) {
         $name = $entry.FullName.Replace('\', '/')
         $parts = $name.TrimEnd('/').Split('/')
@@ -70,9 +80,9 @@ if (Test-Path -LiteralPath $currentExecutable) {
 }
 $projectBoundary = [IO.Path]::GetFullPath($projectRoot).TrimEnd('\') + '\'
 $runningProjectApps = @(Get-CimInstance Win32_Process -Filter "Name = 'valinor_sanctum_2.exe'" | Where-Object {
-    $_.ExecutablePath -and $_.ExecutablePath.StartsWith($projectBoundary, [StringComparison]::OrdinalIgnoreCase)
+    $_.ExecutablePath -and $_.ExecutablePath.StartsWith($currentBundle + '\', [StringComparison]::OrdinalIgnoreCase)
 })
-if ($runningProjectApps.Count -gt 0) { throw 'Cierra las ventanas de Valinor Sanctum 2.0 de este proyecto, incluidas las copias versionadas, antes de actualizar la entrega y su base compartida.' }
+if ($runningProjectApps.Count -gt 0) { throw ('Cierra las ventanas de la edición ' + $Edition + ' antes de actualizar su entrega.') }
 
 $preservedPrevious = $false
 if (Test-Path -LiteralPath $currentBundle) {
@@ -106,7 +116,7 @@ if ($preservedPrevious) {
 Assert-BundleTree $stagingRoot
 Assert-ProjectPath $stagingRoot
 Remove-Item -LiteralPath $stagingRoot -Recurse -Force
-$cleanup = & (Join-Path $PSScriptRoot 'clean-old-distributions.ps1') -Version ($bundleVersionText.Split('+')[0]) | ConvertFrom-Json
+$cleanup = & (Join-Path $PSScriptRoot 'clean-old-distributions.ps1') -Version ($bundleVersionText.Split('+')[0]) -Edition $Edition | ConvertFrom-Json
 [pscustomobject]@{
     executable = $currentExecutable
     version = $bundleVersionText
