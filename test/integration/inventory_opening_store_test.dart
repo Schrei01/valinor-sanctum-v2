@@ -103,6 +103,52 @@ void main() {
     zeroCostsConfirmed: zeroConfirmed,
   );
 
+  test(
+    'opening accepts all four classified groups without merging day passes and events',
+    () async {
+      await store.open(
+        command(
+          data: reference(
+            products: [
+              product(
+                id: '1',
+                name: 'Artículo sintético',
+                category: 'Artículos',
+              ),
+              product(
+                id: '2',
+                name: 'Comida sintética',
+                category: 'Comestibles',
+              ),
+              product(id: '3', name: 'Evento sintético', category: 'Eventos'),
+              product(id: '4', name: 'Pasadía', category: 'Pasadía', cost: 0),
+            ],
+          ),
+        ),
+        initialProfile: profile(),
+      );
+      final inventory = await SqliteInventoryStore(app, synthetic: true).load();
+      expect(inventory.categories.map((c) => c.name).toSet(), {
+        'Artículo',
+        'Comestible',
+        'Evento',
+        'Pasadía',
+      });
+      expect(
+        inventory.products.singleWhere((p) => p.name == 'Pasadía').isService,
+        isTrue,
+      );
+      expect(
+        inventory.products
+            .singleWhere((p) => p.name == 'Evento sintético')
+            .isService,
+        isFalse,
+      );
+      expect((await app.database.query('inventory_opening_items')).length, 4);
+      expect((await app.readHealth())['foreignKeyViolations'], 0);
+    },
+  );
+
   Future<Map<String, int>> counts() async => {
     for (final table in [
       'app_profile',

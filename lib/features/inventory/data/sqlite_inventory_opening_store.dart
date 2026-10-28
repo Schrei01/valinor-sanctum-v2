@@ -383,9 +383,14 @@ class SqliteInventoryOpeningStore {
   }
 
   static String _category(String value) => switch (value.trim().toLowerCase()) {
-    'producto' || 'artículo' || 'articulo' => 'Artículo',
+    'producto' ||
+    'artículo' ||
+    'articulo' ||
+    'artículos' ||
+    'articulos' => 'Artículo',
     'comestible' || 'comestibles' => 'Comestible',
-    'evento' => 'Evento',
+    'evento' || 'eventos' => 'Evento',
+    'pasadía' || 'pasadia' || 'pasadías' || 'pasadias' => 'Pasadía',
     _ => throw const InventoryOpeningValidationException(
       'La copia contiene una categoría desconocida; corrígela antes de abrir inventario.',
     ),
@@ -404,6 +409,8 @@ class SqliteInventoryOpeningStore {
             ? 'article'
             : name == 'Comestible'
             ? 'food'
+            : name == 'Pasadía'
+            ? 'day-pass'
             : 'event'}';
     await txn.insert('categories', {'id': id, 'name': name, 'is_active': 1});
     return id;

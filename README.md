@@ -103,6 +103,7 @@ La auditoría se hizo sobre el código del original, revisión `b94861326bcd9936
 62. [Pagos divididos por línea de Ventas 0.28.0](docs/62-pagos-divididos.md).
 63. [Dividir el total de la cuenta 0.29.0](docs/63-dividir-cuenta.md).
 64. [Forma de pago junto al total de la cuenta 0.30.0](docs/64-pago-por-cuenta.md).
+65. [Preparación de una base compatible para revisión en desarrollo](docs/65-preparacion-produccion.md).
 
 ## Decisiones aprobadas
 
