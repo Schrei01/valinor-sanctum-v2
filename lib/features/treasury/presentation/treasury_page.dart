@@ -7,7 +7,7 @@ import '../application/treasury_controller.dart';
 import '../application/treasury_operation_controller.dart';
 import '../domain/legacy_treasury_snapshot.dart';
 import '../domain/treasury_store.dart';
-import 'legacy_treasury_history.dart';
+import 'treasury_history_dialog.dart';
 import 'treasury_operations_panel.dart';
 
 class TreasuryPage extends StatefulWidget {
@@ -125,10 +125,6 @@ class _TreasuryPageState extends State<TreasuryPage> {
             const SizedBox(height: 28),
             _history(data),
           ],
-          if (widget.legacyStore != null) ...[
-            const SizedBox(height: 28),
-            LegacyTreasuryHistory(store: widget.legacyStore!),
-          ],
           if (widget.supplierPaymentsPanel != null) ...[
             const SizedBox(height: 28),
             Card(
@@ -152,7 +148,7 @@ class _TreasuryPageState extends State<TreasuryPage> {
     builder: (context, constraints) {
       const gap = 12.0;
       final columns = constraints.maxWidth >= 1180
-          ? 5
+          ? 6
           : constraints.maxWidth >= 700
           ? 3
           : constraints.maxWidth >= 440
@@ -183,6 +179,14 @@ class _TreasuryPageState extends State<TreasuryPage> {
                 subtitle: 'Saldo registrado',
                 amount: data.nequiMinor,
                 icon: Icons.phone_android_outlined,
+                width: width,
+              ),
+              _balanceCard(
+                keyName: 'investment',
+                title: 'Inversión por recuperar',
+                subtitle: 'Pendiente de devolución',
+                amount: data.investmentMinor,
+                icon: Icons.handshake_outlined,
                 width: width,
               ),
               _balanceCard(
@@ -291,7 +295,9 @@ class _TreasuryPageState extends State<TreasuryPage> {
   }
 
   Widget _history(TreasurySnapshot data) {
-    final selectedId = data.accounts.any((account) => account.id == _accountId)
+    final selectedId =
+        (_accountId == 'investment' ||
+            data.accounts.any((account) => account.id == _accountId))
         ? _accountId
         : null;
     final movements =
@@ -308,9 +314,30 @@ class _TreasuryPageState extends State<TreasuryPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Últimos movimientos',
-          style: Theme.of(context).textTheme.titleLarge,
+        Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              'Últimos movimientos',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            TextButton.icon(
+              key: const Key('treasury-view-history'),
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => TreasuryHistoryDialog(
+                  profile: widget.profile,
+                  legacyStore: widget.legacyStore,
+                  loadCurrent: () =>
+                      widget.controller.store.load(fullHistory: true),
+                ),
+              ),
+              icon: const Icon(Icons.history),
+              label: const Text('Ver historial'),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         const Text(
@@ -332,6 +359,10 @@ class _TreasuryPageState extends State<TreasuryPage> {
               const DropdownMenuItem(
                 value: '',
                 child: Text('Todas las cuentas'),
+              ),
+              const DropdownMenuItem(
+                value: 'investment',
+                child: Text('Inversión por recuperar'),
               ),
               for (final account in data.accounts)
                 DropdownMenuItem(
@@ -400,7 +431,13 @@ class _TreasuryPageState extends State<TreasuryPage> {
                                 ),
                               ),
                               Text(
-                                movement.amountMinor < 0 ? 'Egreso' : 'Ingreso',
+                                movement.cashAccountId == 'investment'
+                                    ? movement.amountMinor < 0
+                                          ? 'Devolución'
+                                          : 'Inversión'
+                                    : movement.amountMinor < 0
+                                    ? 'Egreso'
+                                    : 'Ingreso',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],

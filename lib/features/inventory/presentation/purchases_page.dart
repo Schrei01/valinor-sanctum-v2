@@ -418,7 +418,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Text(
-                              'Saldo disponible: ${inventoryMoney(_payment(data)?.balanceMinor ?? 0, widget.profile)}',
+                              '${_payment(data)?.isInvestment == true ? 'Inversión por recuperar' : 'Saldo disponible'}: ${inventoryMoney(_payment(data)?.balanceMinor ?? 0, widget.profile)}',
                               key: const Key('intake-balance'),
                             ),
                           ),
@@ -433,7 +433,8 @@ class _PurchasesPageState extends State<PurchasesPage> {
                               : inventoryMoney(_total!.toInt(), widget.profile),
                           valueKey: const Key('intake-total'),
                         ),
-                        if (_total != null &&
+                        if (_payment(data)?.isInvestment != true &&
+                            _total != null &&
                             _total! >
                                 BigInt.from(_payment(data)?.balanceMinor ?? 0))
                           const Padding(

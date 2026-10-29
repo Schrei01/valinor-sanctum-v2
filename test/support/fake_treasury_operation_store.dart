@@ -4,6 +4,7 @@ import 'package:valinor_sanctum_2/features/treasury/domain/treasury_operation_st
 import 'package:valinor_sanctum_2/features/treasury/domain/treasury_store.dart';
 
 class FakeTreasuryOperationStore implements TreasuryOperationStore {
+  int investmentMinor = 0;
   final accounts = <TreasuryAccount>[
     const TreasuryAccount(
       id: 'cash',
@@ -51,6 +52,7 @@ class FakeTreasuryOperationStore implements TreasuryOperationStore {
     loadCalls++;
     if (loadFailure != null) throw loadFailure!;
     return TreasuryOperationSnapshot(
+      investmentMinor: investmentMinor,
       accounts: accounts,
       pendingOperations: pending,
       confirmedCommandIds: results.keys.toSet(),
@@ -115,6 +117,9 @@ class FakeTreasuryOperationStore implements TreasuryOperationStore {
       throw confirmFailure!;
     }
     final command = prepared.command;
+    if (command.kind == TreasuryOperationKind.investmentRefund) {
+      investmentMinor -= command.amountMinor;
+    }
     for (var index = 0; index < accounts.length; index++) {
       final account = accounts[index];
       var balance = account.balanceMinor;

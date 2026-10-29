@@ -5,6 +5,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../core/domain/money.dart';
 import '../../../core/infrastructure/database/app_database.dart';
 import '../../../core/infrastructure/database/schema.dart';
+import '../../../core/infrastructure/database/investment_ledger.dart';
+import 'sqlite_investment_refund_store.dart';
 import '../../inventory/domain/inventory_store.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../domain/treasury_operation_store.dart';
@@ -20,6 +22,8 @@ class SqliteTreasuryOperationStore implements TreasuryOperationStore {
   static const _operator = 'system:local-operator';
   static const expenseAccountId = 'treasury:operating-expenses';
   static const _expenseCode = 'TREASURY:EXPENSE';
+  SqliteInvestmentRefundStore get _refunds =>
+      SqliteInvestmentRefundStore(_database, synthetic: synthetic);
 
   @override
   Future<void> ensureDefaults() async {
@@ -57,6 +61,7 @@ class SqliteTreasuryOperationStore implements TreasuryOperationStore {
           where: "status IN ('prepared','rejected')",
           orderBy: 'prepared_at_utc,command_id',
         );
+        final refunds = await txn.query('investment_refund_requests');
         final confirmed = await txn.rawQuery('''
 SELECT r.command_id FROM treasury_operation_requests r
 JOIN treasury_operations o ON o.request_id=r.command_id
@@ -65,6 +70,7 @@ JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
 WHERE r.status='confirmed'
 ''');
         return TreasuryOperationSnapshot(
+          investmentMinor: await InvestmentLedger.balance(txn),
           accounts: accounts
               .map(
                 (row) => TreasuryAccount(
@@ -78,10 +84,20 @@ WHERE r.status='confirmed'
                 ),
               )
               .toList(),
-          pendingOperations: pending.map(_prepared).toList(),
-          confirmedCommandIds: confirmed
-              .map((r) => r['command_id'] as String)
-              .toSet(),
+          pendingOperations: [
+            ...pending.map(_prepared),
+            ...refunds
+                .where(
+                  (r) => r['status'] == 'prepared' || r['status'] == 'rejected',
+                )
+                .map(SqliteInvestmentRefundStore.prepared),
+          ],
+          confirmedCommandIds:
+              confirmed.map((r) => r['command_id'] as String).toSet()..addAll(
+                refunds
+                    .where((r) => r['status'] == 'confirmed')
+                    .map((r) => r['command_id'] as String),
+              ),
         );
       });
 
@@ -89,6 +105,9 @@ WHERE r.status='confirmed'
   Future<PreparedTreasuryOperation> prepare(
     TreasuryOperationCommand command,
   ) async {
+    if (command.kind == TreasuryOperationKind.investmentRefund) {
+      return _refunds.prepare(command);
+    }
     final input = _input(command);
     return _database.database.transaction((txn) async {
       final profile = await _profile(txn);
@@ -148,6 +167,13 @@ WHERE r.status='confirmed'
 
   @override
   Future<TreasuryOperationResult> confirmPrepared(String commandId) async {
+    if ((await _database.database.query(
+      'investment_refund_requests',
+      where: 'command_id=?',
+      whereArgs: [commandId],
+    )).isNotEmpty) {
+      return _refunds.confirm(commandId);
+    }
     _id(commandId);
     try {
       return await _database.database.transaction(
@@ -320,6 +346,13 @@ WHERE r.status='confirmed'
 
   @override
   Future<void> discardRejected(String commandId) async {
+    if ((await _database.database.query(
+      'investment_refund_requests',
+      where: 'command_id=?',
+      whereArgs: [commandId],
+    )).isNotEmpty) {
+      return _refunds.discard(commandId);
+    }
     _id(commandId);
     await _database.database.transaction((txn) async {
       final rows = await txn.query(

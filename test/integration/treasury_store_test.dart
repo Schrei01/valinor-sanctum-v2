@@ -83,7 +83,7 @@ void main() {
       );
       expect(
         snapshot.movements.every(
-          (movement) => movement.concept == 'Saldo inicial de la copia',
+          (movement) => movement.concept == 'Saldo inicial registrado',
         ),
         isTrue,
       );
@@ -468,6 +468,10 @@ void main() {
       expect(first.cashMinor, 52);
       expect(first.nequiMinor, 7);
       expect(first.movements, hasLength(51));
+      final full = await treasury.load(fullHistory: true);
+      expect(full.movements, hasLength(53));
+      expect(full.cashMinor, first.cashMinor);
+      expect(full.nequiMinor, first.nequiMinor);
       expect(
         first.movements.where((m) => m.cashAccountId == cash),
         hasLength(50),

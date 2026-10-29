@@ -2,7 +2,7 @@ import 'treasury_store.dart';
 
 export 'treasury_store.dart' show TreasuryValidationException;
 
-enum TreasuryOperationKind { expense, transfer }
+enum TreasuryOperationKind { expense, transfer, investmentRefund }
 
 class TreasuryOperationCommand {
   const TreasuryOperationCommand({
@@ -57,6 +57,7 @@ class TreasuryOperationResult {
 
 class TreasuryOperationSnapshot {
   TreasuryOperationSnapshot({
+    this.investmentMinor = 0,
     required List<TreasuryAccount> accounts,
     required List<PreparedTreasuryOperation> pendingOperations,
     required Set<String> confirmedCommandIds,
@@ -66,6 +67,7 @@ class TreasuryOperationSnapshot {
 
   /// Active, available cash accounts with active monetary ledgers only.
   final List<TreasuryAccount> accounts;
+  final int investmentMinor;
   final List<PreparedTreasuryOperation> pendingOperations;
   final Set<String> confirmedCommandIds;
 }

@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../app_config.dart';
 import 'schema.dart';
+import 'investment_ledger.dart';
 
 /// Owns one explicit FFI connection, without changing the global DB factory.
 ///
@@ -210,6 +211,7 @@ class AppDatabase {
     16 => DatabaseSchema.migration16Statements,
     17 => DatabaseSchema.migration17Statements,
     18 => DatabaseSchema.migration18Statements,
+    19 => DatabaseSchema.migration19Statements,
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -219,6 +221,9 @@ class AppDatabase {
   ) async {
     for (final statement in _migrationStatements(version)) {
       await executor.execute(statement);
+    }
+    if (version == 19) {
+      await InvestmentLedger.initialize(executor, reclassificationOnly: true);
     }
     await executor.execute('PRAGMA user_version = $version');
     await _recordMigration(executor, version);

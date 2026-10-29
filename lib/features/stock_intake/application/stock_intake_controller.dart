@@ -305,7 +305,7 @@ class StockIntakeController extends ChangeNotifier {
     if (option == null) {
       throw ArgumentError('Elige de dónde se paga la compra.');
     }
-    if (total > BigInt.from(option.balanceMinor)) {
+    if (!option.isInvestment && total > BigInt.from(option.balanceMinor)) {
       throw ArgumentError(
         'El saldo de ${option.label} no alcanza para esta compra.',
       );

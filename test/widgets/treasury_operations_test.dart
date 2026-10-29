@@ -117,6 +117,36 @@ void main() {
       tester.widget<Text>(find.byKey(Key('treasury-amount-$role'))).data;
   Future<void> submit(WidgetTester tester) =>
       tap(tester, find.byKey(const Key('treasury-operation-submit')));
+
+  for (final width in [1120.0, 400.0]) {
+    testWidgets(
+      'owner refund uses existing person-free flow with debt limit at width $width',
+      (tester) async {
+        store.investmentMinor = 20000;
+        await open(tester, size: Size(width, 1050));
+        expect(balance(tester, 'investment'), 'COP 200,00');
+        await tap(tester, find.byKey(const Key('treasury-investment-refund')));
+        expect(find.text('Devolver inversión'), findsOneWidget);
+        expect(
+          find.byKey(const Key('treasury-operation-destination')),
+          findsNothing,
+        );
+        await enter(tester, 'treasury-operation-amount', '201');
+        await submit(tester);
+        expect(find.text('Supera la inversión pendiente.'), findsOneWidget);
+        expect(store.preparedCommands, isEmpty);
+        await enter(tester, 'treasury-operation-amount', '50');
+        await submit(tester);
+        expect(
+          store.preparedCommands.single.kind,
+          TreasuryOperationKind.investmentRefund,
+        );
+        expect(balance(tester, 'investment'), 'COP 150,00');
+        expect(balance(tester, 'cash'), 'COP 950,00');
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   Finder destination() => find.descendant(
     of: find.byKey(const Key('treasury-operation-destination')),
     matching: find.byType(DropdownButtonFormField<String>),
@@ -465,6 +495,7 @@ class _LiveProjection implements TreasuryStore {
   int loadCalls = 0;
   Completer<TreasurySnapshot>? pendingLoad;
   TreasurySnapshot get current => TreasurySnapshot(
+    investmentMinor: operations.investmentMinor,
     accounts: operations.accounts,
     receivablesMinor: 50000,
     movements: const [],
@@ -472,7 +503,7 @@ class _LiveProjection implements TreasuryStore {
   @override
   Future<void> ensureDefaults() async {}
   @override
-  Future<TreasurySnapshot> load() async {
+  Future<TreasurySnapshot> load({bool fullHistory = false}) async {
     loadCalls++;
     final pending = pendingLoad;
     if (pending != null) return pending.future;

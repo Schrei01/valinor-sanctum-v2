@@ -20,6 +20,7 @@ class IntakePaymentOption {
   final bool openingRecorded;
   final bool canRecordOpening;
   final bool isActive;
+  bool get isInvestment => id == 'investment';
 }
 
 class StockIntakeCommand {

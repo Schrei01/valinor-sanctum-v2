@@ -20,6 +20,21 @@ import '../integration/quick_sales_store_test.dart' show fixture;
 import '../support/register_debtor.dart';
 import 'package:valinor_sanctum_2/features/stock_intake/data/sqlite_stock_intake_store.dart';
 
+/// This scenario uses real SQLite work outside the fake animation clock.
+/// Yield real time until loading indicators finish instead of advancing ten
+/// simulated minutes while the database isolate still waits for CPU.
+Future<void> settleDatabaseUi(WidgetTester tester) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 20));
+  var stable = 0;
+  while (DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await tester.pump(const Duration(milliseconds: 20));
+    stable = tester.binding.hasScheduledFrame ? 0 : stable + 1;
+    if (stable >= 3) return;
+  }
+  fail('The database-backed screen did not settle within 20 real seconds.');
+}
+
 void main() {
   testWidgets(
     'real SQLite accounts survive every tab, unordered GUI payments, new arrivals and widget reopen',
@@ -66,8 +81,7 @@ void main() {
           );
           await workspace.initialize();
           await t.pumpWidget(SanctumApp(controller: workspace));
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-          await t.pumpAndSettle();
+          await settleDatabaseUi(t);
           final c = t
               .widget<QuickSalesPage>(find.byType(QuickSalesPage))
               .controller;
@@ -93,22 +107,19 @@ void main() {
             );
           }
           await c.flushAll();
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-          await t.pumpAndSettle();
+          await settleDatabaseUi(t);
           Future<void> tab(String name) async {
             final f = find.text(name).first;
             await t.ensureVisible(f);
             await t.tap(f);
-            await Future<void>.delayed(const Duration(milliseconds: 250));
-            await t.pumpAndSettle();
+            await settleDatabaseUi(t);
           }
 
           Future<void> pay(String id) async {
             final f = find.byKey(ValueKey('quick-register-$id'));
             await t.ensureVisible(f);
             await t.tap(f);
-            await Future<void>.delayed(const Duration(milliseconds: 250));
-            await t.pumpAndSettle();
+            await settleDatabaseUi(t);
           }
 
           await pay(ids[1]);
@@ -126,8 +137,7 @@ void main() {
             ),
           );
           await c.flushAll();
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-          await t.pumpAndSettle();
+          await settleDatabaseUi(t);
           final expected = {ids[0], ids[2], ids[4], sixth};
           for (var cycle = 0; cycle < 3; cycle++) {
             for (final name in [
@@ -175,11 +185,9 @@ void main() {
             7,
           );
           await t.pumpWidget(const SizedBox());
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-          await t.pumpAndSettle();
+          await settleDatabaseUi(t);
           await t.pumpWidget(SanctumApp(controller: workspace));
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-          await t.pumpAndSettle();
+          await settleDatabaseUi(t);
           final reopened = t
               .widget<QuickSalesPage>(find.byType(QuickSalesPage))
               .controller;

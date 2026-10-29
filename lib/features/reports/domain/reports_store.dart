@@ -73,6 +73,7 @@ class ReportPeriod {
 enum ReportMovementKind {
   saleReceipt,
   debtorPayment,
+  investmentRefund,
   purchasePayment,
   expense,
   eventPayment,
@@ -426,12 +427,31 @@ class ReportsSnapshot {
         .where((m) => m.kind == ReportMovementKind.debtorPayment)
         .map((m) => m.amountMinor),
   );
+  int get investmentRefundsMinor => reportSum(
+    movements
+        .where((m) => m.kind == ReportMovementKind.investmentRefund)
+        .map((m) => -m.amountMinor),
+  );
+  int investmentRefundsFor(ReportAccountRole role) {
+    final ids = accounts.where((a) => a.role == role).map((a) => a.id).toSet();
+    return reportSum(
+      movements
+          .where(
+            (m) =>
+                m.kind == ReportMovementKind.investmentRefund &&
+                ids.contains(m.accountId),
+          )
+          .map((m) => -m.amountMinor),
+    );
+  }
+
   int get outflowsMinor => reportMinor(
     movements
         .where(
           (m) =>
               m.amountMinor < 0 &&
               m.kind != ReportMovementKind.transfer &&
+              m.kind != ReportMovementKind.investmentRefund &&
               m.kind != ReportMovementKind.opening,
         )
         .fold(BigInt.zero, (sum, m) => sum - BigInt.from(m.amountMinor)),
@@ -644,6 +664,7 @@ class ReportOutflowTotals {
     for (final m in movements) {
       if (m.amountMinor >= 0 ||
           m.kind == ReportMovementKind.transfer ||
+          m.kind == ReportMovementKind.investmentRefund ||
           m.kind == ReportMovementKind.opening) {
         continue;
       }

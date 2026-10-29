@@ -7,7 +7,8 @@ $dev=Join-Path $projectRoot 'dist\ValinorSanctum2\valinor_sanctum_2.exe'
 $prod=Join-Path $projectRoot 'dist\ValinorSanctum2-Produccion\valinor_sanctum_2.exe'
 $prodVersion=((Get-Item -LiteralPath $prod).VersionInfo.ProductVersion).Split('+')[0]
 $prodArchive=Join-Path $projectRoot ('dist\valinor-sanctum-2-'+$prodVersion+'-production-windows-x64.zip')
-$devArchive=Join-Path $projectRoot 'dist\valinor-sanctum-2-0.30.0-development-windows-x64.zip'
+$devVersion=((Get-Item -LiteralPath $dev).VersionInfo.ProductVersion).Split('+')[0]
+$devArchive=Join-Path $projectRoot ('dist\valinor-sanctum-2-'+$devVersion+'-development-windows-x64.zip')
 foreach($folder in @('ValinorSanctum2','ValinorSanctum2-Produccion','0.0.1\ValinorSanctum2')){New-Item -ItemType Directory -Path (Join-Path $fixture $folder) -Force | Out-Null}
 Copy-Item -LiteralPath $dev -Destination (Join-Path $fixture 'ValinorSanctum2\valinor_sanctum_2.exe')
 Copy-Item -LiteralPath $prod -Destination (Join-Path $fixture 'ValinorSanctum2-Produccion\valinor_sanctum_2.exe')
@@ -24,11 +25,12 @@ $cleaned=& $cleanup -DistributionPath $fixture -Edition Installed | ConvertFrom-
 if($cleaned.artifacts -ne 2){throw 'Wrong production deletion set'}
 foreach($name in @('ValinorSanctum2','0.0.1','valinor-sanctum-2-0.0.1-development-windows-x64.zip','valinor-sanctum-2-0.30.0-development-windows-x64.zip')){if(-not (Test-Path -LiteralPath (Join-Path $fixture $name))){throw ('Development was removed: '+$name)}}
 $devPreview=& $cleanup -DistributionPath $fixture -Edition Development -DryRun | ConvertFrom-Json
-if($devPreview.artifacts -ne 2){throw 'Development preview selected production'}
-# Even a later development version must retain the pinned 0.30.0 archive.
+$expectedDevCandidates=if([version]$devVersion -gt [version]'0.30.0'){3}else{2}
+if($devPreview.artifacts -ne $expectedDevCandidates){throw 'Development preview selected production'}
+# A new development release may retire previous development, including 0.30.
 Copy-Item -LiteralPath $prod -Destination (Join-Path $fixture 'ValinorSanctum2\valinor_sanctum_2.exe') -Force
 $newerDevPreview=& $cleanup -DistributionPath $fixture -Edition Development -DryRun | ConvertFrom-Json
-if($newerDevPreview.artifacts -ne 2){throw 'Pinned development 0.30.0 was selected for cleanup'}
+if($newerDevPreview.artifacts -ne 3){throw 'Obsolete development 0.30.0 was not selected for cleanup'}
 
 # Exercise the real publisher on an isolated tree while preserving its dev bundle.
 $publishRoot=Join-Path $fixture 'publisher'
@@ -52,4 +54,4 @@ $resolved=[IO.Path]::GetFullPath($fixture)
 if($resolved -ne $fixture -or -not $resolved.StartsWith((Join-Path $projectRoot 'tmp')+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Unsafe cleanup target'}
 foreach($item in Get-ChildItem -LiteralPath $resolved -Force -Recurse){if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Fixture link detected'}}
 Remove-Item -LiteralPath $resolved -Recurse -Force
-[pscustomobject]@{productionCleanupPreservesDevelopment=$true;developmentCleanupPreservesProduction=$true;productionPublicationPreservesDevelopment=$true;wrongEditionPublicationRejected=$true;development030Preserved=$true;development030PinnedForFutureCleanup=$true} | ConvertTo-Json
+[pscustomobject]@{productionCleanupPreservesDevelopment=$true;developmentCleanupPreservesProduction=$true;productionPublicationPreservesDevelopment=$true;wrongEditionPublicationRejected=$true;latestDevelopmentPreservedByProduction=$true;obsoleteDevelopmentCanBeRetired=$true} | ConvertTo-Json

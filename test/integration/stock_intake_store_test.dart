@@ -81,6 +81,53 @@ void main() {
       (await app.database.query(table)).length;
 
   test(
+    'owner-paid intake adds inventory and owner debt with no cash movement and no duplicate supplier debt',
+    () async {
+      final command = StockIntakeCommand(
+        commandId: 'owner-intake',
+        productId: 'owner-product',
+        productName: 'Producto con inversión',
+        categoryId: category,
+        supplierName: 'Proveedor sintético',
+        totalPurchasePriceMinor: 25001,
+        listPriceMinor: 4000,
+        quantity: 10,
+        paymentOptionId: 'investment',
+        occurredAtUtc: DateTime.utc(2026, 10, 29, 20),
+      );
+      await store.prepare(command);
+      final result = await store.confirmPrepared(command.commandId);
+      expect(
+        (await store.confirmPrepared(command.commandId)).paymentDocumentId,
+        result.paymentDocumentId,
+      );
+      final data = await store.load();
+      expect(data.stock.single.quantity, 10);
+      expect(data.stock.single.totalCostMinor, 25001);
+      expect(data.entries.single.paymentLabel, 'Inversión');
+      expect(
+        data.paymentOptions.singleWhere((o) => o.isInvestment).balanceMinor,
+        25001,
+      );
+      expect(
+        data.paymentOptions
+            .where((o) => !o.isInvestment)
+            .every((o) => o.balanceMinor == 0),
+        isTrue,
+      );
+      expect(
+        (await SqliteSupplierPaymentsStore(
+          app,
+        ).load()).payables.single.remainingMinor,
+        0,
+      );
+      expect(await count('supplier_payments'), 0);
+      expect(await count('investment_operations'), 1);
+      expect(await app.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+    },
+  );
+
+  test(
     'total cost remains exact while the new PVP applies to all old and new stock with immutable price history',
     () async {
       await opening();
@@ -413,14 +460,24 @@ void main() {
         'Evento',
       });
       expect(snapshot.categories, hasLength(3));
-      expect(snapshot.paymentOptions, hasLength(2));
+      expect(snapshot.paymentOptions, hasLength(3));
       expect(
-        snapshot.paymentOptions.every(
-          (p) =>
-              p.balanceMinor == 0 && p.canRecordOpening && !p.openingRecorded,
-        ),
+        snapshot.paymentOptions
+            .where((p) => !p.isInvestment)
+            .every(
+              (p) =>
+                  p.balanceMinor == 0 &&
+                  p.canRecordOpening &&
+                  !p.openingRecorded,
+            ),
         isTrue,
       );
+      final investment = snapshot.paymentOptions.singleWhere(
+        (p) => p.isInvestment,
+      );
+      expect(investment.balanceMinor, 0);
+      expect(investment.canRecordOpening, isFalse);
+      expect(investment.openingRecorded, isTrue);
       expect(await count('command_log'), 0);
       expect(await count('journal_entries'), 0);
       final other = await AppDatabase.open(path: inMemoryDatabasePath);

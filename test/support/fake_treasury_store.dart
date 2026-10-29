@@ -26,7 +26,7 @@ class FakeTreasuryStore implements TreasuryStore {
   }
 
   @override
-  Future<TreasurySnapshot> load() async {
+  Future<TreasurySnapshot> load({bool fullHistory = false}) async {
     loadCalls++;
     if (loadFailure != null) throw loadFailure!;
     if (pendingLoad != null) return pendingLoad!.future;

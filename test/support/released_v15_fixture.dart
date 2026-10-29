@@ -74,6 +74,7 @@ Future<void> restoreReleasedV16ForFixture(DatabaseExecutor db) async {
 }
 
 Future<void> restoreReleasedV17ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV18ForFixture(db);
   for (final sql in DatabaseSchema.migration18Statements) {
     final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
     if (name != null) await db.execute('DROP TRIGGER $name');
@@ -87,4 +88,67 @@ Future<void> restoreReleasedV17ForFixture(DatabaseExecutor db) async {
   }
   await db.delete('schema_migrations', where: 'version=18');
   await db.execute('PRAGMA user_version=17');
+}
+
+/// Synthetic reconstruction of an empty investment addition, never a runtime downgrade.
+Future<void> restoreReleasedV18ForFixture(DatabaseExecutor db) async {
+  expect(await db.query('investment_operations'), isEmpty);
+  expect(await db.query('investment_refund_requests'), isEmpty);
+  final names = <String>{};
+  for (final sql in DatabaseSchema.migration19Statements) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name != null) names.add(name);
+  }
+  for (final name in names) {
+    await db.execute('DROP TRIGGER $name');
+  }
+  for (final name in [
+    'investment_initialization',
+    'investment_operations',
+    'investment_refund_requests',
+  ]) {
+    await db.execute('DROP TABLE $name');
+  }
+  final table = DatabaseSchema.migration15Statements.singleWhere(
+    (s) => s.contains('CREATE TABLE paid_purchase_entries_upgrade ('),
+  );
+  await db.execute(table);
+  await db.execute(
+    'INSERT INTO paid_purchase_entries_upgrade SELECT * FROM paid_purchase_entries',
+  );
+  await db.execute('DROP TABLE paid_purchase_entries');
+  await db.execute(
+    'ALTER TABLE paid_purchase_entries_upgrade RENAME TO paid_purchase_entries',
+  );
+  await db.execute(
+    'CREATE INDEX idx_paid_purchase_entries_product ON paid_purchase_entries(product_id)',
+  );
+  for (final sql in DatabaseSchema.migration15Statements.where(
+    (s) => s.contains('CREATE TRIGGER paid_purchase_'),
+  )) {
+    await db.execute(sql);
+  }
+  for (final sql in DatabaseSchema.migration7Statements.where(
+    (s) => s.contains(
+      'CREATE TRIGGER paid_purchase_requests_reserve_command_ids\n',
+    ),
+  )) {
+    await db.execute(sql);
+  }
+  await db.delete('schema_migrations', where: 'version=19');
+  await db.execute('PRAGMA user_version=18');
+  final schema = await db.rawQuery(
+    "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE substr(name,1,7)<>'sqlite_' ORDER BY type,name",
+  );
+  expect(
+    DatabaseSchema.checksum(
+      jsonEncode([
+        for (final s in schema) [s['type'], s['name'], s['tbl_name'], s['sql']],
+      ]),
+    ),
+    (await db.query(
+      'schema_migrations',
+      where: 'version=18',
+    )).single['schema_checksum'],
+  );
 }

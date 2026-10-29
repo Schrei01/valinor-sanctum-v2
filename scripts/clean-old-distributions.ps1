@@ -38,11 +38,10 @@ $candidates = @(
     foreach ($item in Get-ChildItem -LiteralPath $distribution -Force) {
         $candidateVersion = $null
         if ($Edition -eq 'Development' -and $item.PSIsContainer -and $item.Name -match '^\d+\.\d+\.\d+$') { $candidateVersion = [version]$item.Name }
+        elseif ($Edition -eq 'Development' -and $item.PSIsContainer -and $item.Name -match '^ValinorSanctum2-Desarrollo-(\d+\.\d+\.\d+)$') { $candidateVersion = [version]$Matches[1] }
         elseif ($Edition -eq 'Development' -and -not $item.PSIsContainer -and $item.Name -match '^valinor-sanctum-2-(\d+\.\d+\.\d+)-development-windows-x64\.zip$') { $candidateVersion = [version]$Matches[1] }
         elseif ($Edition -eq 'Installed' -and -not $item.PSIsContainer -and $item.Name -match '^valinor-sanctum-2-(\d+\.\d+\.\d+)-production-windows-x64\.zip$') { $candidateVersion = [version]$Matches[1] }
         elseif ($Edition -eq 'Installed' -and -not $item.PSIsContainer -and $item.Name -match '^Valinor-Sanctum-(\d+\.\d+\.\d+)(?:-Produccion)?-Instalar\.exe$') { $candidateVersion = [version]$Matches[1] }
-        # The owner explicitly asked to retain the 0.30.0 development release.
-        if ($Edition -eq 'Development' -and $candidateVersion -eq [version]'0.30.0') { continue }
         if ($null -ne $candidateVersion -and $candidateVersion -lt $currentVersion) { $item }
     }
 )
@@ -54,7 +53,8 @@ foreach ($candidate in $candidates) {
     Assert-CleanupPath $candidate.FullName
     if ((Split-Path -Parent $candidate.FullName) -ne $distribution) { throw 'Un destino no es hijo directo de la carpeta de entregas.' }
     if ($candidate.PSIsContainer) {
-        if (-not (Test-Path -LiteralPath (Join-Path $candidate.FullName 'ValinorSanctum2\valinor_sanctum_2.exe') -PathType Leaf)) { throw ('Carpeta de versión no reconocida: ' + $candidate.Name) }
+        $relativeExecutable = if ($candidate.Name -match '^ValinorSanctum2-Desarrollo-\d+\.\d+\.\d+$') { 'valinor_sanctum_2.exe' } else { 'ValinorSanctum2\valinor_sanctum_2.exe' }
+        if (-not (Test-Path -LiteralPath (Join-Path $candidate.FullName $relativeExecutable) -PathType Leaf)) { throw ('Carpeta de versión no reconocida: ' + $candidate.Name) }
         foreach ($app in $runningApps) {
             if ($app.ExecutablePath.StartsWith($candidate.FullName + '\', [StringComparison]::OrdinalIgnoreCase)) { throw ('Cierra la versión anterior antes de limpiarla: ' + $candidate.Name) }
         }

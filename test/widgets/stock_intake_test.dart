@@ -161,6 +161,31 @@ void main() {
     });
   }
 
+  testWidgets(
+    'investment purchase does not require available cash and displays owner balance',
+    (tester) async {
+      store.paymentOptions.add(
+        const IntakePaymentOption(
+          id: 'investment',
+          label: 'Inversión',
+          cashAccountId: '',
+          paymentMethodId: '',
+          balanceMinor: 0,
+          openingRecorded: true,
+          canRecordOpening: false,
+        ),
+      );
+      await open(tester);
+      await fill(tester);
+      await tap(tester, keyed('intake-payment-'));
+      await tap(tester, find.text('Inversión').last);
+      expect(find.text('Inversión por recuperar: COP 0,00'), findsOneWidget);
+      await tap(tester, find.byKey(const Key('intake-submit')));
+      expect(store.preparedCommands.single.paymentOptionId, 'investment');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('grouped quantity and money submit exact ungrouped values', (
     tester,
   ) async {

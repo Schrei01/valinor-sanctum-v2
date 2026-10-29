@@ -114,6 +114,8 @@ el PVP anterior. Ingresa lo pagado por todas las unidades: se sugiere un PVP
 con total/cantidad/0,65. Puedes escribir un precio menor; la sugerencia no limita.
 El PVP elegido aplica a todas las existencias y sus cambios quedan en historial.
 Elige Efectivo o Nequi para pagar: el ingreso y la salida de dinero se guardan juntos.
+Si pagaste los productos con tu dinero, elige Inversión: aumenta el inventario
+y la Inversión por recuperar, sin descontar Caja ni Nequi ni dejar deuda al proveedor.
 Registra el saldo inicial real antes del primer movimiento de cada cuenta si corresponde.
 Consulta el Historial de ingresos desde la misma sección Compras.
 Catálogo muestra productos: filtra por Categoría y Proveedor, y busca por nombre o SKU.
@@ -162,6 +164,10 @@ desde Caja o Nequi. Indica valor, motivo y una observación opcional.
 Transferir dinero permite elegir cuentas de origen y destino distintas,
 incluyendo Caja mayor. El dinero sale del origen y entra al destino junto.
 Las dos opciones requieren saldo suficiente en la cuenta de origen.
+Inversión por recuperar muestra lo pendiente por devolver al propietario.
+Registrar devolución permite abonos desde Caja o Nequi, con saldo suficiente
+y sin superar la inversión pendiente. No se registra como gasto ni compra nueva.
+Ver historial reúne los movimientos anteriores y actuales con filtros y páginas.
 Filtra los últimos movimientos por cuenta y pulsa Actualizar para consultar de nuevo.
 Los pagos anteriores a proveedores permanecen en un panel secundario de Tesorería.
 Los saldos de una copia verificada se cargan como apertura única, no como ventas.
@@ -173,6 +179,8 @@ Registra pagos y abonos a proveedores con saldo disponible, incluso por varios m
 Las solicitudes de pago guardadas se recuperan al reabrir sin duplicarse.
 En Reportes elige la fecha inicial y, al aceptar, la hora en formato AM/PM.
 El resultado se presenta como comprobante compacto con saldos, ventas y egresos.
+Las devoluciones de inversión aparecen por separado y no se suman a los egresos
+del negocio ni reducen la ganancia nuevamente.
 Incluye transferencias del rango agrupadas por origen y destino, número de
 movimientos y total trasladado; no se suman otra vez a ventas ni egresos.
 Los egresos suman salidas registradas de Caja y Nequi; no incluyen transferencias

@@ -422,6 +422,32 @@ class _ReportsPageState extends State<ReportsPage> {
                 );
               },
             ),
+            if (data.investmentRefundsMinor > 0) ...[
+              const Divider(height: 12),
+              _sectionTitle('Devoluciones de inversión'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 24,
+                runSpacing: 6,
+                children: [
+                  Text(
+                    'Caja: ${inventoryMoney(data.investmentRefundsFor(ReportAccountRole.cash), widget.profile)}',
+                  ),
+                  Text(
+                    'Nequi: ${inventoryMoney(data.investmentRefundsFor(ReportAccountRole.transfer), widget.profile)}',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              FinancialTotal(
+                label: 'Total devuelto',
+                value: inventoryMoney(
+                  data.investmentRefundsMinor,
+                  widget.profile,
+                ),
+                valueKey: const Key('report-investment-refunds-total'),
+              ),
+            ],
             const Divider(height: 12),
             LayoutBuilder(
               builder: (context, constraints) {
@@ -454,6 +480,10 @@ class _ReportsPageState extends State<ReportsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle('Notas del reporte'),
+        if (data.investmentRefundsMinor > 0)
+          _note(
+            'Las devoluciones de inversión descuentan Caja o Nequi y se muestran separadas de los egresos del negocio; no reducen la ganancia nuevamente.',
+          ),
         _note('Horario de Bogotá · El rango incluye todo el minuto final.'),
         if (data.usesHistoricalBalances)
           _note(

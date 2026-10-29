@@ -39,6 +39,7 @@ class TreasuryMovement {
 class TreasurySnapshot {
   TreasurySnapshot({
     required List<TreasuryAccount> accounts,
+    this.investmentMinor = 0,
     required this.receivablesMinor,
     this.legacyReceivablesMinor = 0,
     required List<TreasuryMovement> movements,
@@ -46,6 +47,7 @@ class TreasurySnapshot {
        movements = List.unmodifiable(movements);
 
   final List<TreasuryAccount> accounts;
+  final int investmentMinor;
 
   /// Remaining customer receivables, excluded from available money.
   final int receivablesMinor;
@@ -76,7 +78,7 @@ class TreasurySnapshot {
 
 abstract interface class TreasuryStore {
   Future<void> ensureDefaults();
-  Future<TreasurySnapshot> load();
+  Future<TreasurySnapshot> load({bool fullHistory = false});
 }
 
 class TreasuryValidationException implements Exception {

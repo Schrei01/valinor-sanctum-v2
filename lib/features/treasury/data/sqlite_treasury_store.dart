@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/infrastructure/database/app_database.dart';
+import '../../../core/infrastructure/database/investment_ledger.dart';
 import '../../quick_sales/data/sqlite_quick_sales_store.dart';
 import '../domain/treasury_store.dart';
 
@@ -20,6 +21,7 @@ class SqliteTreasuryStore implements TreasuryStore {
     await SqliteQuickSalesStore(_database).ensureDefaults();
     await _database.database.transaction((txn) async {
       await _requireProfile(txn);
+      await InvestmentLedger.initialize(txn);
       final ledgers = await txn.query(
         'ledger_accounts',
         where: 'id=? OR code=?',
@@ -69,9 +71,9 @@ class SqliteTreasuryStore implements TreasuryStore {
   }
 
   @override
-  Future<TreasurySnapshot> load() => _database.database.transaction((
-    txn,
-  ) async {
+  Future<TreasurySnapshot> load({
+    bool fullHistory = false,
+  }) => _database.database.transaction((txn) async {
     await _requireProfile(txn);
     final accountRows = await txn.rawQuery('''
 SELECT c.* FROM cash_accounts c
@@ -180,11 +182,35 @@ ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
             ? document
             : a.cashAccountId.compareTo(b.cashAccountId);
       });
+    final investmentRows = await txn.rawQuery(
+      '''SELECT op.*,d.occurred_at_utc,d.reason FROM investment_operations op
+      JOIN business_documents d ON d.id=op.document_id AND d.status='posted'
+      JOIN journal_entries e ON e.document_id=d.id AND e.status='posted' ''',
+    );
+    movements.addAll(
+      investmentRows.map(
+        (r) => TreasuryMovement(
+          id: 'investment:${r['document_id']}',
+          cashAccountId: InvestmentLedger.optionId,
+          accountName: 'Inversión por recuperar',
+          documentId: r['document_id'] as String,
+          occurredAtUtc: DateTime.parse(r['occurred_at_utc'] as String),
+          concept: r['reason'] as String,
+          amountMinor: r['kind'] == 'refund'
+              ? -(r['amount_minor'] as int)
+              : r['amount_minor'] as int,
+        ),
+      ),
+    );
+    movements.sort((a, b) {
+      final date = b.occurredAtUtc.compareTo(a.occurredAtUtc);
+      return date == 0 ? b.id.compareTo(a.id) : date;
+    });
     final counts = <String, int>{};
     final recent = movements.where((movement) {
       final count = (counts[movement.cashAccountId] ?? 0) + 1;
       counts[movement.cashAccountId] = count;
-      return count <= 50;
+      return fullHistory || count <= 50;
     }).toList();
     final legacyRows = await txn.rawQuery('''
 SELECT line.debit_minor-line.credit_minor receivables_minor FROM journal_lines line
@@ -200,6 +226,7 @@ WHERE line.account_id='system:legacy-customer-receivables'
     final totalReceivables =
         BigInt.from(await _receivables(txn)) + legacyReceivables;
     final snapshot = TreasurySnapshot(
+      investmentMinor: await InvestmentLedger.balance(txn),
       accounts: accounts,
       receivablesMinor: treasuryCheckedMinor(
         totalReceivables,
@@ -270,7 +297,9 @@ class _MovementAccumulator {
       'cash_opening' => 'Saldo inicial',
       'event_creation' => 'Costo de evento: ${row['event_name']}',
       'debtor_collection' => 'Abono de: ${row['debtor_name']}',
-      'treasury_opening' => 'Saldo inicial de la copia',
+      'treasury_opening' => 'Saldo inicial registrado',
+      'investment_refund' => 'Devolución de inversión',
+      'investment_opening' => 'Traslado a Inversión por recuperar',
       'cash_expense' => 'Gasto: ${row['treasury_reason']}${_note()}',
       'cash_transfer' =>
         row['treasury_source_account_id'] == account

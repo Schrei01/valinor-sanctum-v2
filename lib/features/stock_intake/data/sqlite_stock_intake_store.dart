@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../core/domain/money.dart';
 import '../../../core/infrastructure/database/app_database.dart';
 import '../../../core/infrastructure/database/schema.dart';
+import '../../../core/infrastructure/database/investment_ledger.dart';
 import '../../inventory/data/sqlite_inventory_store.dart';
 import '../../inventory/domain/inventory_store.dart';
 import '../../quick_sales/data/sqlite_quick_sales_store.dart';
@@ -34,6 +35,7 @@ class SqliteStockIntakeStore implements StockIntakeStore {
     ).ensureDefaults();
     await _database.database.transaction((txn) async {
       await _profile(txn);
+      await InvestmentLedger.initialize(txn);
       for (final name in ['Comestible', 'Artículo', 'Evento']) {
         final rows = await txn.query('categories', where: 'is_active=1');
         if (!rows.any(
@@ -121,6 +123,17 @@ WHERE l.account_id=? LIMIT 1
         'paid_purchase_requests',
         where: "status IN ('prepared','rejected')",
         orderBy: 'prepared_at_utc,command_id',
+      );
+      paymentOptions.add(
+        IntakePaymentOption(
+          id: InvestmentLedger.optionId,
+          label: 'Inversión',
+          cashAccountId: '',
+          paymentMethodId: '',
+          balanceMinor: await InvestmentLedger.balance(txn),
+          openingRecorded: true,
+          canRecordOpening: false,
+        ),
       );
       final entries = await txn.rawQuery('''
 SELECT e.*,r.occurred_at_utc FROM paid_purchase_entries e
@@ -336,6 +349,9 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
     } on StockIntakeValidationException catch (e) {
       await _reject(commandId, e.message);
       rethrow;
+    } on InvestmentValidationException catch (e) {
+      await _reject(commandId, e.message);
+      throw StockIntakeValidationException(e.message);
     }
   }
 
@@ -503,41 +519,58 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
       where: 'origin_document_id=?',
       whereArgs: [purchase.documentId],
     )).single;
-    await _payments.preparePaymentInTransaction(
-      txn,
-      SupplierPaymentCommand(
+    final String paymentDocumentId;
+    if (command.paymentOptionId == InvestmentLedger.optionId) {
+      paymentDocumentId = await InvestmentLedger.post(
+        txn,
         commandId: row['payment_command_id'] as String,
+        kind: 'purchase',
+        amount: total,
+        counterLedger: obligation['control_account_id'] as String,
         payableId: obligation['id'] as String,
-        occurredAtUtc: command.occurredAtUtc,
-        parts: [
-          SupplierPaymentPartInput(
+        occurredAt: command.occurredAtUtc,
+        reason: 'Compra con inversión: ${command.productName}',
+        canonical: canonical,
+        synthetic: synthetic,
+      );
+    } else {
+      await _payments.preparePaymentInTransaction(
+        txn,
+        SupplierPaymentCommand(
+          commandId: row['payment_command_id'] as String,
+          payableId: obligation['id'] as String,
+          occurredAtUtc: command.occurredAtUtc,
+          parts: [
+            SupplierPaymentPartInput(
+              cashAccountId: payload['cashAccountId'] as String,
+              paymentMethodId: payload['paymentMethodId'] as String,
+              amountMinor: total,
+            ),
+          ],
+        ),
+        snapshots: [
+          SupplierPaymentPart(
             cashAccountId: payload['cashAccountId'] as String,
             paymentMethodId: payload['paymentMethodId'] as String,
+            cashAccountName: payload['cashAccountName'] as String,
+            cashAccountKind: payload['cashAccountKind'] as String,
+            paymentMethodCode: payload['paymentMethodCode'] as String,
+            paymentMethodName: payload['paymentMethodName'] as String,
             amountMinor: total,
           ),
         ],
-      ),
-      snapshots: [
-        SupplierPaymentPart(
-          cashAccountId: payload['cashAccountId'] as String,
-          paymentMethodId: payload['paymentMethodId'] as String,
-          cashAccountName: payload['cashAccountName'] as String,
-          cashAccountKind: payload['cashAccountKind'] as String,
-          paymentMethodCode: payload['paymentMethodCode'] as String,
-          paymentMethodName: payload['paymentMethodName'] as String,
-          amountMinor: total,
-        ),
-      ],
-    );
-    final payment = await _payments.confirmInTransaction(
-      txn,
-      row['payment_command_id'] as String,
-    );
+      );
+      final payment = await _payments.confirmInTransaction(
+        txn,
+        row['payment_command_id'] as String,
+      );
+      paymentDocumentId = payment.documentId;
+    }
     final result = StockIntakeResult(
       commandId: id,
       productId: command.productId,
       purchaseDocumentId: purchase.documentId,
-      paymentDocumentId: payment.documentId,
+      paymentDocumentId: paymentDocumentId,
       totalCostMinor: total,
     );
     await txn.insert('command_log', {
@@ -551,7 +584,7 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
           'commandId': id,
           'productId': command.productId,
           'purchaseDocumentId': purchase.documentId,
-          'paymentDocumentId': payment.documentId,
+          'paymentDocumentId': paymentDocumentId,
           'totalCostMinor': total,
         },
       }),
@@ -562,7 +595,7 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
     await txn.insert('paid_purchase_entries', {
       'request_id': id,
       'purchase_document_id': purchase.documentId,
-      'payment_document_id': payment.documentId,
+      'payment_document_id': paymentDocumentId,
       'product_id': command.productId,
       'product_name_snapshot': command.productName,
       'sku_snapshot': command.sku,
@@ -574,7 +607,9 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
       'unit_purchase_price_minor': command.exactUnitCostMinor,
       'list_price_minor': command.listPriceMinor,
       'total_cost_minor': total,
-      'payment_option_id': command.paymentOptionId,
+      'payment_option_id': command.paymentOptionId == InvestmentLedger.optionId
+          ? null
+          : command.paymentOptionId,
       'payment_option_label_snapshot': payload['paymentOptionLabel'],
       'cash_account_id': payload['cashAccountId'],
       'payment_method_id': payload['paymentMethodId'],
@@ -865,6 +900,18 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
     DatabaseExecutor txn,
     String id,
   ) async {
+    if (id == InvestmentLedger.optionId) {
+      return {
+        'paymentOptionId': id,
+        'paymentOptionLabel': 'Inversión',
+        'cashAccountId': null,
+        'cashAccountName': null,
+        'cashAccountKind': null,
+        'paymentMethodId': null,
+        'paymentMethodCode': null,
+        'paymentMethodName': null,
+      };
+    }
     final rows = await txn.rawQuery(
       '''SELECT o.*,c.name account_name,c.kind account_kind,c.ledger_account_id,m.code method_code,m.name method_name FROM quick_payment_options o JOIN cash_accounts c ON c.id=o.cash_account_id JOIN ledger_accounts l ON l.id=c.ledger_account_id JOIN payment_methods m ON m.id=o.payment_method_id WHERE o.id=? AND o.is_active=1 AND c.is_active=1 AND c.is_available=1 AND l.is_active=1 AND l.class='asset' AND l.role='cash' AND m.is_active=1''',
       [id],
@@ -908,6 +955,14 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
     int total,
     DateTime occurredAt,
   ) async {
+    if (option['paymentOptionId'] == InvestmentLedger.optionId) {
+      try {
+        await InvestmentLedger.checkPurchase(txn, total, occurredAt);
+      } on InvestmentValidationException catch (e) {
+        throw StockIntakeValidationException(e.message);
+      }
+      return;
+    }
     final cash = (await txn.query(
       'cash_accounts',
       where: 'id=?',

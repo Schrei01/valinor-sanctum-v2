@@ -125,6 +125,21 @@ class _TreasuryOperationsPanelState extends State<TreasuryOperationsPanel> {
                 icon: const Icon(Icons.swap_horiz),
                 label: const Text('Transferir dinero'),
               ),
+              OutlinedButton.icon(
+                key: const Key('treasury-investment-refund'),
+                onPressed:
+                    enabled &&
+                        (controller.snapshot?.investmentMinor ?? 0) > 0 &&
+                        accounts.any(
+                          (a) =>
+                              a.role == TreasuryAccountRole.cash ||
+                              a.role == TreasuryAccountRole.nequi,
+                        )
+                    ? () => _open(TreasuryOperationKind.investmentRefund)
+                    : null,
+                icon: const Icon(Icons.assignment_return_outlined),
+                label: const Text('Registrar devolución'),
+              ),
               if (controller.loading)
                 const SizedBox(
                   width: 24,
@@ -167,6 +182,9 @@ class _TreasuryOperationsPanelState extends State<TreasuryOperationsPanel> {
                     Text(
                       pending.command.kind == TreasuryOperationKind.expense
                           ? 'Gasto pendiente de confirmar'
+                          : pending.command.kind ==
+                                TreasuryOperationKind.investmentRefund
+                          ? 'Devolución de inversión pendiente'
                           : 'Transferencia pendiente de confirmar',
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
@@ -242,6 +260,8 @@ class _OperationDialogState extends State<_OperationDialog> {
   String _reason = 'Arriendo';
 
   bool get _expense => widget.kind == TreasuryOperationKind.expense;
+  bool get _refund => widget.kind == TreasuryOperationKind.investmentRefund;
+  bool get _transfer => widget.kind == TreasuryOperationKind.transfer;
 
   List<TreasuryAccount> get _accounts =>
       widget.controller.snapshot?.accounts ?? const [];
@@ -252,7 +272,7 @@ class _OperationDialogState extends State<_OperationDialog> {
     final command = widget.correction;
     final sources = _accounts.where(
       (account) =>
-          !_expense ||
+          _transfer ||
           account.role == TreasuryAccountRole.cash ||
           account.role == TreasuryAccountRole.nequi,
     );
@@ -287,9 +307,13 @@ class _OperationDialogState extends State<_OperationDialog> {
     final confirmed = await widget.controller.record(
       kind: widget.kind,
       sourceAccountId: _sourceId!,
-      destinationAccountId: _expense ? null : _destinationId,
+      destinationAccountId: _transfer ? _destinationId : null,
       amountMinor: _parseAmount(),
-      reason: _expense ? _reason : 'Transferencia',
+      reason: _expense
+          ? _reason
+          : _refund
+          ? 'Devolución de inversión'
+          : 'Transferencia',
       note: _note.text,
     );
     if (confirmed && mounted) Navigator.of(context).pop();
@@ -303,7 +327,7 @@ class _OperationDialogState extends State<_OperationDialog> {
       final sources = _accounts
           .where(
             (account) =>
-                !_expense ||
+                _transfer ||
                 account.role == TreasuryAccountRole.cash ||
                 account.role == TreasuryAccountRole.nequi,
           )
@@ -320,7 +344,13 @@ class _OperationDialogState extends State<_OperationDialog> {
           : null;
       final locked = controller.formLocked;
       return AlertDialog(
-        title: Text(_expense ? 'Registrar gasto' : 'Transferir dinero'),
+        title: Text(
+          _expense
+              ? 'Registrar gasto'
+              : _refund
+              ? 'Devolver inversión'
+              : 'Transferir dinero',
+        ),
         content: SizedBox(
           width: 440,
           child: SingleChildScrollView(
@@ -335,7 +365,9 @@ class _OperationDialogState extends State<_OperationDialog> {
                     initialValue: source?.id,
                     isExpanded: true,
                     decoration: InputDecoration(
-                      labelText: _expense ? 'Pagar desde' : 'Cuenta de origen',
+                      labelText: !_transfer
+                          ? 'Pagar desde'
+                          : 'Cuenta de origen',
                     ),
                     items: [
                       for (final account in sources)
@@ -360,7 +392,14 @@ class _OperationDialogState extends State<_OperationDialog> {
                       key: const Key('treasury-operation-balance'),
                     ),
                   ],
-                  if (!_expense) ...[
+                  if (_refund) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Inversión por recuperar: ${inventoryMoney(controller.snapshot?.investmentMinor ?? 0, widget.profile)}',
+                      key: const Key('treasury-refund-outstanding'),
+                    ),
+                  ],
+                  if (_transfer) ...[
                     const SizedBox(height: 16),
                     SizedBox(
                       key: const Key('treasury-operation-destination'),
@@ -408,6 +447,11 @@ class _OperationDialogState extends State<_OperationDialog> {
                         }
                         if (source != null && value > source.balanceMinor) {
                           return 'El saldo de ${source.name} no alcanza.';
+                        }
+                        if (_refund &&
+                            value >
+                                (controller.snapshot?.investmentMinor ?? 0)) {
+                          return 'Supera la inversión pendiente.';
                         }
                         return null;
                       } catch (_) {
@@ -473,7 +517,13 @@ class _OperationDialogState extends State<_OperationDialog> {
           FilledButton(
             key: const Key('treasury-operation-submit'),
             onPressed: locked || controller.loadError != null ? null : _submit,
-            child: Text(_expense ? 'Registrar gasto' : 'Transferir'),
+            child: Text(
+              _expense
+                  ? 'Registrar gasto'
+                  : _refund
+                  ? 'Registrar devolución'
+                  : 'Transferir',
+            ),
           ),
         ],
       );

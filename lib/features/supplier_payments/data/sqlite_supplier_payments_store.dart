@@ -555,6 +555,11 @@ ORDER BY r.issued_at_utc DESC, r.id
 SELECT r.payable_id, r.amount_minor FROM payable_settlements r
 JOIN business_documents d ON d.id = r.supplier_payment_id AND d.status = 'posted'
 JOIN journal_entries e ON e.document_id = d.id AND e.status = 'posted'
+UNION ALL
+SELECT r.payable_id,r.amount_minor FROM investment_operations r
+JOIN business_documents d ON d.id=r.document_id AND d.status='posted'
+JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
+WHERE r.kind='purchase'
 ''');
     final totals = <String, BigInt>{};
     for (final row in settlements) {

@@ -153,7 +153,10 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
           collection = collectionByDoc[doc],
           supplier = supplierByDoc[doc];
       final kind = switch (type) {
-        'cash_opening' || 'treasury_opening' => ReportMovementKind.opening,
+        'cash_opening' ||
+        'treasury_opening' ||
+        'investment_opening' => ReportMovementKind.opening,
+        'investment_refund' => ReportMovementKind.investmentRefund,
         'cash_transfer' => ReportMovementKind.transfer,
         'cash_expense' => ReportMovementKind.expense,
         'event_creation' => ReportMovementKind.eventPayment,
@@ -167,6 +170,7 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
       };
       final concept = switch (kind) {
         ReportMovementKind.opening => 'Saldo inicial registrado',
+        ReportMovementKind.investmentRefund => 'Devolución de inversión',
         ReportMovementKind.saleReceipt =>
           'Venta: ${collection?['sale_label_snapshot'] ?? doc}',
         ReportMovementKind.debtorPayment =>

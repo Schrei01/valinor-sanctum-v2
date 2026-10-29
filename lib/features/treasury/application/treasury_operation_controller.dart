@@ -68,7 +68,7 @@ class TreasuryOperationController extends ChangeNotifier {
           .where((account) => account.id == sourceAccountId)
           .firstOrNull;
       if (source == null ||
-          (kind == TreasuryOperationKind.expense &&
+          (kind != TreasuryOperationKind.transfer &&
               source.role != TreasuryAccountRole.cash &&
               source.role != TreasuryAccountRole.nequi)) {
         throw ArgumentError('Elige una cuenta válida para la operación.');
@@ -80,7 +80,7 @@ class TreasuryOperationController extends ChangeNotifier {
           (destination == null || destination.id == source.id)) {
         throw ArgumentError('Elige dos cuentas distintas para transferir.');
       }
-      if (kind == TreasuryOperationKind.expense &&
+      if (kind != TreasuryOperationKind.transfer &&
           destinationAccountId != null) {
         throw ArgumentError('Un gasto no tiene cuenta de destino.');
       }
@@ -89,6 +89,10 @@ class TreasuryOperationController extends ChangeNotifier {
       }
       if (amountMinor > source.balanceMinor) {
         throw ArgumentError('El saldo de ${source.name} no alcanza.');
+      }
+      if (kind == TreasuryOperationKind.investmentRefund &&
+          amountMinor > snapshot!.investmentMinor) {
+        throw ArgumentError('La devolución supera la inversión pendiente.');
       }
       if (destination != null &&
           BigInt.from(destination.balanceMinor) + BigInt.from(amountMinor) >
@@ -176,6 +180,8 @@ class TreasuryOperationController extends ChangeNotifier {
       await _reload();
       operationNotice = canonical.command.kind == TreasuryOperationKind.expense
           ? 'Gasto registrado. El saldo de la cuenta se actualizó.'
+          : canonical.command.kind == TreasuryOperationKind.investmentRefund
+          ? 'Devolución registrada. Se actualizaron la inversión pendiente y la cuenta de pago.'
           : 'Transferencia registrada. Los saldos de ambas cuentas se actualizaron.';
       return true;
     } on TreasuryValidationException catch (failure) {
