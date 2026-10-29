@@ -15,14 +15,12 @@ class TreasuryPage extends StatefulWidget {
     super.key,
     required this.controller,
     required this.profile,
-    this.supplierPaymentsPanel,
     this.legacyStore,
     this.operationController,
   });
 
   final TreasuryController controller;
   final BusinessProfile profile;
-  final Widget? supplierPaymentsPanel;
   final LegacyTreasuryStore? legacyStore;
   final TreasuryOperationController? operationController;
 
@@ -124,20 +122,6 @@ class _TreasuryPageState extends State<TreasuryPage> {
             _balances(data),
             const SizedBox(height: 28),
             _history(data),
-          ],
-          if (widget.supplierPaymentsPanel != null) ...[
-            const SizedBox(height: 28),
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: ExpansionTile(
-                key: const Key('treasury-supplier-payments'),
-                title: const Text('Pagos a proveedores'),
-                subtitle: const Text('Compras a crédito anteriores'),
-                childrenPadding: const EdgeInsets.all(20),
-                expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                children: [widget.supplierPaymentsPanel!],
-              ),
-            ),
           ],
         ],
       );

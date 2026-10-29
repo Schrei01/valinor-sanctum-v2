@@ -169,14 +169,14 @@ Registrar devolución permite abonos desde Caja o Nequi, con saldo suficiente
 y sin superar la inversión pendiente. No se registra como gasto ni compra nueva.
 Ver historial reúne los movimientos anteriores y actuales con filtros y páginas.
 Filtra los últimos movimientos por cuenta y pulsa Actualizar para consultar de nuevo.
-Los pagos anteriores a proveedores permanecen en un panel secundario de Tesorería.
+Los pagos anteriores a proveedores conservan sus registros y movimientos en el historial.
 Los saldos de una copia verificada se cargan como apertura única, no como ventas.
 Deudas identifica la cartera anterior sin detalle cuando la fuente no trae clientes.
 Historial de la copia es consulta separada y no vuelve a mover dinero.
 Las confirmaciones pendientes se recuperan al reabrir para reintentar sin duplicar.
 Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.
-Registra pagos y abonos a proveedores con saldo disponible, incluso por varios medios.
-Las solicitudes de pago guardadas se recuperan al reabrir sin duplicarse.
+Las compras se pagan al ingresar los productos. Tesorería permite devolver
+la inversión con Registrar devolución; no contiene un formulario de pagos a proveedores.
 En Reportes elige la fecha inicial y, al aceptar, la hora en formato AM/PM.
 El resultado se presenta como comprobante compacto con saldos, ventas y egresos.
 Las devoluciones de inversión aparecen por separado y no se suman a los egresos

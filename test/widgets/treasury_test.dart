@@ -106,7 +106,6 @@ void main() {
     FakeTreasuryStore fake, {
     Size size = const Size(1400, 1200),
     bool load = true,
-    Widget? supplierPaymentsPanel,
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -129,11 +128,7 @@ void main() {
           child: Scaffold(
             body: SingleChildScrollView(
               padding: const EdgeInsets.all(28),
-              child: TreasuryPage(
-                controller: controller,
-                profile: profile,
-                supplierPaymentsPanel: supplierPaymentsPanel,
-              ),
+              child: TreasuryPage(controller: controller, profile: profile),
             ),
           ),
         ),
@@ -395,51 +390,33 @@ void main() {
   });
 
   testWidgets(
-    'supplier payment recovery remains accessible when treasury cannot load',
+    'failed treasury load does not offer the retired supplier-payment panel',
     (tester) async {
-      var recoveryRequests = 0;
       final fake = FakeTreasuryStore()
         ..loadFailure = StateError('synthetic treasury failure');
-      await open(
-        tester,
-        fake,
-        supplierPaymentsPanel: TextButton(
-          onPressed: () => recoveryRequests++,
-          child: const Text('Recuperar pago sintético pendiente'),
-        ),
-      );
+      await open(tester, fake);
       expect(find.byKey(const Key('treasury-load-error')), findsOneWidget);
       expect(find.byKey(const Key('treasury-amount-cash')), findsNothing);
-      expect(find.text('Recuperar pago sintético pendiente'), findsNothing);
-      await tester.tap(find.text('Pagos a proveedores'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Recuperar pago sintético pendiente'));
-      expect(recoveryRequests, 1);
-      expect(find.byKey(const Key('treasury-load-error')), findsOneWidget);
+      expect(find.text('Pagos a proveedores'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
 
   testWidgets(
-    'narrow view remains usable and legacy payment form stays folded',
+    'narrow treasury retains account filtering without a supplier-payment panel',
     (tester) async {
       await open(
         tester,
         FakeTreasuryStore(snapshot: snapshot()),
         size: const Size(360, 780),
-        supplierPaymentsPanel: const Text('Formulario secundario sintético'),
       );
-      expect(find.text('Formulario secundario sintético'), findsNothing);
       await chooseAccount(tester, 'Caja mayor');
       expect(
         find.text('Esta cuenta no tiene movimientos recientes.'),
         findsOneWidget,
       );
-      final expansion = find.byKey(const Key('treasury-supplier-payments'));
-      await tester.ensureVisible(expansion);
-      await tester.tap(find.text('Pagos a proveedores'));
-      await tester.pumpAndSettle();
-      expect(find.text('Formulario secundario sintético'), findsOneWidget);
+      expect(find.byKey(const Key('treasury-supplier-payments')), findsNothing);
+      expect(find.text('Pagos a proveedores'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

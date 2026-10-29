@@ -1,0 +1,22 @@
+{
+  "edition": "development",
+  "version": "0.32.1+49",
+  "schemaVersion": 19,
+  "schemaChanged": false,
+  "supplierPaymentsPanelRemoved": true,
+  "automaticSupplierPanelLoadRemoved": true,
+  "historicalPaymentRecordsPreserved": true,
+  "focusedWidgetTestsPassed": 42,
+  "fullSuiteRerun": false,
+  "analyze": "no issues",
+  "formatFiles": 207,
+  "formatChanges": 0,
+  "distributionFilesMatched": 19,
+  "developmentTablesUnchangedAfterNativeStartup": 72,
+  "integrityOk": true,
+  "foreignKeyViolations": 0,
+  "productionDistributionFilesUnchanged": 21,
+  "nativeDevelopmentWindowOpenAndResponding": true,
+  "nativeVisualInspection": false,
+  "operationalBusinessTestOperations": false
+}

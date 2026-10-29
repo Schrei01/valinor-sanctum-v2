@@ -5,17 +5,13 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:valinor_sanctum_2/app/sanctum_app.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/features/collections/domain/collections_store.dart';
 import 'package:valinor_sanctum_2/features/supplier_payments/domain/supplier_payments_store.dart';
 import 'package:valinor_sanctum_2/features/supplier_payments/presentation/supplier_payments_page.dart';
-import 'package:valinor_sanctum_2/features/workspace/application/workspace_controller.dart';
+import 'package:valinor_sanctum_2/features/supplier_payments/application/supplier_payments_controller.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
-import 'package:valinor_sanctum_2/features/workspace/domain/workspace_store.dart';
 import '../support/fake_supplier_payments_store.dart';
-import '../support/fake_workspace_store.dart';
-import '../support/fake_treasury_store.dart';
 
 void main() {
   setUpAll(() async {
@@ -90,40 +86,32 @@ void main() {
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final workspace = FakeWorkspaceStore()
-      ..profile = BusinessProfile(
-        profileId: 'test',
-        businessName: 'Ludoteca sintética',
-        currencyCode: 'COP',
-        moneyScale: 2,
-        timezone: 'America/Bogota',
-        createdAtUtc: DateTime.utc(2026, 10, 19),
-      );
-    final controller = WorkspaceController(
-      openSession: () async => WorkspaceSession(
-        store: workspace,
-        databasePath: 'perfil-sintetico/sanctum2.sqlite3',
-        profileId: 'test',
-        supplierPaymentsStore: fake,
-        treasuryStore: FakeTreasuryStore(),
-      ),
+    final profile = BusinessProfile(
+      profileId: 'test',
+      businessName: 'Ludoteca sintética',
+      currencyCode: 'COP',
+      moneyScale: 2,
+      timezone: 'America/Bogota',
+      createdAtUtc: DateTime.utc(2026, 10, 19),
     );
-    await controller.initialize();
+    // The historical component is exercised independently; it is no longer a
+    // destination or an embedded panel in the application's Treasury page.
+    final controller = SupplierPaymentsController(store: fake);
+    await controller.load();
     await tester.pumpWidget(
       RepaintBoundary(
         key: const Key('supplier-payments-preview'),
-        child: SanctumApp(controller: controller),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Tesorería'));
-    await tester.pumpAndSettle();
-    final paymentsPanel = find.byKey(const Key('treasury-supplier-payments'));
-    await tester.ensureVisible(paymentsPanel);
-    await tester.tap(
-      find.descendant(
-        of: paymentsPanel,
-        matching: find.text('Pagos a proveedores'),
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: SupplierPaymentsPage(
+                controller: controller,
+                profile: profile,
+              ),
+            ),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -440,7 +428,7 @@ void main() {
     },
   );
   testWidgets(
-    'rejected supplier-payment can be corrected and narrow navigation preserves unsaved input',
+    'historical supplier-payment can be corrected in the narrow standalone component',
     (tester) async {
       final fake = store()
         ..confirmationFailure = const SupplierPaymentsValidationException(
@@ -448,8 +436,6 @@ void main() {
         );
       await open(tester, fake, size: const Size(400, 900));
       await fill(tester, '40,00');
-      await tap(tester, find.text('Catálogo'));
-      await tap(tester, find.text('Tesorería'));
       expect(
         tester
             .widget<TextFormField>(keyed('supplier-payment-amount-').first)

@@ -9,6 +9,7 @@ import 'package:valinor_sanctum_2/features/workspace/domain/workspace_store.dart
 import '../support/fake_treasury_store.dart';
 import '../support/fake_treasury_operation_store.dart';
 import '../support/fake_workspace_store.dart';
+import '../support/fake_supplier_payments_store.dart';
 
 void main() {
   testWidgets('Treasury replaces Payments and refreshes on section entry', (
@@ -51,6 +52,8 @@ void main() {
     );
     final treasury = FakeTreasuryStore(snapshot: snapshot(10000));
     final operations = FakeTreasuryOperationStore();
+    final suppliers = FakeSupplierPaymentsStore()
+      ..loadFailure = StateError('Retired supplier panel must not be loaded');
     final controller = WorkspaceController(
       openSession: () async => WorkspaceSession(
         store: workspace,
@@ -58,6 +61,7 @@ void main() {
         profileId: 'test',
         treasuryStore: treasury,
         treasuryOperationStore: operations,
+        supplierPaymentsStore: suppliers,
       ),
     );
     await controller.initialize();
@@ -69,6 +73,9 @@ void main() {
     expect(find.byKey(const Key('treasury-balance-cash')), findsOneWidget);
     expect(find.byKey(const Key('treasury-register-expense')), findsOneWidget);
     expect(find.byKey(const Key('treasury-transfer')), findsOneWidget);
+    expect(find.byKey(const Key('treasury-investment-refund')), findsOneWidget);
+    expect(find.text('Pagos a proveedores'), findsNothing);
+    expect(find.byKey(const Key('treasury-supplier-payments')), findsNothing);
     expect(
       tester.widget<Text>(find.byKey(const Key('treasury-amount-total'))).data,
       'COP 150,00',

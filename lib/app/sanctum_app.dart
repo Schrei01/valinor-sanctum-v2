@@ -13,8 +13,6 @@ import '../features/debtors/application/debtors_controller.dart';
 import '../features/debtors/presentation/debtors_page.dart';
 import '../features/reports/application/reports_controller.dart';
 import '../features/reports/presentation/reports_page.dart';
-import '../features/supplier_payments/application/supplier_payments_controller.dart';
-import '../features/supplier_payments/presentation/supplier_payments_page.dart';
 import '../features/quick_sales/application/quick_sales_controller.dart';
 import '../features/quick_sales/presentation/quick_sales_page.dart';
 import '../features/stock_intake/application/stock_intake_controller.dart';
@@ -82,13 +80,11 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   GlobalKey<CatalogPageState> _catalogKey = GlobalKey<CatalogPageState>();
   DebtorsController? _debtors;
   ReportsController? _reports;
-  SupplierPaymentsController? _supplierPayments;
   QuickSalesController? _quickSales;
   StockIntakeController? _stockIntake;
   TreasuryController? _treasury;
   TreasuryOperationController? _treasuryOperations;
   EventsController? _events;
-  bool _supplierWasConfirming = false;
   late final AppLifecycleListener _exitListener;
 
   @override
@@ -145,15 +141,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     if (index == 4) {
       unawaited(_treasury?.load());
       unawaited(_treasuryOperations?.load());
-      unawaited(_supplierPayments?.load());
     }
-  }
-
-  void _supplierPaymentsChanged() {
-    final confirming = _supplierPayments?.confirming ?? false;
-    final completed = _supplierWasConfirming && !confirming;
-    _supplierWasConfirming = confirming;
-    if (completed && _section == 4) unawaited(_treasury?.load());
   }
 
   @override
@@ -163,8 +151,6 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     _inventory?.dispose();
     _debtors?.dispose();
     _reports?.dispose();
-    _supplierPayments?.removeListener(_supplierPaymentsChanged);
-    _supplierPayments?.dispose();
     _quickSales?.dispose();
     _stockIntake?.dispose();
     _treasury?.dispose();
@@ -239,23 +225,6 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
         _debtors = debtorsStore == null
             ? null
             : DebtorsController(store: debtorsStore);
-      }
-      final supplierPaymentsStore = controller.supplierPaymentsStore;
-      if (!identical(_supplierPayments?.store, supplierPaymentsStore)) {
-        _supplierPayments?.removeListener(_supplierPaymentsChanged);
-        _supplierPayments?.dispose();
-        _supplierPayments = supplierPaymentsStore == null
-            ? null
-            : SupplierPaymentsController(store: supplierPaymentsStore);
-        _supplierWasConfirming = false;
-        _supplierPayments?.addListener(_supplierPaymentsChanged);
-      }
-      if (_supplierPayments != null &&
-          controller.profile != null &&
-          _supplierPayments!.snapshot == null &&
-          !_supplierPayments!.loading &&
-          _supplierPayments!.loadError == null) {
-        unawaited(_supplierPayments!.load());
       }
       final treasuryStore = controller.treasuryStore;
       final treasuryOperationStore = controller.treasuryOperationStore;
@@ -416,16 +385,6 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                         profile: controller.profile!,
                                         legacyStore:
                                             controller.legacyTreasuryStore,
-                                        supplierPaymentsPanel:
-                                            _supplierPayments == null
-                                            ? null
-                                            : SupplierPaymentsPage(
-                                                key: ObjectKey(
-                                                  _supplierPayments,
-                                                ),
-                                                controller: _supplierPayments!,
-                                                profile: controller.profile!,
-                                              ),
                                       ),
                                 wide,
                               ),
@@ -659,7 +618,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Versión 0.32.0',
+                    'Versión 0.32.1',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
