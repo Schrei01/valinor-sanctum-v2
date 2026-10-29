@@ -31,6 +31,7 @@ class FakeEventsStore implements EventsStore {
       accounts: const [
         EventAccount('cash', 'Caja', 100000),
         EventAccount('nequi', 'Nequi', 50000),
+        EventAccount('investment', 'Inversión', 0),
       ],
       pending: pending,
       confirmedCommandIds: confirmed.toSet(),

@@ -5,11 +5,12 @@ import 'legacy_conversion_schema.dart';
 import 'total_purchase_schema.dart';
 import 'catalog_operations_schema.dart';
 import 'investment_schema.dart';
+import 'event_investment_schema.dart';
 part 'split_payment_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 19;
+  static const int version = 20;
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -79,6 +80,7 @@ abstract final class DatabaseSchema {
     17 => 'split_line_payments_v17',
     18 => 'account_payment_mode_and_review_v18',
     19 => 'owner_investment_and_refunds_v19',
+    20 => 'event_owner_investment_v20',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -102,6 +104,7 @@ abstract final class DatabaseSchema {
     17 => checksum(migration17Statements.join('\n;\n')),
     18 => checksum(migration18Statements.join('\n;\n')),
     19 => checksum(migration19Statements.join('\n;\n')),
+    20 => checksum(migration20Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -113,6 +116,12 @@ abstract final class DatabaseSchema {
       intakeV15: migration15Statements,
       intakeV7: migration7Statements,
     ),
+  );
+  static final List<String> migration20Statements = List.unmodifiable(
+    EventInvestmentSchema.build([
+      ...migration12Statements,
+      ...migration16Statements,
+    ]),
   );
   static final List<String> migration17Statements = List.unmodifiable(
     SplitPaymentSchema.build(),

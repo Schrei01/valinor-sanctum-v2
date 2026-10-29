@@ -1,5 +1,7 @@
 /// V19 adds owner financing without treating it as available cash.
 abstract final class InvestmentSchema {
+  static String balanceQuery(String account, {bool creditNormal = false}) =>
+      _balance(account, creditNormal: creditNormal);
   static List<String> build({
     required List<String> intakeV15,
     required List<String> intakeV7,

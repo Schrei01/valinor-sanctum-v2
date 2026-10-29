@@ -92,6 +92,7 @@ Future<void> restoreReleasedV17ForFixture(DatabaseExecutor db) async {
 
 /// Synthetic reconstruction of an empty investment addition, never a runtime downgrade.
 Future<void> restoreReleasedV18ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV19ForFixture(db);
   expect(await db.query('investment_operations'), isEmpty);
   expect(await db.query('investment_refund_requests'), isEmpty);
   final names = <String>{};
@@ -149,6 +150,97 @@ Future<void> restoreReleasedV18ForFixture(DatabaseExecutor db) async {
     (await db.query(
       'schema_migrations',
       where: 'version=18',
+    )).single['schema_checksum'],
+  );
+}
+
+/// Synthetic cash-event graph only, for testing the forward v19 -> v20 upgrade.
+Future<void> restoreReleasedV19ForFixture(DatabaseExecutor db) async {
+  expect(await db.query('events', where: "funding_mode<>'cash'"), isEmpty);
+  const order = ['events', 'event_products', 'event_cost_allocations'];
+  final definitions = {
+    for (final name in order)
+      name: DatabaseSchema.migration12Statements.singleWhere(
+        (s) => s.startsWith('CREATE TABLE $name ('),
+      ),
+  };
+  String staged(String sql) {
+    for (final name in order) {
+      sql = sql
+          .replaceAll(
+            'CREATE TABLE $name (',
+            'CREATE TABLE ${name}_v19_fixture (',
+          )
+          .replaceAll('REFERENCES $name(', 'REFERENCES ${name}_v19_fixture(');
+    }
+    return sql;
+  }
+
+  for (final name in order) {
+    await db.execute(staged(definitions[name]!));
+  }
+  final columns = (await db.rawQuery('PRAGMA table_info(events)'))
+      .map((r) => r['name'] as String)
+      .where((c) => c != 'funding_mode')
+      .join(',');
+  await db.execute(
+    'INSERT INTO events_v19_fixture SELECT $columns FROM events',
+  );
+  for (final name in order.skip(1)) {
+    await db.execute('INSERT INTO ${name}_v19_fixture SELECT * FROM $name');
+  }
+  final triggers = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='trigger' AND (tbl_name IN('events','event_products','event_cost_allocations') OR name IN('events_posting','event_investment_posting'))",
+  );
+  for (final trigger in triggers) {
+    await db.execute('DROP TRIGGER ${trigger['name']}');
+  }
+  for (final name in order.reversed) {
+    await db.execute('DROP TABLE $name');
+  }
+  for (final name in order) {
+    await db.execute(definitions[name]!);
+    await db.execute('INSERT INTO $name SELECT * FROM ${name}_v19_fixture');
+  }
+  for (final name in order.reversed) {
+    await db.execute('DROP TABLE ${name}_v19_fixture');
+  }
+  for (final sql in DatabaseSchema.migration12Statements.where(
+    (s) =>
+        s.startsWith('CREATE INDEX idx_event_') ||
+        s.startsWith('CREATE TRIGGER events_posting ') ||
+        RegExp(
+          r'^CREATE TRIGGER \w+ .*\bON (events|event_products|event_cost_allocations)\b',
+          dotAll: true,
+        ).hasMatch(s),
+  )) {
+    await db.execute(sql);
+  }
+  await db.execute(
+    DatabaseSchema.migration16Statements.singleWhere(
+      (s) => s.startsWith('CREATE TRIGGER service_no_event_material '),
+    ),
+  );
+  await db.execute('DROP VIEW event_expected_journal');
+  await db.execute(
+    DatabaseSchema.migration12Statements.singleWhere(
+      (s) => s.startsWith('CREATE VIEW event_expected_journal AS'),
+    ),
+  );
+  await db.delete('schema_migrations', where: 'version=20');
+  await db.execute('PRAGMA user_version=19');
+  final schema = await db.rawQuery(
+    "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE substr(name,1,7)<>'sqlite_' ORDER BY type,name",
+  );
+  expect(
+    DatabaseSchema.checksum(
+      jsonEncode([
+        for (final s in schema) [s['type'], s['name'], s['tbl_name'], s['sql']],
+      ]),
+    ),
+    (await db.query(
+      'schema_migrations',
+      where: 'version=19',
     )).single['schema_checksum'],
   );
 }

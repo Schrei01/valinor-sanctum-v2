@@ -69,6 +69,7 @@ class EventAccount {
   const EventAccount(this.id, this.label, this.balanceMinor);
   final String id, label;
   final int balanceMinor;
+  bool get isInvestment => id == 'investment';
 }
 
 class PreparedEvent {

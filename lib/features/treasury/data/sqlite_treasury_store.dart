@@ -202,6 +202,24 @@ ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
         ),
       ),
     );
+    final eventInvestments = await txn.rawQuery(
+      '''SELECT ev.document_id,ev.name_snapshot,ev.fixed_cost_minor,d.occurred_at_utc
+      FROM events ev JOIN business_documents d ON d.id=ev.document_id AND d.status='posted'
+      JOIN journal_entries e ON e.document_id=d.id AND e.status='posted' WHERE ev.funding_mode='investment' ''',
+    );
+    movements.addAll(
+      eventInvestments.map(
+        (r) => TreasuryMovement(
+          id: 'investment:event:${r['document_id']}',
+          cashAccountId: InvestmentLedger.optionId,
+          accountName: 'Inversión por recuperar',
+          documentId: r['document_id'] as String,
+          occurredAtUtc: DateTime.parse(r['occurred_at_utc'] as String),
+          concept: 'Evento con inversión: ${r['name_snapshot']}',
+          amountMinor: r['fixed_cost_minor'] as int,
+        ),
+      ),
+    );
     movements.sort((a, b) {
       final date = b.occurredAtUtc.compareTo(a.occurredAtUtc);
       return date == 0 ? b.id.compareTo(a.id) : date;

@@ -348,7 +348,9 @@ class _EventsPageState extends State<EventsPage> {
                                   DropdownMenuItem(
                                     value: a.id,
                                     child: Text(
-                                      '${a.label} · ${_money(a.balanceMinor)}',
+                                      a.isInvestment
+                                          ? 'Inversión'
+                                          : '${a.label} · ${_money(a.balanceMinor)}',
                                     ),
                                   ),
                               ],
@@ -360,7 +362,7 @@ class _EventsPageState extends State<EventsPage> {
                                     },
                               validator: (v) =>
                                   _amountOrZero(_fixed.text) > 0 && v == null
-                                  ? 'Selecciona Caja o Nequi.'
+                                  ? 'Selecciona Caja, Nequi o Inversión.'
                                   : null,
                             ),
                           ),
@@ -439,8 +441,10 @@ class _EventsPageState extends State<EventsPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Text(
-                        'Crear registra los costos y descuenta el dinero y los productos una sola vez. El mínimo se usa para el PU; no limita las inscripciones.',
+                      Text(
+                        _account == 'investment'
+                            ? 'Crear registra el costo fijo como inversión por recuperar y descuenta los productos una sola vez. El mínimo se usa para el PU; no limita las inscripciones.'
+                            : 'Crear registra los costos y descuenta el dinero y los productos una sola vez. El mínimo se usa para el PU; no limita las inscripciones.',
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(

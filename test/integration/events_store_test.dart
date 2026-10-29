@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import '../support/released_v15_fixture.dart';
 import '../support/register_debtor.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -14,6 +17,10 @@ import 'package:valinor_sanctum_2/features/treasury/data/sqlite_treasury_store.d
 import 'package:valinor_sanctum_2/features/treasury/domain/treasury_opening.dart';
 import 'package:valinor_sanctum_2/features/workspace/data/sqlite_workspace_store.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
+import 'package:valinor_sanctum_2/features/treasury/data/sqlite_treasury_operation_store.dart';
+import 'package:valinor_sanctum_2/features/treasury/domain/treasury_operation_store.dart';
+import 'package:valinor_sanctum_2/features/reports/data/sqlite_reports_store.dart';
+import 'package:valinor_sanctum_2/features/reports/domain/reports_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -159,6 +166,220 @@ void main() {
     );
     await quick.confirmPrepared('sell');
   }
+
+  test(
+    'owner-funded fixed cost increases only investment; prizes keep FIFO and retries never duplicate the debt',
+    () async {
+      final c = command(
+        minimum: 3,
+        fixed: 1000,
+        account: 'investment',
+        products: const [
+          EventProductInput('p1', 2),
+          EventProductInput('p2', 1),
+        ],
+      );
+      final quote = await events.quote(c);
+      expect(quote.totalCostMinor, 3501);
+      expect(quote.unitCostMinor, 1167);
+      await events.prepare(c);
+      final id = await events.confirm(c.commandId);
+      final after = await snapshot();
+      expect(await events.confirm(c.commandId), id);
+      expect(await snapshot(), after);
+      final money = await SqliteTreasuryStore(app).load();
+      expect(money.investmentMinor, 1000);
+      expect(money.cashMinor, 100000);
+      expect(money.nequiMinor, 50000);
+      expect(
+        money.movements
+            .singleWhere((m) => m.id.startsWith('investment:event:'))
+            .amountMinor,
+        1000,
+      );
+      final row = (await app.database.query('events')).single;
+      expect(row['funding_mode'], 'investment');
+      expect(row['source_account_id'], isNull);
+      expect(row['source_account_name_snapshot'], 'Inversión');
+      expect(
+        (await inventory.load()).stock
+            .singleWhere((s) => s.productId == 'p1')
+            .quantity,
+        8,
+      );
+      final report = await SqliteReportsStore(
+        app,
+      ).load(ReportPeriod(start: at, end: at));
+      expect(report.outflowTotals.totalMinor, 0);
+      expect(report.eventCostsMinor, 3501);
+      final refund = SqliteTreasuryOperationStore(app, synthetic: true);
+      await refund.ensureDefaults();
+      await refund.prepare(
+        TreasuryOperationCommand(
+          commandId: 'event-refund',
+          kind: TreasuryOperationKind.investmentRefund,
+          sourceAccountId: await cash('quick-default:EFECTIVO'),
+          amountMinor: 1000,
+          reason: 'Devolución de inversión',
+          occurredAtUtc: at.add(const Duration(hours: 1)),
+        ),
+      );
+      await refund.confirmPrepared('event-refund');
+      final paid = await SqliteTreasuryStore(app).load();
+      expect(paid.investmentMinor, 0);
+      expect(paid.cashMinor, 99000);
+      final finalReport = await SqliteReportsStore(
+        app,
+      ).load(ReportPeriod(start: at, end: at));
+      expect(finalReport.investmentRefundsMinor, 1000);
+      expect(finalReport.outflowTotals.totalMinor, 0);
+      expect(finalReport.eventCostsMinor, 3501);
+      await sell(id);
+      final sold = await SqliteTreasuryStore(app).load();
+      expect(sold.investmentMinor, 0);
+      expect(sold.cashMinor, 129000);
+      expect(await app.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+    },
+  );
+  test(
+    'owner-funded event may exceed cash balances and deactivation does not repay it',
+    () async {
+      final id = await create(
+        command(minimum: 10, fixed: 500000, account: 'investment'),
+      );
+      await events.deactivate(id);
+      final money = await SqliteTreasuryStore(app).load();
+      expect(money.investmentMinor, 500000);
+      expect(money.cashMinor, 100000);
+      expect(money.nequiMinor, 50000);
+    },
+  );
+  test(
+    'owner-funded events reject overflow and backdating without side effects',
+    () async {
+      await create(
+        command(
+          id: 'maximum',
+          minimum: 1,
+          fixed: 9223372036854775807,
+          account: 'investment',
+        ),
+      );
+      final before = await snapshot();
+      await expectLater(
+        events.prepare(
+          command(id: 'overflow', minimum: 1, fixed: 1, account: 'investment'),
+        ),
+        throwsA(isA<EventsValidationException>()),
+      );
+      expect(await snapshot(), before);
+      await expectLater(
+        events.prepare(
+          CreateEvent(
+            commandId: 'backdated',
+            name: 'Evento anterior',
+            minimumPeople: 1,
+            fixedCostMinor: 1,
+            pvpMinor: 10000,
+            sourceAccountId: 'investment',
+            products: const [],
+            occurredAtUtc: at.subtract(const Duration(hours: 1)),
+          ),
+        ),
+        throwsA(isA<EventsValidationException>()),
+      );
+      expect(await snapshot(), before);
+    },
+  );
+  test(
+    'selecting investment with zero fixed cost creates no owner debt',
+    () async {
+      await create(command(account: 'investment'));
+      expect((await SqliteTreasuryStore(app).load()).investmentMinor, 0);
+      expect(
+        (await app.database.query('events')).single['funding_mode'],
+        'cash',
+      );
+    },
+  );
+
+  test(
+    'v19 migration preserves sold cash events, allocations and pending requests with verified backup',
+    () async {
+      final oldEvent = await create(
+        command(
+          id: 'old-event',
+          minimum: 3,
+          fixed: 1000,
+          account: await cash('quick-default:EFECTIVO'),
+          products: const [EventProductInput('p1', 2)],
+        ),
+      );
+      await sell(oldEvent);
+      await events.deactivate(oldEvent);
+      await events.prepare(command(id: 'old-pending'));
+      await app.database.transaction(restoreReleasedV19ForFixture);
+      final oldRows = {
+        for (final t in await app.database.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        ))
+          t['name'] as String: await app.database.query(t['name'] as String),
+      };
+      final root = Directory(
+        p.join(Directory.current.path, 'tmp', 'event-migration-tests'),
+      );
+      await root.create(recursive: true);
+      final directory = await root.createTemp('v19_');
+      final path = p.join(directory.path, 'events.sqlite3');
+      await app.database.execute("VACUUM INTO '${path.replaceAll("'", "''")}'");
+      await app.close();
+      app = await AppDatabase.open(path: path);
+      for (final table in oldRows.keys) {
+        if (table == 'schema_migrations') continue;
+        final columns = oldRows[table]!.isEmpty
+            ? null
+            : oldRows[table]!.first.keys.toList();
+        expect(
+          await app.database.query(table, columns: columns),
+          oldRows[table],
+          reason: table,
+        );
+      }
+      expect(
+        (await app.database.query('events')).single['funding_mode'],
+        'cash',
+      );
+      final backupFiles = await Directory(
+        p.join(directory.path, 'backups'),
+      ).list().toList();
+      final backup = backupFiles.whereType<File>().singleWhere(
+        (f) => p.basename(f.path).startsWith('events.v19.'),
+      );
+      final db = await databaseFactoryFfi.openDatabase(
+        backup.path,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      expect(await db.getVersion(), 19);
+      for (final table in oldRows.keys) {
+        expect(await db.query(table), oldRows[table], reason: 'backup $table');
+      }
+      await db.close();
+      events = SqliteEventsStore(app, synthetic: true);
+      await events.confirm('old-pending');
+      await create(
+        command(
+          id: 'new-investment',
+          minimum: 2,
+          fixed: 2000,
+          account: 'investment',
+        ),
+      );
+      expect((await SqliteTreasuryStore(app).load()).investmentMinor, 2000);
+      expect((await app.readHealth())['integrityOk'], isTrue);
+      expect(await app.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      // Kept under ignored tmp for inspection; no operational database is used.
+    },
+  );
 
   test(
     'costless event stores PU zero, manual PVP and category with no stock',
@@ -369,33 +590,41 @@ void main() {
       await events.confirm('event');
     },
   );
-  test(
-    'failure during journal insert rolls back all effects and exact retry succeeds',
-    () async {
-      final c = command(
-        minimum: 2,
-        fixed: 1000,
-        account: await cash('quick-default:NEQUI'),
-        products: const [EventProductInput('p1', 1)],
-      );
-      await events.prepare(c);
-      final before = await snapshot();
-      await app.database.execute(
-        "CREATE TRIGGER synthetic_event_failure BEFORE INSERT ON journal_lines BEGIN SELECT RAISE(ABORT,'Synthetic failure'); END",
-      );
-      await expectLater(events.confirm(c.commandId), throwsA(anything));
-      expect(await snapshot(), before);
-      await app.database.execute('DROP TRIGGER synthetic_event_failure');
-      await events.confirm(c.commandId);
-      expect(
-        (await events.load()).accounts
-            .singleWhere((a) => a.label == 'Nequi')
-            .balanceMinor,
-        49000,
-      );
-      expect((await app.database.query('events')).length, 1);
-    },
-  );
+  for (final investment in [false, true]) {
+    test(
+      'journal failure rolls back money, owner debt and stock; retry succeeds (investment=$investment)',
+      () async {
+        final c = command(
+          minimum: 2,
+          fixed: 1000,
+          account: investment
+              ? 'investment'
+              : await cash('quick-default:NEQUI'),
+          products: const [EventProductInput('p1', 1)],
+        );
+        await events.prepare(c);
+        final before = await snapshot();
+        await app.database.execute(
+          "CREATE TRIGGER synthetic_event_failure BEFORE INSERT ON journal_lines BEGIN SELECT RAISE(ABORT,'Synthetic failure'); END",
+        );
+        await expectLater(events.confirm(c.commandId), throwsA(anything));
+        expect(await snapshot(), before);
+        await app.database.execute('DROP TRIGGER synthetic_event_failure');
+        await events.confirm(c.commandId);
+        expect(
+          (await events.load()).accounts
+              .singleWhere((a) => a.label == 'Nequi')
+              .balanceMinor,
+          investment ? 50000 : 49000,
+        );
+        expect(
+          (await SqliteTreasuryStore(app).load()).investmentMinor,
+          investment ? 1000 : 0,
+        );
+        expect((await app.database.query('events')).length, 1);
+      },
+    );
+  }
   test(
     'PU rounds half up and preserves original total when division is inexact',
     () async {

@@ -4,6 +4,7 @@ import '../../../core/domain/fifo_cost.dart';
 import '../../../core/domain/money.dart';
 import '../../../core/infrastructure/database/app_database.dart';
 import '../../../core/infrastructure/database/schema.dart';
+import '../../../core/infrastructure/database/investment_ledger.dart';
 import '../../inventory/data/sqlite_inventory_store.dart';
 import '../../inventory/domain/inventory_store.dart';
 import '../../quick_sales/data/sqlite_quick_sales_store.dart';
@@ -27,6 +28,7 @@ class SqliteEventsStore implements EventsStore {
       synthetic: synthetic,
     ).load();
     return database.database.transaction((txn) async {
+      await InvestmentLedger.initialize(txn);
       final rows = await txn.rawQuery(
         '''SELECT event.*, product.is_active,document.occurred_at_utc FROM events event
 JOIN catalog_items product ON product.id=event.product_id
@@ -75,6 +77,13 @@ ORDER BY document.occurred_at_utc DESC,document.id''',
         'event_requests',
         where: "status='prepared'",
         orderBy: 'prepared_at_utc,command_id',
+      );
+      accounts.add(
+        EventAccount(
+          InvestmentLedger.optionId,
+          'Inversión',
+          await InvestmentLedger.balance(txn),
+        ),
       );
       return EventsSnapshot(
         inventory: inventory,
@@ -305,9 +314,16 @@ ORDER BY document.occurred_at_utc DESC,document.id''',
       'name_snapshot': command.name.trim(),
       'minimum_people': command.minimumPeople,
       'fixed_cost_minor': command.fixedCostMinor,
-      'source_account_id': command.fixedCostMinor > 0
+      'source_account_id':
+          command.fixedCostMinor > 0 &&
+              command.sourceAccountId != InvestmentLedger.optionId
           ? command.sourceAccountId
           : null,
+      'funding_mode':
+          command.fixedCostMinor > 0 &&
+              command.sourceAccountId == InvestmentLedger.optionId
+          ? 'investment'
+          : 'cash',
       'source_account_name_snapshot': plan.account?['name'],
       'products_cost_minor': plan.quote.productsCostMinor,
       'total_cost_minor': plan.quote.totalCostMinor,
@@ -488,14 +504,31 @@ AND NOT EXISTS(SELECT 1 FROM events WHERE product_id=product.id) AND NOT EXISTS(
     }
     final total = productsCost + BigInt.from(command.fixedCostMinor);
     Map<String, Object?>? account;
-    if (command.fixedCostMinor > 0) {
+    if (command.fixedCostMinor > 0 &&
+        command.sourceAccountId == InvestmentLedger.optionId) {
+      await InvestmentLedger.initialize(txn);
+      try {
+        await InvestmentLedger.checkPurchase(
+          txn,
+          command.fixedCostMinor,
+          command.occurredAtUtc,
+        );
+      } on InvestmentValidationException catch (e) {
+        throw EventsValidationException(e.message);
+      }
+      account = {
+        'id': InvestmentLedger.optionId,
+        'name': 'Inversión',
+        'ledger_account_id': InvestmentLedger.accountId,
+      };
+    } else if (command.fixedCostMinor > 0) {
       final accounts = await _accounts(txn);
       final selected = accounts.where(
         (a) => a['id'] == command.sourceAccountId,
       );
       if (selected.length != 1) {
         throw const EventsValidationException(
-          'Selecciona Caja o Nequi para el costo fijo.',
+          'Selecciona Caja, Nequi o Inversión para el costo fijo.',
         );
       }
       account = selected.single;

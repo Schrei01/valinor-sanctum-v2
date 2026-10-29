@@ -160,9 +160,49 @@ void main() {
     await tester.tap(find.byKey(const Key('event-create')));
     await tester.pumpAndSettle();
     expect(find.text('Con costos o productos, mínimo 1.'), findsOneWidget);
-    expect(find.text('Selecciona Caja o Nequi.'), findsOneWidget);
+    expect(find.text('Selecciona Caja, Nequi o Inversión.'), findsOneWidget);
     expect(store.commands, isEmpty);
   });
+  for (final width in [1100.0, 400.0]) {
+    testWidgets(
+      'event fixed cost can use investment with zero pending balance at $width',
+      (tester) async {
+        final store = FakeEventsStore();
+        await mount(tester, store, width: width);
+        await tester.enterText(
+          find.byKey(const Key('event-name')),
+          'Liga con inversión',
+        );
+        await tester.enterText(find.byKey(const Key('event-minimum')), '10');
+        await tester.enterText(find.byKey(const Key('event-pvp')), '5.000');
+        await tester.enterText(
+          find.byKey(const Key('event-fixed-cost')),
+          '10.000',
+        );
+        final selector = find.byWidgetPredicate(
+          (w) =>
+              w.key is ValueKey<String> &&
+              (w.key! as ValueKey<String>).value.startsWith('event-account-'),
+        );
+        await tester.ensureVisible(selector);
+        await tester.tap(selector);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Inversión').last);
+        await tester.pumpAndSettle(const Duration(milliseconds: 400));
+        expect(
+          find.textContaining('costo fijo como inversión por recuperar'),
+          findsOneWidget,
+        );
+        final create = find.byKey(const Key('event-create'));
+        await tester.ensureVisible(create);
+        await tester.tap(create);
+        await tester.pumpAndSettle();
+        expect(store.commands.single.sourceAccountId, 'investment');
+        expect(store.commands.single.fixedCostMinor, 1000000);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   testWidgets('multiple prize rows and narrow layout stay usable', (
     tester,
   ) async {
