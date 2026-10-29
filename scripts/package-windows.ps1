@@ -150,10 +150,12 @@ o si es deuda adicional, para no duplicar el total.
 Las cuentas de mostrador se guardan automáticamente mientras las preparas.
 Ventas es la única pantalla de ventas; no hay acceso al formulario anterior.
 En Eventos crea pasadías, torneos o ligas con categoría Evento automática.
-Indica mínimo de personas, costo fijo opcional desde Caja o Nequi y varios
+Indica mínimo de personas, costo fijo opcional desde Caja, Nequi o Inversión y varios
 productos del catálogo con sus cantidades. Si hay costos o productos, mínimo 1.
 El PU se calcula con costo FIFO y mínimo de personas; introduce el PVP que cobrarás.
-Crear evento descuenta dinero y productos una sola vez. Luego vende sus inscripciones
+Crear evento descuenta productos una sola vez; el costo fijo sale de Caja/Nequi
+o aumenta Inversión por recuperar si lo pagaste personalmente. Los premios
+no aumentan nuevamente la inversión. Luego vende sus inscripciones
 desde Ventas, sin límite de stock y sin repetir costos. Reintenta las solicitudes
 pendientes desde Eventos si se interrumpe el guardado.
 Desactivar retira el evento de Catálogo y Ventas, sin devolver dinero ni productos.

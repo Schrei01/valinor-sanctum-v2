@@ -52,7 +52,10 @@ void main() {
               find.text(production ? 'PRODUCCIÓN' : 'EN DESARROLLO'),
               findsOneWidget,
             );
-            expect(find.text('Versión 0.33.0'), findsOneWidget);
+            expect(
+              find.text(production ? 'Versión 1.1.0' : 'Versión 0.33.0'),
+              findsOneWidget,
+            );
           }
           expect(
             tester.widget<MaterialApp>(find.byType(MaterialApp)).title,
