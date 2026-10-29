@@ -427,63 +427,66 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets(
-    'long debtor and transfer lists scroll locally with totals kept in the receipt',
-    (tester) async {
-      store.debtorRows = [
-        for (var i = 0; i < 30; i++)
-          ReportDebtorBalance(
-            id: 'p$i',
-            name: 'Persona $i',
-            amountMinor: i == 29 ? 0 : 1000,
-          ),
-      ];
-      store.transferRows = [
-        for (final route in [
-          ('Caja', 'Nequi'),
-          ('Nequi', 'Caja'),
-          ('Caja', 'Caja mayor'),
-          ('Caja mayor', 'Caja'),
-          ('Nequi', 'Caja mayor'),
-          ('Caja mayor', 'Nequi'),
-        ].indexed)
-          ReportTransfer(
-            documentId: 't${route.$1}',
-            occurredAtUtc: DateTime.utc(2026, 10, 26),
-            sourceAccountId: route.$2.$1,
-            sourceName: route.$2.$1,
-            destinationAccountId: route.$2.$2,
-            destinationName: route.$2.$2,
-            amountMinor: 100,
-            note: '',
-          ),
-      ];
-      await open(tester);
-      final list = find.byKey(const Key('report-debtors-details'));
-      final receipt = find.byKey(const Key('report-receipt'));
-      final bottom = tester.getBottomRight(receipt).dy;
-      expect(bottom, lessThan(850));
-      expect(tester.getSize(list).height, lessThanOrEqualTo(120));
-      expect(
-        tester
-            .getSize(find.byKey(const Key('report-transfers-details')))
-            .height,
-        lessThanOrEqualTo(120),
-      );
-      await tester.drag(list, const Offset(0, -1800));
-      await tester.pumpAndSettle();
-      expect(find.text('Persona 29').hitTestable(), findsOneWidget);
-      expect(
-        find.byKey(const Key('report-debtors-total')).hitTestable(),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('report-transfers-total')).hitTestable(),
-        findsOneWidget,
-      );
-      expect(tester.getBottomRight(receipt).dy, bottom);
-      expect(value(tester, 'report-debtors-total'), 'COP 290,00');
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('all debtor rows expand the receipt without a nested scroll', (
+    tester,
+  ) async {
+    store.debtorRows = [
+      for (var i = 0; i < 30; i++)
+        ReportDebtorBalance(
+          id: 'p$i',
+          name: 'Persona $i',
+          amountMinor: i == 29 ? 0 : 1000,
+        ),
+    ];
+    store.transferRows = [
+      for (final route in [
+        ('Caja', 'Nequi'),
+        ('Nequi', 'Caja'),
+        ('Caja', 'Caja mayor'),
+        ('Caja mayor', 'Caja'),
+        ('Nequi', 'Caja mayor'),
+        ('Caja mayor', 'Nequi'),
+      ].indexed)
+        ReportTransfer(
+          documentId: 't${route.$1}',
+          occurredAtUtc: DateTime.utc(2026, 10, 26),
+          sourceAccountId: route.$2.$1,
+          sourceName: route.$2.$1,
+          destinationAccountId: route.$2.$2,
+          destinationName: route.$2.$2,
+          amountMinor: 100,
+          note: '',
+        ),
+    ];
+    await open(tester);
+    final list = find.byKey(const Key('report-debtors-details'));
+    final receipt = find.byKey(const Key('report-receipt'));
+    expect(tester.getSize(list).height, greaterThan(600));
+    expect(
+      find.descendant(of: list, matching: find.byType(Scrollable)),
+      findsNothing,
+    );
+    final lastPerson = find.byKey(const Key('report-debtor-p29'));
+    expect(
+      tester.getBottomRight(lastPerson).dy,
+      lessThan(tester.getBottomRight(receipt).dy),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('report-debtors-total'))).dy,
+      greaterThan(tester.getBottomRight(lastPerson).dy),
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('report-transfers-details'))).height,
+      lessThanOrEqualTo(120),
+    );
+    await tester.ensureVisible(lastPerson);
+    await tester.pumpAndSettle();
+    expect(find.text('Persona 29').hitTestable(), findsOneWidget);
+    expect(
+      find.byKey(const Key('report-debtors-total')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(value(tester, 'report-debtors-total'), 'COP 290,00');
+    expect(tester.takeException(), isNull);
+  });
 }

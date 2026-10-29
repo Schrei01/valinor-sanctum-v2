@@ -138,6 +138,21 @@ class _DebtorsPageState extends State<DebtorsPage> {
                 'Abre Deudores o pulsa Actualizar para cargar la información.',
               )
           else ...[
+            FinancialTotal(
+              label: 'Total deudas',
+              value: _money(
+                data.debtors.fold(
+                      0,
+                      (sum, person) => sum + person.balanceMinor,
+                    ) +
+                    data.unassignedLegacyMinor +
+                    data.charges
+                        .where((charge) => charge.debtorId == null)
+                        .fold(0, (sum, charge) => sum + charge.remainingMinor),
+              ),
+              valueKey: const Key('debtors-total'),
+            ),
+            const SizedBox(height: 16),
             for (final pending in data.pending)
               Card(
                 child: Padding(

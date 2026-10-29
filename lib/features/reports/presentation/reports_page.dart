@@ -508,24 +508,22 @@ class _ReportsPageState extends State<ReportsPage> {
               : 'Sin deudas asignadas en este corte.',
           style: _muted,
         ),
-      _compactDetails(
-        'report-debtors-details',
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final person in data.debtorBalances)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: Row(
-                  children: [
-                    Expanded(child: Text(person.name)),
-                    const SizedBox(width: 12),
-                    _amount('report-debtor-${person.id}', person.amountMinor),
-                  ],
-                ),
+      Column(
+        key: const Key('report-debtors-details'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final person in data.debtorBalances)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Row(
+                children: [
+                  Expanded(child: Text(person.name)),
+                  const SizedBox(width: 12),
+                  _amount('report-debtor-${person.id}', person.amountMinor),
+                ],
               ),
-          ],
-        ),
+            ),
+        ],
       ),
       const SizedBox(height: 6),
       FinancialTotal(

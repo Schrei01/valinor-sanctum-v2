@@ -1,7 +1,8 @@
 param(
     [string]$Version = '',
     [string]$ReleasePath = 'build\windows\x64\runner\Release',
-    [ValidateSet('Installed','Development')][string]$Edition = 'Installed'
+    [ValidateSet('Installed','Development')][string]$Edition = 'Installed',
+    [switch]$ArchiveOnly
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -213,6 +214,10 @@ No abras el ejecutable directamente desde build: ese directorio usa un perfil
 aislado junto a la compilación. Usa siempre el acceso de la raíz o dist.
 '@
 }
+if ($ArchiveOnly -and $Edition -eq 'Development') {
+    $instructions = $instructions.Replace('Abre Iniciar Valinor Sanctum.cmd desde la raíz del proyecto.',
+        'Entrega independiente: extrae la carpeta completa bajo dist y abre su ejecutable o el acceso específico de esta versión.')
+}
 $instructions | Set-Content -LiteralPath (Join-Path $bundleDirectory 'LEEME.txt') -Encoding utf8
 [ordered]@{
     version = $Version
@@ -226,7 +231,9 @@ $zipPath = Join-Path $distributionDirectory ('valinor-sanctum-2-' + $Version + $
 Assert-ProjectPath $zipPath
 if (Test-Path -LiteralPath $zipPath) { throw 'El ZIP ya existe; usa otra versión o conserva la entrega previa.' }
 Compress-Archive -LiteralPath $bundleDirectory -DestinationPath $zipPath -CompressionLevel Optimal
-& (Join-Path $PSScriptRoot 'publish-local-bundle.ps1') -ArchivePath $zipPath -Edition $Edition | Out-Null
+if (-not $ArchiveOnly) {
+    & (Join-Path $PSScriptRoot 'publish-local-bundle.ps1') -ArchivePath $zipPath -Edition $Edition | Out-Null
+}
 Assert-ProjectPath $stagingDirectory
 Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
 [pscustomobject]@{
@@ -237,5 +244,5 @@ Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
     sha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
     includes_synthetic_profiles = $false
     excludes_flutter_debug_artifacts = $true
-    current_executable = (Join-Path $distributionDirectory ($(if ($Edition -eq 'Installed') { 'ValinorSanctum2-Produccion' } else { 'ValinorSanctum2' }) + '\valinor_sanctum_2.exe'))
+    current_executable = if ($ArchiveOnly) { $null } else { (Join-Path $distributionDirectory ($(if ($Edition -eq 'Installed') { 'ValinorSanctum2-Produccion' } else { 'ValinorSanctum2' }) + '\valinor_sanctum_2.exe')) }
 } | ConvertTo-Json

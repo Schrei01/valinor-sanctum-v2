@@ -1,0 +1,21 @@
+{
+  "edition": "development",
+  "version": "0.31.0+47",
+  "schemaVersion": 18,
+  "schemaChanged": false,
+  "widgetTestsPassed": 29,
+  "syntheticRenderTestsPassed": 2,
+  "syntheticRendersInspected": true,
+  "analyze": "no issues",
+  "formatFiles": 201,
+  "formatChanges": 0,
+  "windowsBuild": "release without overrides",
+  "distributionFilesMatched": 19,
+  "protectedFilesUnchanged": 41,
+  "development030Preserved": true,
+  "production100Preserved": true,
+  "nativeDevelopmentWindowResponding": true,
+  "nativeVisualInspection": false,
+  "commercialTestsOnOperationalData": false,
+  "fullSuiteRerun": false
+}

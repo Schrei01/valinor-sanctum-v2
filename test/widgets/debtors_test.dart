@@ -112,6 +112,64 @@ void main() {
   );
 
   testWidgets(
+    'total includes every person and unassigned debt, survives filtering and updates after a payment',
+    (t) async {
+      store.legacy = 500;
+      store.people.addAll([
+        const DebtorSummary(id: 'ana', name: 'Ana', balanceMinor: 20000),
+        const DebtorSummary(
+          id: 'luis',
+          name: 'Luis',
+          balanceMinor: 10000,
+          isActive: false,
+        ),
+      ]);
+      store.charges.addAll([
+        DebtorCharge(
+          receivableId: 'assigned',
+          label: 'Venta',
+          nameSnapshot: 'Ana',
+          occurredAtUtc: DateTime.utc(2026, 10, 29),
+          originalCreditMinor: 20000,
+          remainingMinor: 20000,
+          debtorId: 'ana',
+        ),
+        DebtorCharge(
+          receivableId: 'unassigned',
+          label: 'Venta',
+          nameSnapshot: 'Sin asignar',
+          occurredAtUtc: DateTime.utc(2026, 10, 29),
+          originalCreditMinor: 3000,
+          remainingMinor: 1500,
+        ),
+      ]);
+      await open(t);
+      String total() =>
+          t.widget<Text>(find.byKey(const Key('debtors-total'))).data!;
+      expect(total(), 'COP 320,00');
+      await enter(t, 'debtor-search', 'Ana');
+      expect(total(), 'COP 320,00');
+      await tap(t, find.byKey(const Key('debtor-person-ana')));
+      await enter(t, 'debtor-payment-amount', '50');
+      await tap(t, option());
+      await tap(t, find.text('Efectivo').last);
+      await tap(t, find.byKey(const Key('debtor-confirm-payment')));
+      expect(total(), 'COP 270,00');
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets('empty debt portfolio displays zero', (t) async {
+    store.legacy = 0;
+    await open(t, size: const Size(400, 900));
+    expect(
+      t.widget<Text>(find.byKey(const Key('debtors-total'))).data,
+      'COP 0,00',
+    );
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets(
     'register person with zero debt and keep history after blocking fiado',
     (t) async {
       await open(t);
