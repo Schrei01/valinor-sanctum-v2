@@ -64,7 +64,7 @@ void main() {
               findsOneWidget,
             );
             expect(
-              find.text(production ? 'Versión 1.1.0' : 'Versión 0.35.0'),
+              find.text(production ? 'Versión 1.2.0' : 'Versión 0.35.0'),
               findsOneWidget,
             );
           }
