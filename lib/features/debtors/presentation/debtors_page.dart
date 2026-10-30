@@ -309,7 +309,9 @@ class _DebtorsPageState extends State<DebtorsPage> {
   );
   Widget _people(DebtorsSnapshot data) {
     final people = data.debtors
-        .where((p) => p.name.toLowerCase().contains(_query))
+        .where(
+          (p) => p.balanceMinor > 0 && p.name.toLowerCase().contains(_query),
+        )
         .toList();
     return Card(
       child: Padding(
@@ -325,7 +327,7 @@ class _DebtorsPageState extends State<DebtorsPage> {
             if (people.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(12),
-                child: Text('No hay personas que mostrar.'),
+                child: Text('No hay personas con deuda que mostrar.'),
               ),
             for (final p in people)
               ListTile(
@@ -608,6 +610,14 @@ class _DebtorsPageState extends State<DebtorsPage> {
     final form = GlobalKey<FormState>(),
         name = TextEditingController(text: person?.name ?? ''),
         initial = TextEditingController(text: '0');
+    final nameFocus = FocusNode();
+    DebtorSummary? existing;
+    String nameKey(String value) =>
+        value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+    DebtorSummary? matchingPerson(String value) =>
+        (widget.controller.snapshot ?? data).debtors
+            .where((p) => nameKey(p.name) == nameKey(value))
+            .firstOrNull;
     PreviousDebtSource? source;
     String? error;
     var busy = false;
@@ -641,74 +651,118 @@ class _DebtorsPageState extends State<DebtorsPage> {
                             ),
                           ),
                         ),
-                      TextFormField(
-                        key: const Key('debtor-name'),
-                        controller: name,
-                        enabled: person == null && !busy,
-                        maxLength: 120,
-                        decoration: const InputDecoration(
-                          labelText: 'Nombre de la persona',
-                        ),
-                        validator: (v) => (v?.trim().isEmpty ?? true)
-                            ? 'Escribe un nombre.'
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        key: const Key('debtor-initial-amount'),
-                        controller: initial,
-                        inputFormatters: [const GroupedNumberFormatter()],
-                        enabled: !busy,
-                        decoration: InputDecoration(
-                          labelText: 'Deuda anterior',
-                          helperText: person == null
-                              ? 'Usa 0 si comienza sin deuda.'
-                              : null,
-                        ),
-                        onChanged: (_) => setDialog(() {}),
-                        validator: (v) {
-                          final e = inventoryAmountError(v, widget.profile);
-                          if (e != null) return e;
-                          return person != null && _parse(v!) == 0
-                              ? 'Indica un importe positivo.'
-                              : null;
+                      Autocomplete<DebtorSummary>(
+                        textEditingController: name,
+                        focusNode: nameFocus,
+                        displayStringForOption: (p) => p.name,
+                        optionsBuilder: (text) {
+                          if (person != null ||
+                              busy ||
+                              matchingPerson(text.text) != null) {
+                            return const Iterable<DebtorSummary>.empty();
+                          }
+                          final query = nameKey(text.text);
+                          return (widget.controller.snapshot ?? data).debtors
+                              .where((p) => nameKey(p.name).contains(query));
                         },
+                        onSelected: (p) => setDialog(() {
+                          existing = p;
+                          initial.text = '0';
+                          source = null;
+                          error = null;
+                        }),
+                        fieldViewBuilder: (context, text, focus, submit) =>
+                            TextFormField(
+                              key: const Key('debtor-name'),
+                              controller: text,
+                              focusNode: focus,
+                              enabled: person == null && !busy,
+                              maxLength: 120,
+                              decoration: const InputDecoration(
+                                labelText: 'Nombre de la persona',
+                                hintText:
+                                    'Buscar una persona anterior o escribir un nombre nuevo',
+                              ),
+                              onChanged: (value) => setDialog(() {
+                                existing = matchingPerson(value);
+                                if (existing != null) {
+                                  initial.text = '0';
+                                  source = null;
+                                }
+                              }),
+                              onFieldSubmitted: (_) => submit(),
+                              validator: (v) => (v?.trim().isEmpty ?? true)
+                                  ? 'Escribe un nombre.'
+                                  : null,
+                            ),
                       ),
-                      if (_tryAmount(initial.text) > 0) ...[
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<PreviousDebtSource>(
-                          key: const Key('debtor-initial-source'),
-                          initialValue: source,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Procedencia de esta deuda',
+                      if (existing != null)
+                        InventoryNotice(
+                          key: const Key('debtor-existing-person'),
+                          kind: InventoryNoticeKind.information,
+                          text:
+                              '${existing!.name} ya está registrada. Deuda pendiente: ${_money(existing!.balanceMinor)}${existing!.isActive ? '' : ' · Fiado bloqueado'}. Abre su cuenta sin crear otra ni modificar su saldo.',
+                        ),
+                      if (existing == null) ...[
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          key: const Key('debtor-initial-amount'),
+                          controller: initial,
+                          inputFormatters: [const GroupedNumberFormatter()],
+                          enabled: !busy,
+                          decoration: InputDecoration(
+                            labelText: 'Deuda anterior',
+                            helperText: person == null
+                                ? 'Usa 0 si comienza sin deuda.'
+                                : null,
                           ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: PreviousDebtSource.includedInLegacy,
-                              child: Text('Ya incluida en la cartera anterior'),
+                          onChanged: (_) => setDialog(() {}),
+                          validator: (v) {
+                            final e = inventoryAmountError(v, widget.profile);
+                            if (e != null) return e;
+                            return person != null && _parse(v!) == 0
+                                ? 'Indica un importe positivo.'
+                                : null;
+                          },
+                        ),
+                        if (_tryAmount(initial.text) > 0) ...[
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<PreviousDebtSource>(
+                            key: const Key('debtor-initial-source'),
+                            initialValue: source,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Procedencia de esta deuda',
                             ),
-                            DropdownMenuItem(
-                              value: PreviousDebtSource.additional,
-                              child: Text('Deuda adicional no registrada'),
-                            ),
-                          ],
-                          onChanged: busy
-                              ? null
-                              : (v) => setDialog(() => source = v),
-                          validator: (v) => v == null
-                              ? 'Indica si ya estaba incluida.'
-                              : null,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Cartera anterior disponible para asignar: ${_money(data.unassignedLegacyMinor)}',
-                        ),
-                        Text(
-                          source == PreviousDebtSource.additional
-                              ? 'Esta opción aumenta la deuda total. No registra ingreso de dinero.'
-                              : 'Identifica una parte de la cartera anterior sin volver a sumarla.',
-                        ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: PreviousDebtSource.includedInLegacy,
+                                child: Text(
+                                  'Ya incluida en la cartera anterior',
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: PreviousDebtSource.additional,
+                                child: Text('Deuda adicional no registrada'),
+                              ),
+                            ],
+                            onChanged: busy
+                                ? null
+                                : (v) => setDialog(() => source = v),
+                            validator: (v) => v == null
+                                ? 'Indica si ya estaba incluida.'
+                                : null,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Cartera anterior disponible para asignar: ${_money(data.unassignedLegacyMinor)}',
+                          ),
+                          Text(
+                            source == PreviousDebtSource.additional
+                                ? 'Esta opción aumenta la deuda total. No registra ingreso de dinero.'
+                                : 'Identifica una parte de la cartera anterior sin volver a sumarla.',
+                          ),
+                        ],
                       ],
                     ],
                   ),
@@ -726,6 +780,14 @@ class _DebtorsPageState extends State<DebtorsPage> {
                     ? null
                     : () async {
                         if (!form.currentState!.validate()) return;
+                        final registered = person == null
+                            ? matchingPerson(name.text)
+                            : null;
+                        if (registered != null) {
+                          Navigator.pop(dialogContext);
+                          _select(registered.id);
+                          return;
+                        }
                         setDialog(() {
                           busy = true;
                           error = null;
@@ -757,7 +819,13 @@ class _DebtorsPageState extends State<DebtorsPage> {
                           });
                         }
                       },
-                child: Text(busy ? 'Guardando…' : 'Guardar'),
+                child: Text(
+                  busy
+                      ? 'Guardando…'
+                      : existing != null
+                      ? 'Ver cuenta'
+                      : 'Guardar',
+                ),
               ),
             ],
           ),
@@ -767,6 +835,7 @@ class _DebtorsPageState extends State<DebtorsPage> {
       await route.completed;
     } finally {
       name.dispose();
+      nameFocus.dispose();
       initial.dispose();
     }
   }

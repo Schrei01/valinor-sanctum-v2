@@ -21,7 +21,7 @@ void main() {
           const DebtorSummary(
             id: 'person',
             name: 'Persona del módulo',
-            balanceMinor: 0,
+            balanceMinor: 100,
           ),
         );
       final workspace = FakeWorkspaceStore()
@@ -170,6 +170,121 @@ void main() {
   });
 
   testWidgets(
+    'zero balances stay saved but are absent from the list and search',
+    (t) async {
+      store.legacy = 0;
+      store.people.addAll(const [
+        DebtorSummary(id: 'paid', name: 'Persona pagada', balanceMinor: 0),
+        DebtorSummary(
+          id: 'due',
+          name: 'Persona pendiente',
+          balanceMinor: 10000,
+        ),
+        DebtorSummary(
+          id: 'blocked',
+          name: 'Persona bloqueada',
+          balanceMinor: 5000,
+          isActive: false,
+        ),
+      ]);
+      await open(t);
+      expect(find.byKey(const Key('debtor-person-paid')), findsNothing);
+      expect(find.byKey(const Key('debtor-person-due')), findsOneWidget);
+      expect(find.byKey(const Key('debtor-person-blocked')), findsOneWidget);
+      expect(
+        t.widget<Text>(find.byKey(const Key('debtors-total'))).data,
+        'COP 150,00',
+      );
+      await enter(t, 'debtor-search', 'pagada');
+      expect(find.byKey(const Key('debtor-person-paid')), findsNothing);
+      expect(store.people, hasLength(3));
+      expect(store.inputs, isEmpty);
+    },
+  );
+
+  for (final width in [1120.0, 400.0]) {
+    testWidgets(
+      'register suggests paid and blocked people and opens the original account at $width',
+      (t) async {
+        store.legacy = 0;
+        store.people.add(
+          const DebtorSummary(
+            id: 'paid',
+            name: 'Ana anterior',
+            balanceMinor: 0,
+            isActive: false,
+          ),
+        );
+        store.payments.add(
+          DebtorPayment(
+            id: 'old-payment',
+            debtorId: 'paid',
+            nameSnapshot: 'Ana anterior',
+            amountMinor: 10000,
+            occurredAtUtc: DateTime.utc(2026, 10, 20),
+            paymentLabel: 'Efectivo',
+          ),
+        );
+        await open(t, size: Size(width, 1100));
+        expect(find.byKey(const Key('debtor-person-paid')), findsNothing);
+        await tap(t, find.byKey(const Key('debtor-add')));
+        await enter(t, 'debtor-name', 'Ana');
+        expect(find.text('Ana anterior'), findsOneWidget);
+        await tap(t, find.text('Ana anterior'));
+        expect(find.byKey(const Key('debtor-existing-person')), findsOneWidget);
+        expect(find.byKey(const Key('debtor-initial-amount')), findsNothing);
+        expect(find.text('Ver cuenta'), findsOneWidget);
+        await tap(t, find.byKey(const Key('debtor-create-confirm')));
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.text('Ana anterior'), findsOneWidget);
+        expect(find.text('Habilitar fiado'), findsOneWidget);
+        expect(find.textContaining('COP 100,00 · Efectivo'), findsOneWidget);
+        expect(store.people.single.id, 'paid');
+        expect(store.people.single.isActive, isFalse);
+        expect(store.inputs, isEmpty);
+        expect(store.confirmed, isEmpty);
+        expect(t.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'exact normalized name reuses the account; editing it to a new name still allows registration',
+    (t) async {
+      store.people.add(
+        const DebtorSummary(
+          id: 'existing',
+          name: 'Ana anterior',
+          balanceMinor: 10000,
+        ),
+      );
+      await open(t);
+      await tap(t, find.byKey(const Key('debtor-add')));
+      await enter(t, 'debtor-name', '  ANA   ANTERIOR  ');
+      expect(find.text('Ver cuenta'), findsOneWidget);
+      expect(find.byKey(const Key('debtor-initial-amount')), findsNothing);
+      await tap(t, find.byKey(const Key('debtor-create-confirm')));
+      expect(store.inputs, isEmpty);
+      expect(
+        t.widget<Text>(find.byKey(const Key('debtor-balance'))).data,
+        'COP 100,00',
+      );
+      await tap(t, find.byKey(const Key('debtor-add')));
+      await enter(t, 'debtor-name', 'Ana');
+      await tap(t, find.text('Ana anterior').last);
+      await enter(t, 'debtor-name', 'Persona nueva');
+      expect(find.text('Ver cuenta'), findsNothing);
+      expect(find.byKey(const Key('debtor-initial-amount')), findsOneWidget);
+      await tap(t, find.byKey(const Key('debtor-create-confirm')));
+      expect(store.people, hasLength(2));
+      expect(store.inputs.single.kind, 'create');
+      expect(store.inputs.single.name, 'Persona nueva');
+      expect(store.inputs.single.amountMinor, 0);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'register person with zero debt and keep history after blocking fiado',
     (t) async {
       await open(t);
@@ -235,6 +350,14 @@ void main() {
       await tap(t, find.byKey(const Key('debtor-confirm-payment')));
       expect(store.people.single.balanceMinor, 0);
       expect(store.confirmed, hasLength(2));
+      expect(find.byKey(const Key('debtor-person-ana')), findsNothing);
+      await tap(t, find.byKey(const Key('debtor-add')));
+      await enter(t, 'debtor-name', 'Ana');
+      await tap(t, find.text('Ana sintética').last);
+      await tap(t, find.byKey(const Key('debtor-create-confirm')));
+      expect(store.confirmed, hasLength(2));
+      expect(store.payments, hasLength(2));
+      expect(store.people.single.balanceMinor, 0);
       expect(t.takeException(), isNull);
     },
   );
