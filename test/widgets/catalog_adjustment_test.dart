@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:valinor_sanctum_2/app/sanctum_app.dart';
 import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart';
 import 'package:valinor_sanctum_2/features/inventory/domain/stock_adjustment_store.dart';
+import 'package:valinor_sanctum_2/features/inventory/presentation/inventory_widgets.dart';
 import 'package:valinor_sanctum_2/features/workspace/application/workspace_controller.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/workspace_store.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
@@ -155,6 +156,10 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Quedarán 3 unidades.'), findsOneWidget);
     await tap(t, find.byKey(const Key('stock-adjustment-submit')));
+    expect(
+      t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
+      InventoryNotice.informationBackground,
+    );
     expect(
       inventory.stock.singleWhere((s) => s.productId == 'cola').quantity,
       3,

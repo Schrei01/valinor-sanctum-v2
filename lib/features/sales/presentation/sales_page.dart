@@ -175,16 +175,10 @@ class _SalesPageState extends State<SalesPage> {
                   InventoryNotice(text: controller.operationError!),
                 if (controller.operationNotice != null &&
                     !awaitingUnlockedRevision)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: Text(
-                      controller.operationNotice!,
-                      key: const Key('sale-notice'),
-                      style: const TextStyle(
-                        color: Color(0xFF183D35),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  InventoryNotice(
+                    key: const Key('sale-notice'),
+                    text: controller.operationNotice!,
+                    kind: InventoryNoticeKind.information,
                   ),
                 _accounts(data),
                 const SizedBox(height: 24),

@@ -23,6 +23,7 @@ import '../features/treasury/presentation/treasury_page.dart';
 const _forest = Color(0xFF183D35);
 const _gold = Color(0xFFD8BB80);
 const _paper = Color(0xFFF5F5F0);
+final _colorScheme = ColorScheme.fromSeed(seedColor: _forest);
 const _productionBuild = String.fromEnvironment('SANCTUM_ENV') == 'installed';
 const _destinations = [
   (Icons.inventory_2_outlined, 'Catálogo'),
@@ -49,7 +50,11 @@ class SanctumApp extends StatelessWidget {
     title: 'Valinor Sanctum — ${isProduction ? 'Producción' : 'Desarrollo'}',
     theme: ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: _forest),
+      colorScheme: _colorScheme,
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: _colorScheme.errorContainer,
+        contentTextStyle: TextStyle(color: _colorScheme.onErrorContainer),
+      ),
       scaffoldBackgroundColor: _paper,
       inputDecorationTheme: const InputDecorationTheme(
         border: OutlineInputBorder(),
@@ -618,7 +623,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    isProduction ? 'Versión 1.1.0' : 'Versión 0.34.0',
+                    isProduction ? 'Versión 1.1.0' : 'Versión 0.35.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

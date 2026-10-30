@@ -36,31 +36,63 @@ String? inventoryAmountError(String? value, BusinessProfile profile) {
   }
 }
 
+enum InventoryNoticeKind { information, error }
+
 class InventoryNotice extends StatelessWidget {
-  const InventoryNotice({super.key, required this.text, this.onRetry});
+  const InventoryNotice({
+    super.key,
+    required this.text,
+    this.onRetry,
+    this.kind = InventoryNoticeKind.error,
+  }) : content = null,
+       compact = false,
+       bottomSpacing = 16;
+  const InventoryNotice.content({
+    super.key,
+    required Widget this.content,
+    this.kind = InventoryNoticeKind.information,
+    this.compact = true,
+    this.bottomSpacing = 0,
+  }) : text = '',
+       onRetry = null;
+  static const informationBackground = Color(0xFFE3F3E8);
+  static const informationForeground = Color(0xFF174D32);
   final String text;
   final VoidCallback? onRetry;
+  final InventoryNoticeKind kind;
+  final Widget? content;
+  final bool compact;
+  final double bottomSpacing;
 
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    margin: const EdgeInsets.only(bottom: 16),
-    padding: const EdgeInsets.all(16),
+    margin: EdgeInsets.only(bottom: bottomSpacing),
+    padding: EdgeInsets.all(compact ? 12 : 16),
     decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.errorContainer,
+      color: kind == InventoryNoticeKind.information
+          ? informationBackground
+          : Theme.of(context).colorScheme.errorContainer,
       borderRadius: BorderRadius.circular(10),
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(text),
-        if (onRetry != null)
-          TextButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Actualizar'),
-          ),
-      ],
+    child: DefaultTextStyle.merge(
+      style: TextStyle(
+        color: kind == InventoryNoticeKind.information
+            ? informationForeground
+            : Theme.of(context).colorScheme.onErrorContainer,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          content ?? Text(text),
+          if (onRetry != null)
+            TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Actualizar'),
+            ),
+        ],
+      ),
     ),
   );
 }

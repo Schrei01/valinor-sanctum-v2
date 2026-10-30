@@ -159,9 +159,9 @@ class _EventsPageState extends State<EventsPage> {
               onRetry: controller.busy ? null : controller.load,
             ),
           if (controller.message != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text(controller.message!),
+            InventoryNotice(
+              text: controller.message!,
+              kind: InventoryNoticeKind.information,
             ),
           if (controller.uncertainCreation != null)
             Card(

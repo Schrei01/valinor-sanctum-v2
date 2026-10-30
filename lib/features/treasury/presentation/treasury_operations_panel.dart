@@ -161,6 +161,7 @@ class _TreasuryOperationsPanelState extends State<TreasuryOperationsPanel> {
             InventoryNotice(
               key: const Key('treasury-operation-notice'),
               text: controller.operationNotice!,
+              kind: InventoryNoticeKind.information,
             ),
           ],
           if (controller.operationError != null) ...[

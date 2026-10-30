@@ -105,9 +105,9 @@ class _DebtorsPageState extends State<DebtorsPage> {
           if (c.error != null)
             InventoryNotice(text: c.error!, onRetry: c.busy ? null : c.load),
           if (c.message != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text(c.message!),
+            InventoryNotice(
+              text: c.message!,
+              kind: InventoryNoticeKind.information,
             ),
           if (c.uncertain != null)
             Card(

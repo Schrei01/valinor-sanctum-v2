@@ -68,16 +68,10 @@ class QuickSalesPage extends StatelessWidget {
                 onRetry: controller.loading ? null : controller.load,
               ),
             if (controller.notice != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  controller.notice!,
-                  key: const Key('quick-notice'),
-                  style: const TextStyle(
-                    color: Color(0xFF183D35),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              InventoryNotice(
+                key: const Key('quick-notice'),
+                text: controller.notice!,
+                kind: InventoryNoticeKind.information,
               ),
             if (data == null)
               if (controller.loading)
@@ -95,11 +89,14 @@ class QuickSalesPage extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    color: InventoryNotice.informationBackground,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Text(
                     'Todo listo. Pulsa Nueva cuenta para atender una venta.',
+                    style: TextStyle(
+                      color: InventoryNotice.informationForeground,
+                    ),
                   ),
                 ),
               for (final account in controller.accounts)
@@ -260,14 +257,14 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     _labelFocus.unfocus();
   }
 
-  Widget _accountField(bool locked, bool hasCredit) {
+  String? _personHint(bool hasCredit) {
     final account = widget.account;
     final people = widget.data.debtors.where((p) => p.isActive).toList();
     final selected = widget.data.debtors
         .where((p) => p.id == account.debtorId)
         .firstOrNull;
     final linked = account.debtorId != null;
-    final helper = linked
+    return linked
         ? selected == null || !selected.isActive
               ? '${account.customerName} · Fiado bloqueado'
               : 'Titular: ${selected.name} · Debe ${inventoryMoney(selected.balanceMinor, widget.profile)}'
@@ -276,6 +273,11 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
               ? 'Primero registra una persona en Deudores.'
               : 'Selecciona una persona de Deudores para asignarle lo fiado.'
         : null;
+  }
+
+  Widget _accountField(bool locked) {
+    final account = widget.account;
+    final people = widget.data.debtors.where((p) => p.isActive).toList();
     return LayoutBuilder(
       builder: (context, constraints) => RawAutocomplete<DebtorSummary>(
         textEditingController: _label,
@@ -300,8 +302,6 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
             hintText: 'Nombre de cuenta o persona',
             counterText: '',
             isDense: true,
-            helperText: helper,
-            helperMaxLines: 2,
             suffixIcon: PopupMenuButton<String>(
               key: ValueKey('quick-person-picker-${account.id}'),
               tooltip: 'Elegir persona de Deudores',
@@ -385,6 +385,10 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     final hasCredit = controller.hasCreditFor(account);
     final credit = controller.creditTotalFor(account);
     final isSplit = account.isPaymentSplit;
+    final personHint = _personHint(hasCredit);
+    final debtBlocked =
+        hasCredit &&
+        !widget.data.debtors.any((p) => p.id == account.debtorId && p.isActive);
     final singlePayment = account.singlePaymentOptionId;
     final paymentOptions = widget.data.paymentOptions
         .where((p) => p.isActive || p.id == singlePayment)
@@ -428,7 +432,7 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
           children: [
             Row(
               children: [
-                Expanded(child: _accountField(locked, hasCredit)),
+                Expanded(child: _accountField(locked)),
                 const SizedBox(width: 12),
                 Tooltip(
                   message: controller.isSaving(account.id)
@@ -561,50 +565,37 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                   ),
                 ),
                 if (pending == null)
-                  OutlinedButton.icon(
-                    key: ValueKey('quick-split-account-${account.id}'),
-                    icon: const Icon(Icons.call_split, size: 18),
-                    label: Text(isSplit ? 'Editar división' : 'Dividir cuenta'),
-                    onPressed:
-                        locked ||
-                            controller.loadError != null ||
-                            total <= BigInt.zero ||
-                            total > BigInt.from(0x7fffffffffffffff)
-                        ? null
-                        : () async {
-                            final result =
-                                await showDialog<SplitPaymentSelection>(
-                                  context: context,
-                                  builder: (_) => SplitPaymentDialog(
-                                    account: account,
-                                    data: widget.data,
-                                    profile: widget.profile,
-                                  ),
-                                );
-                            if (!mounted || result == null) return;
-                            controller.divideAccount(account.id, result.parts);
-                          },
-                  ),
-                if (isSplit && pending == null)
-                  TextButton(
-                    key: ValueKey('quick-single-payment-${account.id}'),
-                    onPressed: locked
-                        ? null
-                        : () => controller.returnToSinglePayment(account.id),
-                    child: const Text('Volver a pago único'),
-                  ),
-                if (hasCredit && !account.needsPaymentReview)
-                  Text(
-                    'Cobrado: ${_money(total - credit)} · Deudas: ${_money(credit)}',
-                    key: ValueKey('quick-credit-summary-${account.id}'),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                if (groups.length > 1 && !account.needsPaymentReview)
-                  Text(
-                    groups.entries
-                        .map((part) => '${part.key}: ${_money(part.value)}')
-                        .join(' · '),
-                    style: Theme.of(context).textTheme.bodySmall,
+                  SizedBox(
+                    width: 180,
+                    child: OutlinedButton.icon(
+                      key: ValueKey('quick-split-account-${account.id}'),
+                      icon: const Icon(Icons.call_split, size: 18),
+                      label: Text(
+                        isSplit ? 'Editar división' : 'Dividir cuenta',
+                      ),
+                      onPressed:
+                          locked ||
+                              controller.loadError != null ||
+                              total <= BigInt.zero ||
+                              total > BigInt.from(0x7fffffffffffffff)
+                          ? null
+                          : () async {
+                              final result =
+                                  await showDialog<SplitPaymentSelection>(
+                                    context: context,
+                                    builder: (_) => SplitPaymentDialog(
+                                      account: account,
+                                      data: widget.data,
+                                      profile: widget.profile,
+                                    ),
+                                  );
+                              if (!mounted || result == null) return;
+                              controller.divideAccount(
+                                account.id,
+                                result.parts,
+                              );
+                            },
+                    ),
                   ),
                 if (pending == null)
                   FilledButton.icon(
@@ -662,6 +653,52 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                   ),
               ],
             ),
+            if (debtBlocked && personHint != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: InventoryNotice(text: personHint),
+              ),
+            if ((personHint != null && !debtBlocked) ||
+                (hasCredit && !account.needsPaymentReview) ||
+                (groups.length > 1 && !account.needsPaymentReview) ||
+                (isSplit && pending == null))
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: InventoryNotice.content(
+                  key: ValueKey('quick-payment-details-${account.id}'),
+                  content: Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (personHint != null && !debtBlocked) Text(personHint),
+                      if (hasCredit && !account.needsPaymentReview)
+                        Text(
+                          'Cobrado: ${_money(total - credit)} · Deudas: ${_money(credit)}',
+                          key: ValueKey('quick-credit-summary-${account.id}'),
+                        ),
+                      if (groups.length > 1 && !account.needsPaymentReview)
+                        Text(
+                          groups.entries
+                              .map(
+                                (part) => '${part.key}: ${_money(part.value)}',
+                              )
+                              .join(' · '),
+                        ),
+                      if (isSplit && pending == null)
+                        TextButton(
+                          key: ValueKey('quick-single-payment-${account.id}'),
+                          onPressed: locked
+                              ? null
+                              : () => controller.returnToSinglePayment(
+                                  account.id,
+                                ),
+                          child: const Text('Volver a pago único'),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),

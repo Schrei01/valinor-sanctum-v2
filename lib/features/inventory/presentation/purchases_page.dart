@@ -205,16 +205,10 @@ class _PurchasesPageState extends State<PurchasesPage> {
             if (controller.operationError != null)
               InventoryNotice(text: controller.operationError!),
             if (controller.operationNotice != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: Text(
-                  controller.operationNotice!,
-                  key: const Key('intake-notice'),
-                  style: const TextStyle(
-                    color: Color(0xFF183D35),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              InventoryNotice(
+                key: const Key('intake-notice'),
+                text: controller.operationNotice!,
+                kind: InventoryNoticeKind.information,
               ),
             if (data == null)
               if (controller.loading)

@@ -35,6 +35,17 @@ void main() {
             SanctumApp(controller: controller, isProduction: production),
           );
           await tester.pumpAndSettle();
+          final appTheme = tester
+              .widget<MaterialApp>(find.byType(MaterialApp))
+              .theme!;
+          expect(
+            appTheme.snackBarTheme.backgroundColor,
+            appTheme.colorScheme.errorContainer,
+          );
+          expect(
+            appTheme.snackBarTheme.contentTextStyle!.color,
+            appTheme.colorScheme.onErrorContainer,
+          );
           expect(
             find.text(production ? 'Producción' : 'Desarrollo'),
             findsOneWidget,
@@ -53,7 +64,7 @@ void main() {
               findsOneWidget,
             );
             expect(
-              find.text(production ? 'Versión 1.1.0' : 'Versión 0.34.0'),
+              find.text(production ? 'Versión 1.1.0' : 'Versión 0.35.0'),
               findsOneWidget,
             );
           }

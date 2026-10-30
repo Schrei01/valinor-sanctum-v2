@@ -136,8 +136,10 @@ class CatalogPageState extends State<CatalogPage> {
       if (done == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
+            backgroundColor: InventoryNotice.informationBackground,
             content: Text(
-              'Unidades descontadas. No se registró una venta ni se movió dinero.',
+              'Inventario corregido. No se registró una compra ni una venta, ni se movió dinero.',
+              style: TextStyle(color: InventoryNotice.informationForeground),
             ),
           ),
         );
