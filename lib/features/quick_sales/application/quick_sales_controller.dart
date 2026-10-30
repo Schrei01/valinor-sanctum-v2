@@ -26,8 +26,18 @@ class QuickSalesController extends ChangeNotifier {
   bool _defaultsReady = false;
   int _readGeneration = 0;
 
-  List<QuickSaleAccount> get accounts =>
-      List.unmodifiable(_cards.values.map((card) => card.account));
+  List<QuickSaleAccount> get accounts {
+    final values = _cards.values.map((card) => card.account).toList();
+    final positions = {for (var i = 0; i < values.length; i++) values[i].id: i};
+    values.sort((a, b) {
+      final order = (b.createdAtUtc ?? DateTime.utc(1)).compareTo(
+        a.createdAtUtc ?? DateTime.utc(1),
+      );
+      return order != 0 ? order : positions[a.id]!.compareTo(positions[b.id]!);
+    });
+    return List.unmodifiable(values);
+  }
+
   bool get hasUnsavedChanges => _cards.values.any((card) => card.dirty);
   bool isLocked(String id) =>
       _cards[id]?.pending != null || (_cards[id]?.acting ?? false);
@@ -142,12 +152,20 @@ class QuickSalesController extends ChangeNotifier {
     }
     final id = InventoryIds.next();
     final firstLine = _emptyLine();
+    var createdAt = DateTime.now().toUtc();
+    for (final card in _cards.values) {
+      final prior = card.account.createdAtUtc;
+      if (prior != null && !createdAt.isAfter(prior)) {
+        createdAt = prior.add(const Duration(microseconds: 1));
+      }
+    }
     final account = QuickSaleAccount(
       id: id,
       label: 'Cuenta $number',
       revision: 0,
       status: 'open',
       updatedAtUtc: DateTime.now().toUtc(),
+      createdAtUtc: createdAt,
       lines: [firstLine],
       paymentMode: 'single',
       accountPaymentOptionId: firstLine.paymentOptionId,
@@ -413,6 +431,7 @@ class QuickSalesController extends ChangeNotifier {
           card.uncertainSave ??
           SaveQuickSaleAccount(
             id: card.account.id,
+            createdAtUtc: card.account.createdAtUtc,
             label: card.account.label,
             customerName: card.account.customerName,
             debtorId: card.account.debtorId,
@@ -740,6 +759,7 @@ class QuickSalesController extends ChangeNotifier {
     revision: revision ?? current.revision,
     status: current.status,
     updatedAtUtc: current.updatedAtUtc,
+    createdAtUtc: current.createdAtUtc,
     lines: lines ?? current.lines,
     confirmedDocumentId: current.confirmedDocumentId,
     paymentMode: paymentMode ?? current.paymentMode,

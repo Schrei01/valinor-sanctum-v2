@@ -104,6 +104,32 @@ void main() {
         (widget.key! as ValueKey<String>).value.startsWith(prefix),
   );
 
+  testWidgets(
+    'adding first preserves the older account editor and its entered data',
+    (tester) async {
+      await open(tester);
+      final old = controller.addAccount()!;
+      await tester.pumpAndSettle();
+      final oldField = find.byKey(ValueKey('quick-label-$old'));
+      await tester.enterText(oldField, 'Cuenta conservada');
+      await tester.pumpAndSettle();
+      final before = tester.element(oldField);
+      final newer = controller.addAccount()!;
+      await tester.pumpAndSettle();
+      expect(controller.accounts.map((a) => a.id), [newer, old]);
+      expect(identical(tester.element(oldField), before), isTrue);
+      expect(controller.accounts.last.label, 'Cuenta conservada');
+      final newCard = find.byKey(ValueKey('quick-account-position-$newer'));
+      final oldCard = find.byKey(ValueKey('quick-account-position-$old'));
+      expect(
+        tester.getTopLeft(newCard).dy,
+        lessThan(tester.getTopLeft(oldCard).dy),
+      );
+      expect(await controller.flushAll(), isTrue);
+      await tester.pumpAndSettle();
+    },
+  );
+
   Future<void> tap(WidgetTester tester, Finder target) async {
     await tester.ensureVisible(target);
     await tester.tap(target);
@@ -377,7 +403,7 @@ void main() {
       ]);
       expect(store.sales.single.result.totalMinor, 800000);
       expect(controller.accounts, hasLength(1));
-      expect(controller.accounts.single.label, 'Cuenta 2');
+      expect(controller.accounts.single.label, 'Cuenta 1');
       expect(controller.accounts.single.lines.single.productId, 'water');
       expect(find.text('Cliente de la cuenta por cobrar'), findsNothing);
       expect(find.text('Confirmar entrega'), findsNothing);
@@ -477,8 +503,8 @@ void main() {
         isFalse,
       );
       await tap(tester, find.byKey(const Key('quick-new-account')));
-      await enter(tester, keyed('quick-label-').at(1), 'Cuenta disponible');
-      expect(controller.accounts.last.label, 'Cuenta disponible');
+      await enter(tester, keyed('quick-label-').first, 'Cuenta disponible');
+      expect(controller.accounts.first.label, 'Cuenta disponible');
       store.confirmationFailure = null;
       await tap(tester, keyed('quick-retry-').first);
       expect(store.confirmedIds.toSet(), {firstCommand});

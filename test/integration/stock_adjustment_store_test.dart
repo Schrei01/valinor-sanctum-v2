@@ -35,10 +35,12 @@ void main() {
     int quantity, {
     String product = 'product',
     DateTime? time,
+    bool addition = false,
   }) => StockAdjustmentCommand(
     commandId: id,
     productId: product,
     quantity: quantity,
+    isAddition: addition,
     reason: 'Consumo interno',
     occurredAtUtc: time ?? at,
   );
@@ -92,6 +94,99 @@ void main() {
     ),
   );
   test(
+    'positive correction keeps registered cost without purchase payment investment or duplicate units',
+    () async {
+      final purchases = await app.database.query('purchases');
+      final c = command('found', 1, addition: true);
+      await inventory.prepareAdjustment(c);
+      await inventory.confirmAdjustment(c.commandId);
+      final after = await rows();
+      await inventory.confirmAdjustment(c.commandId);
+      expect(await rows(), after);
+      expect((await stock()).quantity, 11);
+      expect((await stock()).totalCostMinor, 11001);
+      expect(await app.database.query('purchases'), purchases);
+      expect(await app.database.query('stock_additions'), hasLength(1));
+      expect(await app.database.query('supplier_payments'), isEmpty);
+      expect(await app.database.query('collections'), isEmpty);
+      expect(await app.database.query('investment_operations'), isEmpty);
+      final r = await report();
+      expect(r.saleTotals.knownTotalMinor, 0);
+      expect(r.outflowTotals.knownTotalMinor, 0);
+      await sell('all-corrected', 'product', 11);
+      expect((await stock()).quantity, 0);
+      expect((await stock()).totalCostMinor, 0);
+      expect((await app.readHealth())['integrityOk'], isTrue);
+    },
+  );
+  test(
+    'exhausted items can be corrected and used in events and later writeoffs',
+    () async {
+      await inventory.prepareAdjustment(command('exhaust', 10));
+      await inventory.confirmAdjustment('exhaust');
+      await inventory.prepareAdjustment(command('found', 4, addition: true));
+      await inventory.confirmAdjustment('found');
+      final events = SqliteEventsStore(app, synthetic: true);
+      await events.prepare(
+        CreateEvent(
+          commandId: 'event-found',
+          name: 'Liga corregida',
+          minimumPeople: 2,
+          fixedCostMinor: 0,
+          pvpMinor: 5000,
+          sourceAccountId: null,
+          products: const [EventProductInput('product', 2)],
+          occurredAtUtc: at,
+        ),
+      );
+      await events.confirm('event-found');
+      await inventory.prepareAdjustment(command('correct-down', 1));
+      await inventory.confirmAdjustment('correct-down');
+      expect((await stock()).quantity, 1);
+      expect((await stock()).totalCostMinor, 1000);
+      await sell('last', 'product', 1);
+      expect((await stock()).quantity, 0);
+    },
+  );
+  test(
+    'positive correction rollback and stale-cost preparation preserve all facts',
+    () async {
+      final c = command('positive-failure', 2, addition: true);
+      await inventory.prepareAdjustment(c);
+      final before = await rows();
+      await app.database.execute(
+        "CREATE TRIGGER synthetic_correction_failure BEFORE INSERT ON journal_lines BEGIN SELECT RAISE(ABORT,'Synthetic failure'); END",
+      );
+      await expectLater(
+        inventory.confirmAdjustment(c.commandId),
+        throwsA(anything),
+      );
+      expect(await rows(), before);
+      await app.database.execute('DROP TRIGGER synthetic_correction_failure');
+      await inventory.confirmAdjustment(c.commandId);
+      expect((await stock()).quantity, 12);
+      for (final table in [
+        'stock_additions',
+        'inventory_movements',
+        'cost_layers',
+      ]) {
+        final row = (await app.database.query(table)).last;
+        await expectLater(
+          app.database.insert(
+            table,
+            row,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          ),
+          throwsA(anything),
+        );
+        await expectLater(
+          app.database.update(table, {'product_id': 'product'}),
+          throwsA(anything),
+        );
+      }
+    },
+  );
+  test(
     'two units remove exact FIFO cost once without cash, sale, debt or revenue',
     () async {
       final beforeSales = await app.database.query('sales'),
@@ -113,6 +208,61 @@ void main() {
       expect(r.operatingExpensesMinor, 2001);
       expect((await app.readHealth())['integrityOk'], isTrue);
       expect(await inventory.pendingAdjustments(), isEmpty);
+    },
+  );
+  test(
+    'positive correction rechecks cost and SQL refuses a mismatched quantity',
+    () async {
+      final c = command('sql-proof', 1, addition: true);
+      await inventory.prepareAdjustment(c);
+      final before = await rows();
+      await app.database.execute(
+        "CREATE TRIGGER synthetic_bad_correction AFTER INSERT ON cost_layers BEGIN UPDATE inventory_movements SET quantity_delta=quantity_delta+1 WHERE stock_addition_id IS NOT NULL; END",
+      );
+      await expectLater(
+        inventory.confirmAdjustment(c.commandId),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect(await rows(), before);
+      await app.database.execute('DROP TRIGGER synthetic_bad_correction');
+      await inventory.receivePurchase(
+        ReceiptCommand(
+          commandId: 'new-cost',
+          supplierId: 'supplier',
+          dueDate: '2026-10-20',
+          occurredAtUtc: at,
+          lines: const [
+            ReceiptLineInput(
+              productId: 'product',
+              quantity: 2,
+              totalCostMinor: 3000,
+            ),
+          ],
+        ),
+      );
+      final afterPurchase = await rows();
+      await expectLater(
+        inventory.confirmAdjustment(c.commandId),
+        throwsA(isA<StockAdjustmentValidationException>()),
+      );
+      expect(await rows(), afterPurchase);
+      await inventory.discardAdjustment(c.commandId);
+      await inventory.prepareAdjustment(
+        command('current-cost', 1, addition: true),
+      );
+      await inventory.confirmAdjustment('current-cost');
+      expect(
+        (await app.database.query('stock_additions')).single['unit_cost_minor'],
+        1500,
+      );
+      final after = await rows();
+      await expectLater(
+        inventory.prepareAdjustment(
+          command('overflow', 9223372036854775807, addition: true),
+        ),
+        throwsA(isA<StockAdjustmentValidationException>()),
+      );
+      expect(await rows(), after);
     },
   );
   test(
@@ -235,6 +385,22 @@ void main() {
       await inventory.confirmAdjustment('cost');
       expect((await stock(cost)).quantity, 1);
       expect((await stock(cost)).totalCostMinor, 101);
+      await inventory.prepareAdjustment(
+        command('free-found', 2, product: free, addition: true),
+      );
+      await inventory.confirmAdjustment('free-found');
+      expect((await stock(free)).quantity, 2);
+      expect((await stock(free)).totalCostMinor, 0);
+      final positive = (await app.database.query('stock_additions')).single;
+      expect(
+        await app.database.rawQuery(
+          'SELECT line.* FROM journal_lines line JOIN journal_entries entry ON entry.id=line.entry_id WHERE entry.document_id=?',
+          [positive['document_id']],
+        ),
+        isEmpty,
+      );
+      await sell('free-sale', free, 2);
+      expect((await stock(free)).quantity, 0);
     },
   );
   test(

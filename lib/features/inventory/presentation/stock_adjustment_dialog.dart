@@ -30,14 +30,14 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
   };
   List<CatalogProduct> get _products =>
       (widget.controller.snapshot?.products ?? <CatalogProduct>[])
-          .where((p) => !p.isUnlimited && (_positions[p.id] ?? 0) > 0)
+          .where((p) => !p.isUnlimited)
           .toList();
   CatalogProduct? get _selected => widget.controller.snapshot?.products
       .where((p) => p.id == _productId)
       .firstOrNull;
   int? get _units {
     final n = BigInt.tryParse(_quantity.text.replaceAll('.', ''));
-    return n != null && n > BigInt.zero && n <= Money.maxMinorUnits
+    return n != null && n != BigInt.zero && n.abs() <= Money.maxMinorUnits
         ? n.toInt()
         : null;
   }
@@ -59,7 +59,7 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
         if (_pending != null) {
           _productId = _pending!.productId;
           _quantity.text = GroupedNumberFormatter.format(
-            '${_pending!.quantity}',
+            '${_pending!.isAddition ? _pending!.quantity : -_pending!.quantity}',
           );
           _reason.text = _pending!.reason;
         }
@@ -90,17 +90,21 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
       if (_productId == null ||
           !_products.any((p) => p.id == _productId) ||
           units == null ||
-          units > (_positions[_productId] ?? 0)) {
+          BigInt.from(_positions[_productId] ?? 0) + BigInt.from(units) <
+              BigInt.zero ||
+          BigInt.from(_positions[_productId] ?? 0) + BigInt.from(units) >
+              Money.maxMinorUnits) {
         setState(
           () => _error =
-              'Elige un producto y una cantidad positiva, sin superar sus existencias.',
+              'Elige un producto y un entero distinto de 0. Usa positivo para sumar o negativo para restar, sin dejar existencias negativas.',
         );
         return;
       }
       _pending = StockAdjustmentCommand(
         commandId: InventoryIds.next(),
         productId: _productId!,
-        quantity: units,
+        quantity: units.abs(),
+        isAddition: units > 0,
         reason: _reason.text.trim().isEmpty
             ? 'Ajuste manual de inventario'
             : _reason.text.trim(),
@@ -121,7 +125,7 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
       if (mounted) {
         setState(
           () => _error =
-              'No se pudo confirmar el resultado. Reintenta el mismo descuento; la solicitud queda guardada para evitar duplicados.',
+              'No se pudo confirmar el resultado. Reintenta el mismo ajuste; la solicitud queda guardada para evitar duplicados.',
         );
       }
     } finally {
@@ -145,7 +149,7 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
       if (mounted) {
         setState(
           () => _error =
-              'No se pudo descartar. Si el descuento ya se registró, reintenta para recuperar su confirmación.',
+              'No se pudo descartar. Si el ajuste ya se registró, reintenta para recuperar su confirmación.',
         );
       }
     } finally {
@@ -160,7 +164,7 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
     return PopScope(
       canPop: !_busy,
       child: AlertDialog(
-        title: const Text('Descontar unidades'),
+        title: const Text('Corregir inventario'),
         content: SizedBox(
           width: 460,
           child: SingleChildScrollView(
@@ -169,17 +173,17 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Descuenta unidades del inventario sin registrar una venta ni mover dinero.',
+                  'Usa un número positivo para sumar unidades o negativo para restarlas. No registra compras, ventas ni movimientos de dinero.',
                 ),
                 const SizedBox(height: 16),
                 if (_busy) const LinearProgressIndicator(),
                 if (_pending != null) ...[
                   Text(
-                    'Solicitud guardada: ${_selected?.name ?? _pending!.productId} · ${GroupedNumberFormatter.format('${_pending!.quantity}')} unidades',
+                    'Solicitud guardada: ${_selected?.name ?? _pending!.productId} · ${GroupedNumberFormatter.format('${_pending!.isAddition ? '+' : '-'}${_pending!.quantity}')} unidades',
                   ),
                   if (_requests.length > 1)
                     Text(
-                      'Hay ${_requests.length} descuentos pendientes; se resuelve primero el más antiguo.',
+                      'Hay ${_requests.length} ajustes pendientes; se resuelve primero el más antiguo.',
                     ),
                 ] else
                   Autocomplete<CatalogProduct>(
@@ -226,20 +230,25 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
                   key: const Key('stock-adjustment-quantity'),
                   controller: _quantity,
                   enabled: !locked,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: const [
-                    GroupedNumberFormatter(integerOnly: true),
-                  ],
+                  keyboardType: const TextInputType.numberWithOptions(
+                    signed: true,
+                  ),
+                  inputFormatters: const [GroupedNumberFormatter()],
                   decoration: const InputDecoration(
-                    labelText: 'Unidades a descontar',
+                    labelText: 'Cambio de unidades (+ / −)',
                   ),
                   onChanged: (_) => setState(() => _error = null),
                 ),
-                if (_selected != null && units != null && units <= available)
+                if (_selected != null &&
+                    units != null &&
+                    BigInt.from(available) + BigInt.from(units) >=
+                        BigInt.zero &&
+                    BigInt.from(available) + BigInt.from(units) <=
+                        Money.maxMinorUnits)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      'Quedarán ${GroupedNumberFormatter.format('${available - units}')} unidades.',
+                      'Quedarán ${GroupedNumberFormatter.format('${BigInt.from(available) + BigInt.from(units)}')} unidades.',
                       key: const Key('stock-adjustment-remaining'),
                     ),
                   ),
@@ -283,8 +292,8 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
               _busy
                   ? 'Procesando…'
                   : _pending == null
-                  ? 'Descontar unidades'
-                  : 'Reintentar mismo descuento',
+                  ? 'Aplicar ajuste'
+                  : 'Reintentar mismo ajuste',
             ),
           ),
         ],

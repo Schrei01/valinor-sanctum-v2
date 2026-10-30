@@ -20,6 +20,32 @@ void main() {
   tearDown(() => controller.dispose());
 
   String account() => controller.addAccount()!;
+  test(
+    'new accounts appear first and edits or navigation do not reorder them',
+    () async {
+      final first = account(), second = account(), third = account();
+      expect(controller.accounts.map((a) => a.id), [third, second, first]);
+      controller.rename(first, 'Cuenta anterior editada');
+      expect(controller.accounts.map((a) => a.id), [third, second, first]);
+      expect(await controller.flushAll(), isTrue);
+      await controller.load();
+      expect(controller.accounts.map((a) => a.id), [third, second, first]);
+      controller.dispose();
+      controller = QuickSalesController(
+        store: store,
+        autosaveDelay: const Duration(days: 1),
+      );
+      await controller.load();
+      expect(controller.accounts.map((a) => a.id), [third, second, first]);
+      final fourth = account();
+      expect(controller.accounts.map((a) => a.id), [
+        fourth,
+        third,
+        second,
+        first,
+      ]);
+    },
+  );
   void fill(String id, {String product = 'water', String payment = 'cash'}) {
     final line = controller.accounts
         .firstWhere((item) => item.id == id)

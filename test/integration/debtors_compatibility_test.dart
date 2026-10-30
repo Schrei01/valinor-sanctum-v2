@@ -199,6 +199,7 @@ void main() {
             copy.remove('payment_mode');
             copy.remove('account_payment_option_id');
             copy.remove('payment_split_basis');
+            copy.remove('created_at_utc');
             copy['status'] = 'open';
           }
           if (table == 'quick_sales_lines') {

@@ -114,7 +114,8 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       final rows = await txn.query(
         'quick_sales_accounts',
         where: "status IN ('open','prepared')",
-        orderBy: 'updated_at_utc,id',
+        orderBy:
+            'created_at_utc IS NOT NULL DESC, ${DatabaseSchema.utcSortKey('created_at_utc')} DESC, rowid DESC',
       );
       final accounts = <QuickSaleAccount>[];
       for (final row in rows) {
@@ -237,6 +238,14 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
   @override
   Future<QuickSaleAccount> saveAccount(SaveQuickSaleAccount input) async {
     _id(input.id);
+    if (input.createdAtUtc != null &&
+        (!input.createdAtUtc!.isUtc ||
+            input.createdAtUtc!.year < 1 ||
+            input.createdAtUtc!.year > 9998)) {
+      throw const QuickSalesValidationException(
+        'La fecha de creación no es válida.',
+      );
+    }
     if (!['legacy', 'single', 'split'].contains(input.paymentMode) ||
         (input.paymentMode != 'single' &&
             input.accountPaymentOptionId != null)) {
@@ -323,6 +332,12 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
       }
       if (rows.isNotEmpty) {
         final old = await _account(txn, rows.single);
+        if (input.createdAtUtc != null &&
+            old.createdAtUtc != input.createdAtUtc) {
+          throw const QuickSalesValidationException(
+            'La fecha de creación de la cuenta no puede cambiar.',
+          );
+        }
         if (old.status == 'open' &&
             old.revision == input.expectedRevision + 1 &&
             old.label == input.label &&
@@ -345,6 +360,11 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         'Revisión',
       );
       final now = DateTime.now().toUtc();
+      final createdAt = rows.isEmpty
+          ? input.createdAtUtc ?? now
+          : rows.single['created_at_utc'] == null
+          ? null
+          : DateTime.parse(rows.single['created_at_utc'] as String);
       if (rows.isEmpty) {
         await txn.insert('quick_sales_accounts', {
           'id': input.id,
@@ -357,6 +377,7 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
           'revision': revision,
           'status': 'open',
           'updated_at_utc': now.toIso8601String(),
+          'created_at_utc': createdAt!.toIso8601String(),
         });
       } else {
         await txn.update(
@@ -412,6 +433,7 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         revision: revision,
         status: 'open',
         updatedAtUtc: now,
+        createdAtUtc: createdAt,
         lines: input.lines,
       );
     }, exclusive: true);
@@ -1411,6 +1433,9 @@ WHERE line.account_id='system:legacy-customer-receivables'
       revision: row['revision'] as int,
       status: row['status'] as String,
       updatedAtUtc: DateTime.parse(row['updated_at_utc'] as String).toUtc(),
+      createdAtUtc: row['created_at_utc'] == null
+          ? null
+          : DateTime.parse(row['created_at_utc'] as String).toUtc(),
       confirmedDocumentId: row['confirmed_document_id'] as String?,
       lines: lines
           .map(

@@ -47,6 +47,7 @@ class QuickSaleAccount {
     required this.revision,
     required this.status,
     required this.updatedAtUtc,
+    this.createdAtUtc,
     required List<QuickSaleLine> lines,
     this.customerName = '',
     this.debtorId,
@@ -62,6 +63,7 @@ class QuickSaleAccount {
   final int revision;
   final String status;
   final DateTime updatedAtUtc;
+  final DateTime? createdAtUtc;
   final List<QuickSaleLine> lines;
   final String? confirmedDocumentId;
   final String paymentMode;
@@ -97,6 +99,7 @@ class SaveQuickSaleAccount {
     required this.id,
     required this.label,
     required this.expectedRevision,
+    this.createdAtUtc,
     required List<QuickSaleLine> lines,
     this.customerName = '',
     this.debtorId,
@@ -109,6 +112,7 @@ class SaveQuickSaleAccount {
   final String customerName;
   final String? debtorId;
   final int expectedRevision;
+  final DateTime? createdAtUtc;
   final List<QuickSaleLine> lines;
   final String paymentMode;
   final String? accountPaymentOptionId;

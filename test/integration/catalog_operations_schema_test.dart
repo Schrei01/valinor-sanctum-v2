@@ -15,7 +15,17 @@ Future<Map<String, String>> allRows(DatabaseExecutor db) async => {
   for (final row in await db.rawQuery(
     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
   ))
-    row['name'] as String: jsonEncode(await db.query(row['name'] as String)),
+    row['name'] as String: jsonEncode([
+      for (final record in await db.query(row['name'] as String))
+        {
+          for (final e in record.entries)
+            if (!((row['name'] == 'inventory_movements' &&
+                    e.key == 'stock_addition_id') ||
+                (row['name'] == 'quick_sales_accounts' &&
+                    e.key == 'created_at_utc')))
+              e.key: e.value,
+        },
+    ]),
 };
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

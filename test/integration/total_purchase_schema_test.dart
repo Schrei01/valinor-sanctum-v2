@@ -18,7 +18,17 @@ Future<Map<String, List<Map<String, Object?>>>> rows(
   for (final table in await db.rawQuery(
     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
   ))
-    table['name'] as String: await db.query(table['name'] as String),
+    table['name'] as String: [
+      for (final row in await db.query(table['name'] as String))
+        {
+          for (final e in row.entries)
+            if (!((table['name'] == 'inventory_movements' &&
+                    e.key == 'stock_addition_id') ||
+                (table['name'] == 'quick_sales_accounts' &&
+                    e.key == 'created_at_utc')))
+              e.key: e.value,
+        },
+    ],
 };
 
 /// Synthetic fixture only: use valid legacy unit-mode facts, then restore the

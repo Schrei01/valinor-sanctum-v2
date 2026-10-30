@@ -104,6 +104,7 @@ class QuickSalesPage extends StatelessWidget {
                 ),
               for (final account in controller.accounts)
                 Padding(
+                  key: ValueKey('quick-account-position-${account.id}'),
                   padding: const EdgeInsets.only(bottom: 16),
                   child: _QuickAccountCard(
                     key: ValueKey(

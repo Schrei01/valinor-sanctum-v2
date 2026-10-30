@@ -119,6 +119,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
 
   String _key(SaveQuickSaleAccount input) => jsonEncode([
     input.id,
+    input.createdAtUtc?.toIso8601String(),
     input.expectedRevision,
     input.label,
     input.customerName,
@@ -164,6 +165,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
         revision: input.expectedRevision + 1,
         status: 'open',
         updatedAtUtc: DateTime.utc(2026, 10, 19),
+        createdAtUtc: current?.createdAtUtc ?? input.createdAtUtc,
         lines: input.lines,
       );
       accounts.removeWhere((item) => item.id == input.id);
@@ -377,6 +379,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
         revision: account.revision + 1,
         status: 'open',
         updatedAtUtc: account.updatedAtUtc,
+        createdAtUtc: account.createdAtUtc,
         lines: account.lines,
       ),
     );

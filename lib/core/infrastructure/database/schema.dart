@@ -6,11 +6,13 @@ import 'total_purchase_schema.dart';
 import 'catalog_operations_schema.dart';
 import 'investment_schema.dart';
 import 'event_investment_schema.dart';
+import 'stock_correction_schema.dart';
 part 'split_payment_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 20;
+  static const int version = 21;
+  static String utcSortKey(String expression) => _utcSortKey(expression);
 
   // ASCII VS20: a file-format marker, independent of the original POS.
   static const int applicationId = 0x56533230;
@@ -81,6 +83,7 @@ abstract final class DatabaseSchema {
     18 => 'account_payment_mode_and_review_v18',
     19 => 'owner_investment_and_refunds_v19',
     20 => 'event_owner_investment_v20',
+    21 => 'signed_stock_corrections_and_account_creation_v21',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -105,6 +108,7 @@ abstract final class DatabaseSchema {
     18 => checksum(migration18Statements.join('\n;\n')),
     19 => checksum(migration19Statements.join('\n;\n')),
     20 => checksum(migration20Statements.join('\n;\n')),
+    21 => checksum(migration21Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -122,6 +126,13 @@ abstract final class DatabaseSchema {
       ...migration12Statements,
       ...migration16Statements,
     ]),
+  );
+  static final List<String> migration21Statements = List.unmodifiable(
+    StockCorrectionSchema.build(
+      inventory: migration2Statements,
+      adjustments: migration16Statements,
+      utcKey: _utcSortKey,
+    ),
   );
   static final List<String> migration17Statements = List.unmodifiable(
     SplitPaymentSchema.build(),

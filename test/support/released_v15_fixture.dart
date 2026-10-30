@@ -156,6 +156,7 @@ Future<void> restoreReleasedV18ForFixture(DatabaseExecutor db) async {
 
 /// Synthetic cash-event graph only, for testing the forward v19 -> v20 upgrade.
 Future<void> restoreReleasedV19ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV20ForFixture(db);
   expect(await db.query('events', where: "funding_mode<>'cash'"), isEmpty);
   const order = ['events', 'event_products', 'event_cost_allocations'];
   final definitions = {
@@ -241,6 +242,83 @@ Future<void> restoreReleasedV19ForFixture(DatabaseExecutor db) async {
     (await db.query(
       'schema_migrations',
       where: 'version=19',
+    )).single['schema_checksum'],
+  );
+}
+
+/// Test-only reconstruction of the released v20, without positive corrections.
+Future<void> restoreReleasedV20ForFixture(DatabaseExecutor db) async {
+  expect(await db.query('stock_additions'), isEmpty);
+  for (final sql in DatabaseSchema.migration21Statements) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name != null) {
+      await db.execute('DROP TRIGGER $name');
+    }
+  }
+  await db.execute('DROP VIEW stock_adjustment_expected_journal');
+  await db.execute(
+    DatabaseSchema.migration16Statements.singleWhere(
+      (s) => s.startsWith('CREATE VIEW stock_adjustment_expected_journal '),
+    ),
+  );
+  await db.execute('DROP VIEW inventory_adjustment_facts');
+  await db.execute('DROP VIEW inventory_reference_costs');
+  await db.execute(
+    'ALTER TABLE quick_sales_accounts DROP COLUMN created_at_utc',
+  );
+  await db.execute('PRAGMA defer_foreign_keys=ON');
+  final columns = (await db.rawQuery('PRAGMA table_info(inventory_movements)'))
+      .map((r) => r['name'] as String)
+      .where((name) => name != 'stock_addition_id')
+      .join(',');
+  await db.execute(
+    'CREATE TABLE movements_v20_fixture AS SELECT $columns FROM inventory_movements',
+  );
+  await db.execute('DROP TABLE inventory_movements');
+  await db.execute(
+    DatabaseSchema.migration2Statements.singleWhere(
+      (s) => s.contains('CREATE TABLE inventory_movements ('),
+    ),
+  );
+  await db.execute(
+    'INSERT INTO inventory_movements SELECT * FROM movements_v20_fixture',
+  );
+  await db.execute('DROP TABLE movements_v20_fixture');
+  await db.execute('DROP TABLE stock_additions');
+  for (final sql in DatabaseSchema.migration2Statements.where(
+    (s) =>
+        s.startsWith('CREATE INDEX idx_movements_') ||
+        RegExp(
+          r'^\s*CREATE TRIGGER \w+\s+.*\bON inventory_movements\b',
+          dotAll: true,
+        ).hasMatch(s),
+  )) {
+    await db.execute(sql);
+  }
+  for (final sql in DatabaseSchema.migration21Statements) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name == null) continue;
+    final original = DatabaseSchema.migration16Statements.where(
+      (s) => RegExp('^CREATE TRIGGER $name\\b').hasMatch(s),
+    );
+    if (original.isNotEmpty) {
+      await db.execute(original.single);
+    }
+  }
+  await db.delete('schema_migrations', where: 'version=21');
+  await db.execute('PRAGMA user_version=20');
+  final schema = await db.rawQuery(
+    "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE substr(name,1,7)<>'sqlite_' ORDER BY type,name",
+  );
+  expect(
+    DatabaseSchema.checksum(
+      jsonEncode([
+        for (final s in schema) [s['type'], s['name'], s['tbl_name'], s['sql']],
+      ]),
+    ),
+    (await db.query(
+      'schema_migrations',
+      where: 'version=20',
     )).single['schema_checksum'],
   );
 }

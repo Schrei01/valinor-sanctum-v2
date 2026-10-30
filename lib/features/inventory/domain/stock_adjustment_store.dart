@@ -5,9 +5,11 @@ class StockAdjustmentCommand {
     required this.quantity,
     required this.reason,
     required this.occurredAtUtc,
+    this.isAddition = false,
   });
   final String commandId, productId, reason;
   final int quantity;
+  final bool isAddition;
   final DateTime occurredAtUtc;
 }
 

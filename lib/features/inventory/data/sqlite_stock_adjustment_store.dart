@@ -45,7 +45,7 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
         if (jsonEncode(_input(_decode(old))) != jsonEncode(_input(command)) ||
             prior.single['status'] == 'discarded') {
           throw const StockAdjustmentValidationException(
-            'Este identificador pertenece a otro descuento.',
+            'Este identificador pertenece a otro ajuste.',
           );
         }
         return;
@@ -58,6 +58,10 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
         'scale': profile.moneyScale,
         'costMinor': plan.cost,
         'productName': plan.name,
+        if (command.isAddition) ...{
+          'referenceId': plan.referenceId,
+          'referenceSource': plan.referenceSource,
+        },
       });
       await txn.insert('stock_adjustment_requests', {
         'command_id': command.commandId,
@@ -114,9 +118,12 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
         payload['currency'] != profile.currencyCode ||
         payload['scale'] != profile.moneyScale ||
         payload['costMinor'] != plan.cost ||
-        payload['productName'] != plan.name) {
+        payload['productName'] != plan.name ||
+        (command.isAddition &&
+            (payload['referenceId'] != plan.referenceId ||
+                payload['referenceSource'] != plan.referenceSource))) {
       throw const StockAdjustmentValidationException(
-        'Cambió el producto o su costo. Descarta esta solicitud y revisa el descuento.',
+        'Cambió el producto o su costo. Descarta esta solicitud y revisa el ajuste.',
       );
     }
     final now = DateTime.now().toUtc().toIso8601String();
@@ -203,25 +210,78 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
       'source_kind': synthetic ? 'synthetic' : 'native',
       'date_quality': 'documented',
     });
-    await txn.insert('stock_adjustments', {
-      'id': adjustment,
-      'document_id': document,
-      'product_id': command.productId,
-      'name_snapshot': plan.name,
-      'quantity': command.quantity,
-      'cost_minor': plan.cost,
-      'reason': command.reason,
-    });
-    for (var i = 0; i < plan.allocations.length; i++) {
-      final a = plan.allocations[i];
-      await txn.insert('stock_adjustment_allocations', {
-        'id': InventoryIds.next(),
-        'adjustment_id': adjustment,
-        'sequence': i,
-        a.source == 'purchase' ? 'cost_layer_id' : 'opening_item_id': a.id,
-        'quantity': a.quantity,
-        'cost_minor': a.cost,
+    if (command.isAddition) {
+      await txn.insert('stock_additions', {
+        'id': adjustment,
+        'document_id': document,
+        'product_id': command.productId,
+        'name_snapshot': plan.name,
+        'quantity': command.quantity,
+        'unit_cost_minor': plan.unitCost,
+        'cost_minor': plan.cost,
+        'reason': command.reason,
+        plan.referenceSource == 'purchase'
+                ? 'reference_cost_layer_id'
+                : 'reference_opening_item_id':
+            plan.referenceId,
       });
+      final sequence =
+          BigInt.from(
+            (await txn.rawQuery(
+                  'SELECT coalesce(max(stock_sequence),0) n FROM inventory_movements',
+                )).single['n']
+                as int,
+          ) +
+          BigInt.one;
+      if (sequence > Money.maxMinorUnits) {
+        throw const StockAdjustmentValidationException(
+          'No se puede asignar otra secuencia de inventario.',
+        );
+      }
+      final movement = InventoryIds.next();
+      await txn.insert('inventory_movements', {
+        'id': movement,
+        'document_id': document,
+        'sequence': 0,
+        'stock_sequence': sequence.toInt(),
+        'product_id': command.productId,
+        'kind': 'adjustment',
+        'quantity_delta': command.quantity,
+        'value_delta_minor': plan.cost,
+        'purchase_line_id': null,
+        'stock_addition_id': adjustment,
+      });
+      await txn.insert('cost_layers', {
+        'id': InventoryIds.next(),
+        'inbound_movement_id': movement,
+        'product_id': command.productId,
+        'initial_quantity': command.quantity,
+        'total_cost_minor': plan.cost,
+        'cost_quality': 'documented',
+        'fifo_sequence': sequence.toInt(),
+        'acquired_at_utc': command.occurredAtUtc.toIso8601String(),
+      });
+    } else {
+      await txn.insert('stock_adjustments', {
+        'id': adjustment,
+        'document_id': document,
+        'product_id': command.productId,
+        'name_snapshot': plan.name,
+        'quantity': command.quantity,
+        'cost_minor': plan.cost,
+        'reason': command.reason,
+      });
+      for (var i = 0; i < plan.allocations.length; i++) {
+        final a = plan.allocations[i];
+        await txn.insert('stock_adjustment_allocations', {
+          'id': InventoryIds.next(),
+          'adjustment_id': adjustment,
+          'sequence': i,
+          a.source == 'purchase' ? 'cost_layer_id' : 'opening_item_id': a.id,
+          'quantity': a.quantity,
+          'cost_minor': a.cost,
+        });
+      }
     }
     await txn.insert('journal_entries', {
       'id': entry,
@@ -273,7 +333,7 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
           whereArgs: [commandId],
         )).isNotEmpty) {
           throw const StockAdjustmentValidationException(
-            'El descuento ya se registró y no se puede descartar.',
+            'El ajuste ya se registró y no se puede descartar.',
           );
         }
         await txn.update(
@@ -319,7 +379,7 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
     final later = await txn.rawQuery(
       '''SELECT d.occurred_at_utc FROM business_documents d WHERE d.status='posted' AND d.id IN(
  SELECT purchase_id FROM purchase_lines WHERE product_id=? UNION SELECT sale_id FROM sale_lines WHERE product_id=?
- UNION SELECT event_id FROM event_products WHERE product_id=? UNION SELECT document_id FROM stock_adjustments WHERE product_id=?)''',
+ UNION SELECT event_id FROM event_products WHERE product_id=? UNION SELECT document_id FROM inventory_adjustment_facts WHERE product_id=?)''',
       List.filled(4, c.productId),
     );
     if (later.any(
@@ -328,8 +388,11 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
       ).isAfter(c.occurredAtUtc),
     )) {
       throw const StockAdjustmentValidationException(
-        'El descuento no puede ser anterior a otro movimiento de este producto.',
+        'El ajuste no puede ser anterior a otro movimiento de este producto.',
       );
+    }
+    if (c.isAddition) {
+      return _additionPlan(txn, c, rows.single['name'] as String);
     }
     final layers = await txn.query(
       'inventory_effective_layers',
@@ -373,7 +436,7 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
     }
     if (cost > Money.maxMinorUnits) {
       throw const StockAdjustmentValidationException(
-        'El costo del descuento supera el límite monetario.',
+        'El costo del ajuste supera el límite monetario.',
       );
     }
     return _Plan(rows.single['name'] as String, cost.toInt(), allocations);
@@ -384,12 +447,13 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
         c.commandId.length > 128 ||
         c.productId.isEmpty ||
         c.quantity <= 0 ||
+        BigInt.from(c.quantity) > Money.maxMinorUnits ||
         c.reason.trim().isEmpty ||
         c.reason.length > 300 ||
         RegExp(r'[\x00-\x1f]').hasMatch(c.reason) ||
         !c.occurredAtUtc.isUtc) {
       throw const StockAdjustmentValidationException(
-        'Indica un producto y una cantidad entera positiva a descontar.',
+        'Indica un producto y una cantidad entera positiva para el ajuste.',
       );
     }
   }
@@ -398,6 +462,7 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
     'commandId': c.commandId,
     'productId': c.productId,
     'quantity': c.quantity,
+    if (c.isAddition) 'isAddition': true,
     'reason': c.reason,
     'occurredAtUtc': c.occurredAtUtc.toIso8601String(),
   };
@@ -406,16 +471,95 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
         commandId: j['commandId'] as String,
         productId: j['productId'] as String,
         quantity: j['quantity'] as int,
+        isAddition: j['isAddition'] == true,
         reason: j['reason'] as String,
         occurredAtUtc: DateTime.parse(j['occurredAtUtc'] as String),
       );
+
+  static Future<_Plan> _additionPlan(
+    DatabaseExecutor txn,
+    StockAdjustmentCommand c,
+    String name,
+  ) async {
+    final references = await txn.query(
+      'inventory_reference_costs',
+      where: 'product_id=?',
+      whereArgs: [c.productId],
+      orderBy:
+          '${DatabaseSchema.utcSortKey('acquired_at_utc')} DESC,fifo_sequence DESC,id DESC',
+      limit: 1,
+    );
+    if (references.isEmpty) {
+      throw const StockAdjustmentValidationException(
+        'Este producto no tiene un costo registrado. Registra su primer ingreso desde Compras.',
+      );
+    }
+    final reference = references.single;
+    if (DateTime.parse(
+      reference['acquired_at_utc'] as String,
+    ).isAfter(c.occurredAtUtc)) {
+      throw const StockAdjustmentValidationException(
+        'El ajuste no puede ser anterior al ingreso del producto.',
+      );
+    }
+    final available = await txn.rawQuery(
+      '''SELECT layer.initial_quantity,layer.total_cost_minor,
+    coalesce((SELECT sum(cost_minor) FROM inventory_cost_usage usage WHERE
+    (layer.source_kind='purchase' AND usage.cost_layer_id=layer.id) OR
+    (layer.source_kind='opening' AND usage.opening_item_id=layer.id)),0) used_cost,
+    coalesce((SELECT sum(quantity) FROM inventory_cost_usage usage WHERE
+    (layer.source_kind='purchase' AND usage.cost_layer_id=layer.id) OR
+    (layer.source_kind='opening' AND usage.opening_item_id=layer.id)),0) used
+    FROM inventory_effective_layers layer WHERE layer.product_id=?''',
+      [c.productId],
+    );
+    final current = available.fold(
+      BigInt.zero,
+      (n, r) =>
+          n +
+          BigInt.from(r['initial_quantity'] as int) -
+          BigInt.from(r['used'] as int),
+    );
+    final unitCost = reference['unit_cost_minor'] as int;
+    final currentCost = available.fold(
+      BigInt.zero,
+      (n, r) =>
+          n +
+          BigInt.from(r['total_cost_minor'] as int) -
+          BigInt.from(r['used_cost'] as int),
+    );
+    final total = BigInt.from(unitCost) * BigInt.from(c.quantity);
+    if (current + BigInt.from(c.quantity) > Money.maxMinorUnits ||
+        currentCost + total > Money.maxMinorUnits) {
+      throw const StockAdjustmentValidationException(
+        'La cantidad o su costo superan el límite permitido.',
+      );
+    }
+    return _Plan(
+      name,
+      total.toInt(),
+      const [],
+      referenceId: reference['id'] as String,
+      referenceSource: reference['source_kind'] as String,
+      unitCost: unitCost,
+    );
+  }
 }
 
 class _Plan {
-  _Plan(this.name, this.cost, this.allocations);
+  _Plan(
+    this.name,
+    this.cost,
+    this.allocations, {
+    this.referenceId,
+    this.referenceSource,
+    this.unitCost = 0,
+  });
   final String name;
   final int cost;
   final List<_Allocation> allocations;
+  final String? referenceId, referenceSource;
+  final int unitCost;
 }
 
 class _Allocation {

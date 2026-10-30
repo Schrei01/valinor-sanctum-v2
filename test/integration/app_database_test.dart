@@ -539,7 +539,11 @@ void main() {
         if (table == 'schema_migrations') {
           expect(after.take(2).toList(), before[table]);
         } else {
-          expect(after, before[table], reason: table);
+          expect(
+            _priorColumns(after, before[table]!),
+            before[table],
+            reason: table,
+          );
         }
       }
       await app.close();
@@ -682,7 +686,9 @@ void main() {
       for (final table in before.keys) {
         final after = await app.database.query(table);
         expect(
-          table == 'schema_migrations' ? after.take(3).toList() : after,
+          table == 'schema_migrations'
+              ? after.take(3).toList()
+              : _priorColumns(after, before[table]!),
           before[table],
           reason: table,
         );
@@ -758,7 +764,9 @@ void main() {
       for (final table in before.keys) {
         final after = await app.database.query(table);
         expect(
-          table == 'schema_migrations' ? after.take(4).toList() : after,
+          table == 'schema_migrations'
+              ? after.take(4).toList()
+              : _priorColumns(after, before[table]!),
           before[table],
           reason: table,
         );
@@ -860,7 +868,9 @@ void main() {
       for (final table in before.keys) {
         final after = await app.database.query(table);
         expect(
-          table == 'schema_migrations' ? after.take(5).toList() : after,
+          table == 'schema_migrations'
+              ? after.take(5).toList()
+              : _priorColumns(after, before[table]!),
           before[table],
           reason: table,
         );

@@ -27,15 +27,21 @@ class AdjustmentInventory extends FakeInventoryStore
   Future<void> confirmAdjustment(String id) async {
     if (applied.contains(id)) return;
     final c = pending[id]!,
-        position = stock.singleWhere((s) => s.productId == c.productId);
-    if (c.quantity > position.quantity) {
+        position =
+            stock.where((s) => s.productId == c.productId).firstOrNull ??
+            StockPosition(
+              productId: c.productId,
+              quantity: 0,
+              totalCostMinor: 0,
+            );
+    if (!c.isAddition && c.quantity > position.quantity) {
       throw const StockAdjustmentValidationException('Sin existencias');
     }
     stock.remove(position);
     stock.add(
       StockPosition(
         productId: c.productId,
-        quantity: position.quantity - c.quantity,
+        quantity: position.quantity + (c.isAddition ? c.quantity : -c.quantity),
         totalCostMinor: 0,
       ),
     );
@@ -134,9 +140,41 @@ void main() {
     );
     await t.pumpAndSettle();
     await tap(t, find.text('Cocacola sintética').last);
-    await t.enterText(find.byKey(const Key('stock-adjustment-quantity')), '2');
+    await t.enterText(find.byKey(const Key('stock-adjustment-quantity')), '-2');
     await t.pumpAndSettle();
   }
+
+  testWidgets('signed corrections add units and restore a zero-stock product', (
+    t,
+  ) async {
+    await open(t);
+    await tap(t, find.text('Catálogo'));
+    await shortcut(t);
+    await choose(t);
+    await t.enterText(find.byKey(const Key('stock-adjustment-quantity')), '+1');
+    await t.pumpAndSettle();
+    expect(find.text('Quedarán 3 unidades.'), findsOneWidget);
+    await tap(t, find.byKey(const Key('stock-adjustment-submit')));
+    expect(
+      inventory.stock.singleWhere((s) => s.productId == 'cola').quantity,
+      3,
+    );
+    await shortcut(t);
+    await t.enterText(
+      find.byKey(const Key('stock-adjustment-product')),
+      'Agotado',
+    );
+    await t.pumpAndSettle();
+    await tap(t, find.text('Agotado').last);
+    await t.enterText(find.byKey(const Key('stock-adjustment-quantity')), '2');
+    await t.pumpAndSettle();
+    expect(find.text('Quedarán 2 unidades.'), findsOneWidget);
+    await tap(t, find.byKey(const Key('stock-adjustment-submit')));
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Agotado'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
     'Ctrl D is confined to Catalog and subtracting to zero hides product and updates full value',
@@ -149,7 +187,7 @@ void main() {
       expect(find.text('Ilimitado'), findsNWidgets(2));
       expect(find.text('COP 8.000'), findsOneWidget);
       await shortcut(t);
-      expect(find.text('Descontar unidades'), findsNWidgets(2));
+      expect(find.text('Corregir inventario'), findsOneWidget);
       await choose(t);
       expect(find.text('Quedarán 0 unidades.'), findsOneWidget);
       await tap(t, find.byKey(const Key('stock-adjustment-submit')));
@@ -237,7 +275,7 @@ void main() {
       await choose(t);
       await tap(t, find.byKey(const Key('stock-adjustment-submit')));
       expect(find.byType(AlertDialog), findsOneWidget);
-      expect(find.text('Reintentar mismo descuento'), findsOneWidget);
+      expect(find.text('Reintentar mismo ajuste'), findsOneWidget);
       await tap(t, find.byKey(const Key('stock-adjustment-submit')));
       expect(find.byType(AlertDialog), findsNothing);
       expect(

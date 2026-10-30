@@ -128,6 +128,7 @@ Si hay una copia de inventario cargada localmente, Catálogo permite consultarla
 en Inventario de la copia y volver al Catálogo de esta app con el selector de origen.
 La copia muestra su corte, cantidades, PVP y lotes; no está disponible para vender.
 En Ventas crea varias cuentas, agrega productos y elige la forma de pago junto al total.
+Las cuentas nuevas aparecen primero y conservan su posición al editarlas.
 El selector muestra existencias y ofrece productos físicos activos con unidades;
 los agotados se ocultan. Pasadía y eventos activos se muestran como Ilimitado.
 Elige Efectivo, Transferencia o Deudas. Transferencia usa la cuenta de Nequi;
