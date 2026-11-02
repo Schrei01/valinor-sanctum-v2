@@ -108,8 +108,10 @@ class ReportMovement {
     required this.concept,
     required this.amountMinor,
     this.reason = '',
+    this.debtorName,
   });
   final String id, documentId, accountId, accountName, concept, reason;
+  final String? debtorName;
   final DateTime occurredAtUtc;
   final ReportMovementKind kind;
 
@@ -422,11 +424,30 @@ class ReportsSnapshot {
         .where((m) => m.kind == ReportMovementKind.saleReceipt)
         .map((m) => m.amountMinor),
   );
-  int get debtorPaymentsMinor => reportSum(
+  late final List<ReportMovement> debtorPayments = List.unmodifiable(
     movements
-        .where((m) => m.kind == ReportMovementKind.debtorPayment)
-        .map((m) => m.amountMinor),
+        .where(
+          (m) =>
+              m.kind == ReportMovementKind.debtorPayment &&
+              period.contains(m.occurredAtUtc),
+        )
+        .toList()
+      ..sort((a, b) {
+        final date = b.occurredAtUtc.compareTo(a.occurredAtUtc);
+        return date == 0 ? a.id.compareTo(b.id) : date;
+      }),
   );
+  int get debtorPaymentsMinor =>
+      reportSum(debtorPayments.map((m) => m.amountMinor));
+  int debtorPaymentsFor(ReportAccountRole role) {
+    final ids = accounts.where((a) => a.role == role).map((a) => a.id).toSet();
+    return reportSum(
+      debtorPayments
+          .where((m) => ids.contains(m.accountId))
+          .map((m) => m.amountMinor),
+    );
+  }
+
   int get investmentRefundsMinor => reportSum(
     movements
         .where((m) => m.kind == ReportMovementKind.investmentRefund)

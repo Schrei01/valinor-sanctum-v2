@@ -19,6 +19,7 @@ void main() {
     );
   });
   tearDown(() => controller.dispose());
+
   Future<void> open(
     WidgetTester tester, {
     Size size = const Size(1000, 850),
@@ -93,6 +94,104 @@ void main() {
   String value(WidgetTester tester, String key) =>
       tester.widget<Text>(find.byKey(Key(key))).data!;
 
+  for (final width in [1000.0, 400.0]) {
+    testWidgets(
+      'debtor payment detail follows transactions and reconciles by method at $width',
+      (tester) async {
+        final at = DateTime.utc(2026, 10, 26, 15, 30);
+        store.movementRows = [
+          ReportMovement(
+            id: 'paid-cash',
+            documentId: 'cash-doc',
+            occurredAtUtc: at,
+            accountId: 'cash',
+            accountName: 'Caja',
+            kind: ReportMovementKind.debtorPayment,
+            concept: 'Abono',
+            amountMinor: 5000,
+            debtorName: 'Persona que pagó efectivo',
+          ),
+          ReportMovement(
+            id: 'paid-transfer',
+            documentId: 'transfer-doc',
+            occurredAtUtc: at.add(const Duration(minutes: 1)),
+            accountId: 'nequi',
+            accountName: 'Nequi',
+            kind: ReportMovementKind.debtorPayment,
+            concept: 'Abono',
+            amountMinor: 3000,
+            debtorName: 'Persona que pagó transferencia',
+          ),
+          ReportMovement(
+            id: 'sale-only',
+            documentId: 'sale-doc',
+            occurredAtUtc: at,
+            accountId: 'cash',
+            accountName: 'Caja',
+            kind: ReportMovementKind.saleReceipt,
+            concept: 'Venta',
+            amountMinor: 20000,
+          ),
+        ];
+        await open(tester, size: Size(width, 1200));
+        final section = find.byKey(const Key('report-debtor-payments'));
+        expect(
+          tester.getTopLeft(section).dy,
+          greaterThan(
+            tester.getBottomRight(find.byKey(const Key('report-items'))).dy,
+          ),
+        );
+        expect(value(tester, 'report-debtor-payments-total'), 'COP 80,00');
+        expect(
+          value(tester, 'report-debtor-payments-cash'),
+          'Efectivo: COP 50,00',
+        );
+        expect(
+          value(tester, 'report-debtor-payments-transfer'),
+          'Transferencia: COP 30,00',
+        );
+        expect(
+          find.descendant(
+            of: section,
+            matching: find.text('Persona que pagó efectivo'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: section,
+            matching: find.text('Persona que pagó transferencia'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('report-debtor-payment-sale-only')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: section,
+            matching: find.text('26/10/2026 · 10:30 AM'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: section, matching: find.byType(Scrollable)),
+          findsNothing,
+        );
+        expect(value(tester, 'report-sales-total'), 'COP 300,00');
+        store.movementRows = [];
+        await controller.load();
+        await tester.pumpAndSettle();
+        expect(value(tester, 'report-debtor-payments-total'), 'COP 0,00');
+        expect(
+          find.text('No hay abonos de deudores registrados en este rango.'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   testWidgets(
     'initial date is empty, end is current Bogotá minute, and no query runs until start is chosen',
     (tester) async {

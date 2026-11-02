@@ -195,6 +195,10 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
           concept: concept,
           amountMinor: reportMinor(movement.amount),
           reason: op?['reason'] as String? ?? '',
+          debtorName: kind == ReportMovementKind.debtorPayment
+              ? debtorByDoc[doc] ??
+                    (collection?['customer_name_snapshot'] as String?)
+              : null,
         ),
       );
     }

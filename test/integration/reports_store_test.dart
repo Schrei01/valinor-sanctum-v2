@@ -250,11 +250,31 @@ void main() {
         ),
       );
       await debtors.confirm('pay');
+      await debtors.confirm('pay');
       final before = await rows();
       final data = await reports.load(period());
       expect(data.salesMinor, 0);
       expect(data.saleReceiptsMinor, 0);
       expect(data.debtorPaymentsMinor, 6000);
+      expect(data.debtorPayments.single.debtorName, 'Persona sintética');
+      expect(data.debtorPayments.single.amountMinor, 6000);
+      expect(data.debtorPayments.single.occurredAtUtc, at);
+      expect(data.debtorPaymentsFor(ReportAccountRole.cash), 6000);
+      expect(data.debtorPaymentsFor(ReportAccountRole.transfer), 0);
+      final minute = await reports.load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 20, 9),
+          end: DateTime.utc(2026, 10, 20, 9),
+        ),
+      );
+      expect(minute.debtorPayments.single.amountMinor, 6000);
+      final nextMinute = await reports.load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 20, 9, 1),
+          end: DateTime.utc(2026, 10, 20, 9, 1),
+        ),
+      );
+      expect(nextMinute.debtorPayments, isEmpty);
       expect(data.saleTotals.cashTotalMinor, 0);
       expect(data.saleTotals.totalMinor, 0);
       expect(
@@ -602,6 +622,10 @@ void main() {
         'customer_receivables',
       )).single;
       final collections = SqliteCollectionsStore(app, synthetic: true);
+      final transferOption = (await app.database.query(
+        'quick_payment_options',
+        where: "id='quick-default:NEQUI'",
+      )).single;
       await collections.prepareCollection(
         CollectionCommand(
           commandId: 'historical-abono',
@@ -611,7 +635,12 @@ void main() {
             CollectionPartInput(
               cashAccountId: option['cash_account_id'] as String,
               paymentMethodId: option['payment_method_id'] as String,
-              amountMinor: 4000,
+              amountMinor: 3000,
+            ),
+            CollectionPartInput(
+              cashAccountId: transferOption['cash_account_id'] as String,
+              paymentMethodId: transferOption['payment_method_id'] as String,
+              amountMinor: 1000,
             ),
           ],
         ),
@@ -623,6 +652,17 @@ void main() {
       expect(data.creditSalesMinor, 10000);
       expect(data.saleReceiptsMinor, 0);
       expect(data.debtorPaymentsMinor, 4000);
+      expect(data.debtorPayments, hasLength(2));
+      expect(
+        data.debtorPayments.every((m) => m.debtorName == 'Persona histórica'),
+        isTrue,
+      );
+      expect(
+        data.debtorPayments.map((m) => m.documentId).toSet(),
+        hasLength(1),
+      );
+      expect(data.debtorPaymentsFor(ReportAccountRole.cash), 3000);
+      expect(data.debtorPaymentsFor(ReportAccountRole.transfer), 1000);
       expect(data.saleTotals.cashTotalMinor, 0);
       expect(data.saleTotals.creditTotalMinor, 10000);
       expect(data.saleTotals.totalMinor, 10000);

@@ -11,6 +11,7 @@ class FakeReportsStore implements ReportsStore {
   List<ReportTransfer>? transferRows;
   List<ReportItem>? itemRows;
   List<ReportDebtorBalance>? debtorRows;
+  List<ReportMovement>? movementRows;
   int unpricedTransferRecords = 0;
   int unpricedCashSales = 0;
   int estimatedCashMinor = 0, estimatedSales = 0;
@@ -30,6 +31,7 @@ class FakeReportsStore implements ReportsStore {
           transferRows: transferRows,
           itemRows: itemRows,
           debtorRows: debtorRows,
+          movementRows: movementRows,
           unpricedTransferRecords: unpricedTransferRecords,
           unpricedCashSales: unpricedCashSales,
           estimatedCashMinor: estimatedCashMinor,
@@ -47,6 +49,7 @@ ReportsSnapshot reportFixture(
   List<ReportTransfer>? transferRows,
   List<ReportItem>? itemRows,
   List<ReportDebtorBalance>? debtorRows,
+  List<ReportMovement>? movementRows,
   int unpricedTransferRecords = 0,
   int unpricedCashSales = 0,
   int estimatedCashMinor = 0,
@@ -70,6 +73,9 @@ ReportsSnapshot reportFixture(
     concept: concept,
     amountMinor: amount,
     reason: reason,
+    debtorName: kind == ReportMovementKind.debtorPayment
+        ? 'Cliente sintético'
+        : null,
   );
   return ReportsSnapshot(
     period: period,
@@ -99,51 +105,53 @@ ReportsSnapshot reportFixture(
         closingMinor: unknownBalances ? null : 80000,
       ),
     ],
-    movements: [
-      movement(
-        'cash-sale',
-        'cash',
-        ReportMovementKind.saleReceipt,
-        6000,
-        'Venta física',
-      ),
-      movement(
-        'event-sale',
-        'nequi',
-        ReportMovementKind.saleReceipt,
-        20000,
-        'Inscripciones',
-      ),
-      movement(
-        'abono',
-        'cash',
-        ReportMovementKind.debtorPayment,
-        5000,
-        'Abono anterior',
-      ),
-      movement(
-        'expense',
-        'cash',
-        ReportMovementKind.expense,
-        -7000,
-        'Aseo',
-        reason: 'Aseo',
-      ),
-      movement(
-        'transfer-out',
-        'cash',
-        ReportMovementKind.transfer,
-        -10000,
-        'Caja → Nequi',
-      ),
-      movement(
-        'transfer-in',
-        'nequi',
-        ReportMovementKind.transfer,
-        10000,
-        'Caja → Nequi',
-      ),
-    ],
+    movements:
+        movementRows ??
+        [
+          movement(
+            'cash-sale',
+            'cash',
+            ReportMovementKind.saleReceipt,
+            6000,
+            'Venta física',
+          ),
+          movement(
+            'event-sale',
+            'nequi',
+            ReportMovementKind.saleReceipt,
+            20000,
+            'Inscripciones',
+          ),
+          movement(
+            'abono',
+            'cash',
+            ReportMovementKind.debtorPayment,
+            5000,
+            'Abono anterior',
+          ),
+          movement(
+            'expense',
+            'cash',
+            ReportMovementKind.expense,
+            -7000,
+            'Aseo',
+            reason: 'Aseo',
+          ),
+          movement(
+            'transfer-out',
+            'cash',
+            ReportMovementKind.transfer,
+            -10000,
+            'Caja → Nequi',
+          ),
+          movement(
+            'transfer-in',
+            'nequi',
+            ReportMovementKind.transfer,
+            10000,
+            'Caja → Nequi',
+          ),
+        ],
     sales: [
       ReportSaleLine(
         id: 'physical',
