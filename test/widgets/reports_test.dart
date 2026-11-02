@@ -96,7 +96,7 @@ void main() {
 
   for (final width in [1000.0, 400.0]) {
     testWidgets(
-      'debtor payment detail sits below transfers inside the receipt at $width',
+      'debtor payments show only method totals below transfers at $width',
       (tester) async {
         final at = DateTime.utc(2026, 10, 26, 15, 30);
         store.movementRows = [
@@ -164,28 +164,25 @@ void main() {
             greaterThan(tester.getTopLeft(find.text('DEUDORES AL CIERRE')).dx),
           );
         }
-        expect(value(tester, 'report-debtor-payments-total'), 'COP 80,00');
         expect(
-          value(tester, 'report-debtor-payments-cash'),
-          'Efectivo: COP 50,00',
+          find.byKey(const Key('report-debtor-payments-total')),
+          findsNothing,
         );
-        expect(
-          value(tester, 'report-debtor-payments-transfer'),
-          'Transferencia: COP 30,00',
-        );
+        expect(value(tester, 'report-debtor-payments-cash'), 'COP 50,00');
+        expect(value(tester, 'report-debtor-payments-transfer'), 'COP 30,00');
         expect(
           find.descendant(
             of: section,
             matching: find.text('Persona que pagó efectivo'),
           ),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.descendant(
             of: section,
             matching: find.text('Persona que pagó transferencia'),
           ),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.byKey(const Key('report-debtor-payment-sale-only')),
@@ -196,7 +193,7 @@ void main() {
             of: section,
             matching: find.text('26/10/2026 · 10:30 AM'),
           ),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.descendant(of: section, matching: find.byType(Scrollable)),
@@ -206,11 +203,8 @@ void main() {
         store.movementRows = [];
         await controller.load();
         await tester.pumpAndSettle();
-        expect(value(tester, 'report-debtor-payments-total'), 'COP 0,00');
-        expect(
-          find.text('No hay abonos de deudores registrados en este rango.'),
-          findsOneWidget,
-        );
+        expect(value(tester, 'report-debtor-payments-cash'), 'COP 0,00');
+        expect(value(tester, 'report-debtor-payments-transfer'), 'COP 0,00');
         expect(tester.takeException(), isNull);
       },
     );
