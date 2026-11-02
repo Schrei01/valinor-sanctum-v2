@@ -175,10 +175,6 @@ class _ReportsPageState extends State<ReportsPage> {
                 const Text('Elige las fechas y horas y genera el reporte.'),
               if (data != null) _receipt(data),
               if (data != null) ...[const SizedBox(height: 16), _items(data)],
-              if (data != null) ...[
-                const SizedBox(height: 16),
-                _debtorPayments(data),
-              ],
               if (data != null) ...[const SizedBox(height: 16), _notes(data)],
             ],
           ),
@@ -341,129 +337,123 @@ class _ReportsPageState extends State<ReportsPage> {
     String person(ReportMovement m) => m.debtorName?.trim().isNotEmpty == true
         ? m.debtorName!
         : 'Persona sin identificar';
-    return Card(
+    return SizedBox(
       key: const Key('report-debtor-payments'),
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionTitle('Abonos de deudores'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 24,
-              runSpacing: 8,
-              children: [
-                Text(
-                  'Efectivo: ${inventoryMoney(cash, widget.profile)}',
-                  key: const Key('report-debtor-payments-cash'),
-                ),
-                Text(
-                  'Transferencia: ${inventoryMoney(transfer, widget.profile)}',
-                  key: const Key('report-debtor-payments-transfer'),
-                ),
-                if (other != 0)
-                  Text(
-                    'Otras cuentas: ${inventoryMoney(other, widget.profile)}',
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            FinancialTotal(
-              label: 'Total abonado',
-              value: inventoryMoney(data.debtorPaymentsMinor, widget.profile),
-              valueKey: const Key('report-debtor-payments-total'),
-            ),
-            const SizedBox(height: 12),
-            if (payments.isEmpty)
-              const Text('No hay abonos de deudores registrados en este rango.')
-            else
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth < 700) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (final m in payments)
-                          Padding(
-                            key: ValueKey('report-debtor-payment-${m.id}'),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  person(m),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(moment(m), style: _muted),
-                                Wrap(
-                                  spacing: 16,
-                                  runSpacing: 4,
-                                  children: [
-                                    Text(method(m)),
-                                    Text(
-                                      inventoryMoney(
-                                        m.amountMinor,
-                                        widget.profile,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    );
-                  }
-                  return Table(
-                    columnWidths: const {
-                      0: FlexColumnWidth(1.5),
-                      1: FlexColumnWidth(2),
-                      2: FlexColumnWidth(1.2),
-                      3: FlexColumnWidth(1.3),
-                    },
-                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('Abonos de deudores'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 24,
+            runSpacing: 8,
+            children: [
+              Text(
+                'Efectivo: ${inventoryMoney(cash, widget.profile)}',
+                key: const Key('report-debtor-payments-cash'),
+              ),
+              Text(
+                'Transferencia: ${inventoryMoney(transfer, widget.profile)}',
+                key: const Key('report-debtor-payments-transfer'),
+              ),
+              if (other != 0)
+                Text('Otras cuentas: ${inventoryMoney(other, widget.profile)}'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FinancialTotal(
+            label: 'Total abonado',
+            value: inventoryMoney(data.debtorPaymentsMinor, widget.profile),
+            valueKey: const Key('report-debtor-payments-total'),
+          ),
+          const SizedBox(height: 12),
+          if (payments.isEmpty)
+            const Text('No hay abonos de deudores registrados en este rango.')
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 700) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TableRow(
-                        children: [
-                          Text('Fecha y hora', style: _muted),
-                          Text('Persona', style: _muted),
-                          Text('Medio de pago', style: _muted),
-                          Text(
-                            'Importe',
-                            textAlign: TextAlign.right,
-                            style: _muted,
-                          ),
-                        ],
-                      ),
                       for (final m in payments)
-                        TableRow(
-                          children: [
-                            Padding(
-                              key: ValueKey('report-debtor-payment-${m.id}'),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(moment(m)),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 12),
-                              child: Text(person(m)),
-                            ),
-                            Text(method(m)),
-                            _amount(
-                              'report-debtor-payment-amount-${m.id}',
-                              m.amountMinor,
-                            ),
-                          ],
+                        Padding(
+                          key: ValueKey('report-debtor-payment-${m.id}'),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                person(m),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(moment(m), style: _muted),
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 4,
+                                children: [
+                                  Text(method(m)),
+                                  Text(
+                                    inventoryMoney(
+                                      m.amountMinor,
+                                      widget.profile,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                     ],
                   );
-                },
-              ),
-          ],
-        ),
+                }
+                return Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(1.5),
+                    1: FlexColumnWidth(2),
+                    2: FlexColumnWidth(1.2),
+                    3: FlexColumnWidth(1.3),
+                  },
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: [
+                    TableRow(
+                      children: [
+                        Text('Fecha y hora', style: _muted),
+                        Text('Persona', style: _muted),
+                        Text('Medio de pago', style: _muted),
+                        Text(
+                          'Importe',
+                          textAlign: TextAlign.right,
+                          style: _muted,
+                        ),
+                      ],
+                    ),
+                    for (final m in payments)
+                      TableRow(
+                        children: [
+                          Padding(
+                            key: ValueKey('report-debtor-payment-${m.id}'),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(moment(m)),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: Text(person(m)),
+                          ),
+                          Text(method(m)),
+                          _amount(
+                            'report-debtor-payment-amount-${m.id}',
+                            m.amountMinor,
+                          ),
+                        ],
+                      ),
+                  ],
+                );
+              },
+            ),
+        ],
       ),
     );
   }
@@ -604,7 +594,17 @@ class _ReportsPageState extends State<ReportsPage> {
             const Divider(height: 12),
             LayoutBuilder(
               builder: (context, constraints) {
-                final panels = [_debtors(data), _transfers(data)];
+                final panels = [
+                  _debtors(data),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _transfers(data),
+                      const Divider(height: 24),
+                      _debtorPayments(data),
+                    ],
+                  ),
+                ];
                 if (constraints.maxWidth < 660) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

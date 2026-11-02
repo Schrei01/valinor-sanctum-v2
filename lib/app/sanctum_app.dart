@@ -623,7 +623,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    isProduction ? 'Versión 1.2.1' : 'Versión 0.37.0',
+                    isProduction ? 'Versión 1.2.1' : 'Versión 0.37.1',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

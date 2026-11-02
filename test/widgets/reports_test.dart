@@ -96,7 +96,7 @@ void main() {
 
   for (final width in [1000.0, 400.0]) {
     testWidgets(
-      'debtor payment detail follows transactions and reconciles by method at $width',
+      'debtor payment detail sits below transfers inside the receipt at $width',
       (tester) async {
         final at = DateTime.utc(2026, 10, 26, 15, 30);
         store.movementRows = [
@@ -136,11 +136,34 @@ void main() {
         await open(tester, size: Size(width, 1200));
         final section = find.byKey(const Key('report-debtor-payments'));
         expect(
+          find.descendant(
+            of: find.byKey(const Key('report-receipt')),
+            matching: section,
+          ),
+          findsOneWidget,
+        );
+        expect(
           tester.getTopLeft(section).dy,
           greaterThan(
-            tester.getBottomRight(find.byKey(const Key('report-items'))).dy,
+            tester
+                .getBottomRight(find.byKey(const Key('report-transfers-total')))
+                .dy,
           ),
         );
+        expect(
+          tester.getBottomRight(section).dy,
+          lessThan(tester.getTopLeft(find.byKey(const Key('report-items'))).dy),
+        );
+        if (width >= 1000) {
+          expect(
+            tester.getTopLeft(section).dx,
+            tester.getTopLeft(find.text('TRANSFERENCIAS ENTRE CUENTAS')).dx,
+          );
+          expect(
+            tester.getTopLeft(section).dx,
+            greaterThan(tester.getTopLeft(find.text('DEUDORES AL CIERRE')).dx),
+          );
+        }
         expect(value(tester, 'report-debtor-payments-total'), 'COP 80,00');
         expect(
           value(tester, 'report-debtor-payments-cash'),
