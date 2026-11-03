@@ -326,6 +326,7 @@ Future<void> restoreReleasedV20ForFixture(DatabaseExecutor db) async {
 
 /// Synthetic reconstruction only: remove the empty v22 addition for old fixtures.
 Future<void> restoreReleasedV21ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV22ForFixture(db);
   expect(await db.query('debtor_loans'), isEmpty);
   await db.execute('PRAGMA defer_foreign_keys=ON');
   final created = <String>{};
@@ -393,6 +394,34 @@ Future<void> restoreReleasedV21ForFixture(DatabaseExecutor db) async {
     (await db.query(
       'schema_migrations',
       where: 'version=21',
+    )).single['schema_checksum'],
+  );
+}
+
+/// Test-only reconstruction of v22; keep the original financial facts intact.
+Future<void> restoreReleasedV22ForFixture(DatabaseExecutor db) async {
+  await db.execute('DROP TRIGGER supplier_payments_validate_document_posting');
+  await db.execute(
+    DatabaseSchema.migration5Statements.singleWhere(
+      (s) => s.startsWith(
+        'CREATE TRIGGER supplier_payments_validate_document_posting\n',
+      ),
+    ),
+  );
+  await db.delete('schema_migrations', where: 'version=23');
+  await db.execute('PRAGMA user_version=22');
+  final schema = await db.rawQuery(
+    "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE substr(name,1,7)<>'sqlite_' ORDER BY type,name",
+  );
+  expect(
+    DatabaseSchema.checksum(
+      jsonEncode([
+        for (final s in schema) [s['type'], s['name'], s['tbl_name'], s['sql']],
+      ]),
+    ),
+    (await db.query(
+      'schema_migrations',
+      where: 'version=22',
     )).single['schema_checksum'],
   );
 }

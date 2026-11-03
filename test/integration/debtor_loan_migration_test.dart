@@ -85,7 +85,7 @@ void main() {
         await app.close();
         app = null;
         app = await AppDatabase.open(path: path);
-        expect(await app.database.getVersion(), 22);
+        expect(await app.database.getVersion(), AppDatabase.schemaVersion);
         for (final name in oldColumns.keys) {
           final current = (await app.database.query(
             name,

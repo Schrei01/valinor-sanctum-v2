@@ -12,7 +12,7 @@ part 'split_payment_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 22;
+  static const int version = 23;
   static String utcSortKey(String expression) => _utcSortKey(expression);
 
   // ASCII VS20: a file-format marker, independent of the original POS.
@@ -86,6 +86,7 @@ abstract final class DatabaseSchema {
     20 => 'event_owner_investment_v20',
     21 => 'signed_stock_corrections_and_account_creation_v21',
     22 => 'owner_funded_debtor_loans_v22',
+    23 => 'supplier_payments_ignore_voided_cash_documents_v23',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -112,8 +113,22 @@ abstract final class DatabaseSchema {
     20 => checksum(migration20Statements.join('\n;\n')),
     21 => checksum(migration21Statements.join('\n;\n')),
     22 => checksum(migration22Statements.join('\n;\n')),
+    23 => checksum(migration23Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
+
+  /// Cash balances and chronology must match the posted-only read models.
+  /// Reversed documents remain immutable history but cannot spend cash twice.
+  static final List<String> migration23Statements = List.unmodifiable([
+    'DROP TRIGGER supplier_payments_validate_document_posting',
+    migration5Statements
+        .singleWhere(
+          (s) => s.startsWith(
+            'CREATE TRIGGER supplier_payments_validate_document_posting\n',
+          ),
+        )
+        .replaceAll("doc.status <> 'draft'", "doc.status = 'posted'"),
+  ]);
 
   static final List<String> migration22Statements = List.unmodifiable(
     DebtorLoanSchema.build([
