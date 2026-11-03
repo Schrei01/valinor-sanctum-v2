@@ -279,7 +279,14 @@ void main() {
       expect(find.text('Reponer producto · existencias: 2'), findsOneWidget);
       await enter(tester, 'intake-cost', '1.100');
       await enter(tester, 'intake-pvp', '2.600');
+      expect(find.text('Usar sugerido'), findsNothing);
+      await tap(tester, find.byKey(const Key('intake-use-previous-pvp')));
+      expect(value(tester, 'intake-pvp'), '2.500,00');
       await enter(tester, 'intake-quantity', '2');
+      await enter(tester, 'intake-cost', '1.200');
+      expect(value(tester, 'intake-pvp'), '2.500,00');
+      await enter(tester, 'intake-cost', '1.100');
+      await enter(tester, 'intake-pvp', '2.600');
       await controller.load();
       await tester.pumpAndSettle();
       expect(value(tester, 'intake-cost'), '1.100');

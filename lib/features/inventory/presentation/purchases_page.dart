@@ -350,31 +350,34 @@ class _PurchasesPageState extends State<PurchasesPage> {
                         ]),
                         const SizedBox(height: 8),
                         if (_existing != null)
-                          Text(
-                            'PVP anterior: ${inventoryMoney(_existing!.listPriceMinor, widget.profile)}',
-                            key: const Key('intake-previous-pvp'),
-                          ),
-                        Wrap(
-                          spacing: 12,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              _suggestedPvp == null
-                                  ? 'PVP sugerido: completa costo total y cantidad'
-                                  : 'PVP sugerido: ${inventoryMoney(_suggestedPvp!, widget.profile)}',
-                              key: const Key('intake-suggested-pvp'),
-                            ),
-                            if (_suggestedPvp != null)
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'PVP anterior: ${inventoryMoney(_existing!.listPriceMinor, widget.profile)}',
+                                key: const Key('intake-previous-pvp'),
+                              ),
                               TextButton(
+                                key: const Key('intake-use-previous-pvp'),
                                 onPressed: locked
                                     ? null
                                     : () => setState(() {
-                                        _pvpManual = false;
-                                        _suggest();
+                                        _pvp.text = _amount(
+                                          _existing!.listPriceMinor,
+                                        );
+                                        _pvpManual = true;
                                       }),
-                                child: const Text('Usar sugerido'),
+                                child: const Text('Usar valor'),
                               ),
-                          ],
+                            ],
+                          ),
+                        Text(
+                          _suggestedPvp == null
+                              ? 'PVP sugerido: completa costo total y cantidad'
+                              : 'PVP sugerido: ${inventoryMoney(_suggestedPvp!, widget.profile)}',
+                          key: const Key('intake-suggested-pvp'),
                         ),
                         const Text(
                           'Sugerencia = costo total ÷ cantidad ÷ 0,65. Puedes elegir un PVP menor. El PVP elegido aplica a todas las existencias y sus cambios quedan guardados.',
