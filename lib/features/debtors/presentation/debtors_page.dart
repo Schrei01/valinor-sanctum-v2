@@ -379,12 +379,18 @@ class _DebtorsPageState extends State<DebtorsPage> {
               value: _money(person.balanceMinor),
               valueKey: const Key('debtor-balance'),
             ),
+            const SizedBox(height: 16),
             if (!person.isActive)
-              const Text(
-                'Esta persona no puede recibir nuevas ventas a Deudas. Puede seguir abonando.',
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Esta persona no puede recibir nuevas ventas a Deudas. Puede seguir abonando.',
+                ),
               ),
             Wrap(
-              spacing: 8,
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 OutlinedButton.icon(
                   key: const Key('debtor-add-loan'),
@@ -392,6 +398,13 @@ class _DebtorsPageState extends State<DebtorsPage> {
                       ? null
                       : () => _loan(person),
                   icon: const Icon(Icons.add_card),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
                   label: const Text('Registrar préstamo'),
                 ),
                 TextButton(
