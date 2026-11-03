@@ -3,6 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../core/domain/money.dart';
 import '../../../core/infrastructure/database/app_database.dart';
 import '../../../core/infrastructure/database/schema.dart';
+import '../../../core/infrastructure/database/investment_ledger.dart';
 import '../../collections/data/sqlite_collections_store.dart';
 import '../../inventory/domain/inventory_store.dart';
 import '../../quick_sales/data/sqlite_quick_sales_store.dart';
@@ -27,6 +28,7 @@ class SqliteDebtorsStore implements DebtorsStore {
       synthetic: synthetic,
     ).load();
     return database.database.transaction((txn) async {
+      await InvestmentLedger.initialize(txn);
       final people = await txn.rawQuery(
         'SELECT debtor.*,EXISTS(SELECT 1 FROM debtor_openings WHERE debtor_id=debtor.id) has_opening FROM debtors debtor ORDER BY name COLLATE NOCASE,id',
       );
@@ -168,6 +170,7 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
         'debtorId': command.kind == 'create'
             ? InventoryIds.next()
             : command.debtorId,
+        if (command.kind == 'loan') 'receivableId': InventoryIds.next(),
         'input': input,
         'nameSnapshot': plan.name,
         'allocations': plan.allocations,
@@ -260,6 +263,7 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
         personId = payload['debtorId'] as String;
     final document =
         (command.kind == 'payment' ||
+            command.kind == 'loan' ||
             command.kind == 'opening' ||
             (command.kind == 'create' && command.amountMinor > 0))
         ? InventoryIds.next()
@@ -286,7 +290,7 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
               ? _minor(plan.balance - BigInt.from(command.amountMinor))
               : command.kind == 'create'
               ? command.amountMinor
-              : command.kind == 'opening'
+              : command.kind == 'opening' || command.kind == 'loan'
               ? _minor(plan.balance + BigInt.from(command.amountMinor))
               : _minor(plan.balance),
         },
@@ -315,17 +319,44 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
         'actor_id': _operator,
         'type': command.kind == 'payment'
             ? 'debtor_collection'
+            : command.kind == 'loan'
+            ? 'debtor_loan'
             : 'debtor_opening',
         'status': 'draft',
         'occurred_at_utc': command.occurredAtUtc.toIso8601String(),
         'business_date': _date(command.occurredAtUtc),
         'recorded_at_utc': now,
         'source_kind': synthetic ? 'synthetic' : 'native',
-        'date_quality': command.kind == 'payment'
+        'date_quality': command.kind == 'payment' || command.kind == 'loan'
             ? 'documented'
             : 'reconstructed',
       });
-      if (command.kind == 'create' || command.kind == 'opening') {
+      if (command.kind == 'loan') {
+        await _account(
+          txn,
+          _control,
+          'CXC',
+          'Clientes por cobrar',
+          'asset',
+          'customer_receivable',
+        );
+        await txn.insert('debtor_loans', {
+          'document_id': document,
+          'debtor_id': personId,
+          'name_snapshot': plan.name,
+          'amount_minor': command.amountMinor,
+          'control_account_id': _control,
+          'funding_account_id': InvestmentLedger.accountId,
+        });
+        await txn.insert('debtor_receivables', {
+          'receivable_id': payload['receivableId'],
+          'loan_document_id': document,
+          'debtor_id': personId,
+          'source': 'loan',
+          'command_id': commandId,
+          'assigned_at_utc': now,
+        });
+      } else if (command.kind == 'create' || command.kind == 'opening') {
         await _account(
           txn,
           _control,
@@ -501,6 +532,47 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
       (s, r) => s + BigInt.from(r['remaining_minor'] as int),
     );
     _minor(balance);
+    if (command.kind == 'loan') {
+      if (person['is_active'] != 1) {
+        throw const DebtorsValidationException(
+          'Habilita el fiado de esta persona antes de registrar un préstamo.',
+        );
+      }
+      final account = await txn.query(
+        'ledger_accounts',
+        where: 'id=?',
+        whereArgs: [InvestmentLedger.accountId],
+      );
+      if (account.length != 1 ||
+          account.single['class'] != 'liability' ||
+          account.single['role'] != 'owner_payable' ||
+          account.single['is_active'] != 1) {
+        throw const DebtorsValidationException(
+          'La cuenta de inversión no está disponible.',
+        );
+      }
+      try {
+        await InvestmentLedger.checkPurchase(
+          txn,
+          command.amountMinor,
+          command.occurredAtUtc,
+        );
+        await InvestmentLedger.checkChronology(txn, [
+          _control,
+        ], command.occurredAtUtc);
+      } on InvestmentValidationException catch (e) {
+        throw DebtorsValidationException(e.message);
+      }
+      _minor(balance + BigInt.from(command.amountMinor));
+      _minor(
+        rows.fold<BigInt>(
+              legacy,
+              (sum, r) => sum + BigInt.from(r['remaining_minor'] as int),
+            ) +
+            BigInt.from(command.amountMinor),
+      );
+      return _Plan(name, balance, [], null);
+    }
     if (command.kind == 'opening') {
       if ((await txn.query(
         'debtor_openings',
@@ -689,13 +761,14 @@ JOIN journal_lines line ON line.entry_id=entry.id WHERE document.status='posted'
     DatabaseExecutor txn,
   ) => txn.rawQuery(
     '''SELECT balance.*,link.debtor_id,
- coalesce(sale.label_snapshot,'Saldo anterior') label,CASE WHEN opening.document_id IS NULL THEN 0 ELSE 1 END is_opening,
+ coalesce(sale.label_snapshot,CASE WHEN loan.document_id IS NOT NULL THEN 'Préstamo desde inversión' ELSE 'Saldo anterior' END) label,CASE WHEN opening.document_id IS NULL THEN 0 ELSE 1 END is_opening,
  CASE WHEN request.command_id IS NOT NULL AND json_valid(request.canonical_payload) AND json_extract(request.canonical_payload,'\$.version') IN(2,3)
  THEN json_extract(request.canonical_payload,'\$.creditMinor') ELSE balance.initial_minor END credit_minor
  FROM customer_receivable_balances balance LEFT JOIN debtor_receivables link ON link.receivable_id=balance.id
  LEFT JOIN sales sale ON sale.document_id=balance.origin_document_id LEFT JOIN debtor_openings opening ON opening.document_id=balance.origin_document_id
+ LEFT JOIN debtor_loans loan ON loan.document_id=balance.origin_document_id
  LEFT JOIN business_documents document ON document.id=balance.origin_document_id LEFT JOIN quick_sale_requests request ON request.sale_command_id=document.command_id
- WHERE sale.document_id IS NOT NULL OR opening.document_id IS NOT NULL ORDER BY balance.issued_at_utc,balance.id''',
+ WHERE sale.document_id IS NOT NULL OR opening.document_id IS NOT NULL OR loan.document_id IS NOT NULL ORDER BY balance.issued_at_utc,balance.id''',
   );
   static Future<List<Map<String, Object?>>> _options(
     DatabaseExecutor txn,
@@ -810,8 +883,18 @@ JOIN business_documents document ON document.id=entry.document_id AND document.s
     }
     _minor(BigInt.from(c.amountMinor));
     _date(c.occurredAtUtc);
-    if (!['create', 'opening', 'payment', 'assign'].contains(c.kind)) {
+    if (!['create', 'opening', 'payment', 'assign', 'loan'].contains(c.kind)) {
       throw const DebtorsValidationException('Operación desconocida.');
+    }
+    if (c.kind == 'loan' &&
+        (c.amountMinor <= 0 ||
+            c.paymentOptionId != InvestmentLedger.optionId ||
+            c.previousSource != null ||
+            c.receivableId != null ||
+            c.name != null)) {
+      throw const DebtorsValidationException(
+        'Indica un valor positivo y selecciona Inversión para el préstamo.',
+      );
     }
     if (c.kind == 'opening' &&
         (c.amountMinor <= 0 || c.previousSource == null)) {
@@ -852,7 +935,9 @@ JOIN business_documents document ON document.id=entry.document_id AND document.s
                 ? 'legacy'
                 : 'additional')
           : null,
-      'paymentOptionId': c.kind == 'payment' ? c.paymentOptionId : null,
+      'paymentOptionId': c.kind == 'payment' || c.kind == 'loan'
+          ? c.paymentOptionId
+          : null,
       'receivableId': c.kind == 'assign' ? c.receivableId : null,
       'occurredAtUtc': c.occurredAtUtc.toIso8601String(),
     };

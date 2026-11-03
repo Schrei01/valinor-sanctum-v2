@@ -1,5 +1,8 @@
 /// V19 adds owner financing without treating it as available cash.
 abstract final class InvestmentSchema {
+  /// Exact checked running balance shared with later financial migrations.
+  static String balanceSql(String account, {bool creditNormal = false}) =>
+      _balance(account, creditNormal: creditNormal);
   static String balanceQuery(String account, {bool creditNormal = false}) =>
       _balance(account, creditNormal: creditNormal);
   static List<String> build({

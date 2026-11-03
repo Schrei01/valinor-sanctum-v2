@@ -335,6 +335,19 @@ JOIN business_documents document ON document.id=opening.document_id AND document
 JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='posted' ''',
     );
     final debtChanges = <ReportDebtChange>[
+      for (final loan in await txn.rawQuery(
+        '''SELECT loan.*,document.occurred_at_utc FROM debtor_loans loan
+ JOIN business_documents document ON document.id=loan.document_id AND document.status='posted'
+ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='posted' ''',
+      ))
+        if (period.contains(_date(loan['occurred_at_utc'])))
+          ReportDebtChange(
+            documentId: loan['document_id'] as String,
+            occurredAtUtc: _date(loan['occurred_at_utc']),
+            concept: 'Préstamo desde inversión: ${loan['name_snapshot']}',
+            amountMinor: loan['amount_minor'] as int,
+            isLegacyAssignment: false,
+          ),
       for (final opening in openingRows.where(
         (o) => period.contains(_date(o['occurred_at_utc'])),
       ))

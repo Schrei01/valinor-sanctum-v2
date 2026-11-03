@@ -202,6 +202,24 @@ ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
         ),
       ),
     );
+    final loans = await txn.rawQuery(
+      '''SELECT loan.*,d.occurred_at_utc FROM debtor_loans loan
+ JOIN business_documents d ON d.id=loan.document_id AND d.status='posted'
+ JOIN journal_entries e ON e.document_id=d.id AND e.status='posted' ''',
+    );
+    movements.addAll(
+      loans.map(
+        (r) => TreasuryMovement(
+          id: 'investment:loan:${r['document_id']}',
+          cashAccountId: InvestmentLedger.optionId,
+          accountName: 'Inversión por recuperar',
+          documentId: r['document_id'] as String,
+          occurredAtUtc: DateTime.parse(r['occurred_at_utc'] as String),
+          concept: 'Préstamo desde inversión: ${r['name_snapshot']}',
+          amountMinor: r['amount_minor'] as int,
+        ),
+      ),
+    );
     final eventInvestments = await txn.rawQuery(
       '''SELECT ev.document_id,ev.name_snapshot,ev.fixed_cost_minor,d.occurred_at_utc
       FROM events ev JOIN business_documents d ON d.id=ev.document_id AND d.status='posted'

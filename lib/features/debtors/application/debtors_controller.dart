@@ -98,6 +98,8 @@ class DebtorsController extends ChangeNotifier {
   String _success(String kind) => switch (kind) {
     'create' => 'Persona registrada. Ya puedes seleccionarla en Ventas.',
     'opening' => 'Saldo anterior registrado.',
+    'loan' =>
+      'Préstamo registrado. Aumentaron la deuda y la inversión por recuperar.',
     'payment' =>
       'Abono registrado. La deuda y la cuenta de dinero están actualizadas.',
     _ => 'Deuda anterior asignada sin aumentar el total.',

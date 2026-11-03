@@ -175,14 +175,17 @@ class _DebtorsPageState extends State<DebtorsPage> {
                         ),
                       if (pending.command.paymentOptionId != null)
                         Text(
-                          data.paymentOptions
-                                  .where(
-                                    (p) =>
-                                        p.id == pending.command.paymentOptionId,
-                                  )
-                                  .firstOrNull
-                                  ?.displayLabel ??
-                              'Medio no disponible',
+                          pending.command.kind == 'loan'
+                              ? 'Inversión'
+                              : data.paymentOptions
+                                        .where(
+                                          (p) =>
+                                              p.id ==
+                                              pending.command.paymentOptionId,
+                                        )
+                                        .firstOrNull
+                                        ?.displayLabel ??
+                                    'Medio no disponible',
                         ),
                       const Text(
                         'Reintentar recupera la misma operación sin repetir movimientos. Descartar libera una solicitud no confirmada.',
@@ -383,6 +386,14 @@ class _DebtorsPageState extends State<DebtorsPage> {
             Wrap(
               spacing: 8,
               children: [
+                OutlinedButton.icon(
+                  key: const Key('debtor-add-loan'),
+                  onPressed: _locked || !person.isActive
+                      ? null
+                      : () => _loan(person),
+                  icon: const Icon(Icons.add_card),
+                  label: const Text('Registrar préstamo'),
+                ),
                 TextButton(
                   onPressed: _locked ? null : () => _availability(person),
                   child: Text(
@@ -601,6 +612,125 @@ class _DebtorsPageState extends State<DebtorsPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _loan(DebtorSummary person) async {
+    final amount = TextEditingController();
+    final form = GlobalKey<FormState>();
+    String? funding, error;
+    var busy = false;
+    try {
+      final route = DialogRoute<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialog) => AlertDialog(
+            title: Text('Préstamo a ${person.name}'),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Form(
+                  key: form,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (error != null) InventoryNotice(text: error!),
+                      TextFormField(
+                        key: const Key('debtor-loan-amount'),
+                        controller: amount,
+                        inputFormatters: [const GroupedNumberFormatter()],
+                        keyboardType: TextInputType.number,
+                        enabled: !busy,
+                        decoration: const InputDecoration(
+                          labelText: 'Valor del préstamo',
+                        ),
+                        validator: (v) =>
+                            inventoryAmountError(v, widget.profile) ??
+                            (_parse(v!) <= 0
+                                ? 'El valor debe ser positivo.'
+                                : null),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        key: const Key('debtor-loan-funding'),
+                        initialValue: funding,
+                        decoration: const InputDecoration(
+                          labelText: 'Origen del dinero',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'investment',
+                            child: Text('Inversión'),
+                          ),
+                        ],
+                        onChanged: busy
+                            ? null
+                            : (v) => setDialog(() => funding = v),
+                        validator: (v) =>
+                            v == null ? 'Selecciona Inversión.' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Aumenta la deuda de esta persona y la inversión por recuperar. El dinero lo entregas tú; no sale de Caja ni Nequi y no se registra como venta.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                key: const Key('debtor-loan-confirm'),
+                onPressed: busy
+                    ? null
+                    : () async {
+                        if (!form.currentState!.validate()) return;
+                        setDialog(() {
+                          busy = true;
+                          error = null;
+                        });
+                        final ok = await widget.controller.submit(
+                          DebtorCommand(
+                            commandId: InventoryIds.next(),
+                            kind: 'loan',
+                            debtorId: person.id,
+                            amountMinor: _parse(amount.text),
+                            paymentOptionId: funding,
+                            occurredAtUtc: DateTime.now().toUtc(),
+                          ),
+                        );
+                        if (!dialogContext.mounted) return;
+                        if (ok ||
+                            widget.controller.uncertain != null ||
+                            (widget.controller.snapshot?.pending.isNotEmpty ??
+                                false)) {
+                          Navigator.pop(dialogContext);
+                          await _submitted(ok);
+                        } else {
+                          setDialog(() {
+                            busy = false;
+                            error =
+                                widget.controller.error ??
+                                'No se pudo registrar el préstamo.';
+                          });
+                        }
+                      },
+                child: const Text('Registrar préstamo'),
+              ),
+            ],
+          ),
+        ),
+      );
+      await Navigator.of(context).push(route);
+      await route.completed;
+    } finally {
+      amount.dispose();
+    }
   }
 
   Future<void> _createOrOpening(
@@ -969,6 +1099,7 @@ class _DebtorsPageState extends State<DebtorsPage> {
   }
 
   String _kindLabel(String kind) => switch (kind) {
+    'loan' => 'Préstamo desde inversión',
     'create' => 'Persona',
     'opening' => 'Saldo anterior',
     'payment' => 'Abono',

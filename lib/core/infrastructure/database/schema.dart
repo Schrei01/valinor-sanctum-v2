@@ -7,11 +7,12 @@ import 'catalog_operations_schema.dart';
 import 'investment_schema.dart';
 import 'event_investment_schema.dart';
 import 'stock_correction_schema.dart';
+import 'debtor_loan_schema.dart';
 part 'split_payment_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 21;
+  static const int version = 22;
   static String utcSortKey(String expression) => _utcSortKey(expression);
 
   // ASCII VS20: a file-format marker, independent of the original POS.
@@ -84,6 +85,7 @@ abstract final class DatabaseSchema {
     19 => 'owner_investment_and_refunds_v19',
     20 => 'event_owner_investment_v20',
     21 => 'signed_stock_corrections_and_account_creation_v21',
+    22 => 'owner_funded_debtor_loans_v22',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -109,9 +111,18 @@ abstract final class DatabaseSchema {
     19 => checksum(migration19Statements.join('\n;\n')),
     20 => checksum(migration20Statements.join('\n;\n')),
     21 => checksum(migration21Statements.join('\n;\n')),
+    22 => checksum(migration22Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
 
+  static final List<String> migration22Statements = List.unmodifiable(
+    DebtorLoanSchema.build([
+      ...migration13Statements,
+      ...migration16Statements,
+      ...migration17Statements,
+      ...migration19Statements,
+    ]),
+  );
   static final List<String> migration14Statements = List.unmodifiable(
     LegacyConversionSchema.statements,
   );

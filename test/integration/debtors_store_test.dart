@@ -15,6 +15,9 @@ import 'package:valinor_sanctum_2/features/quick_sales/data/sqlite_quick_sales_s
 import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
 import 'package:valinor_sanctum_2/features/collections/data/sqlite_collections_store.dart';
 import 'package:valinor_sanctum_2/features/collections/domain/collections_store.dart';
+import 'package:valinor_sanctum_2/features/reports/data/sqlite_reports_store.dart';
+import 'package:valinor_sanctum_2/features/reports/domain/reports_store.dart';
+import 'package:valinor_sanctum_2/core/domain/money.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -169,6 +172,215 @@ void main() {
     );
     await quick.confirmPrepared('sale-$id');
   }
+
+  DebtorCommand loan(
+    String id,
+    String debtor,
+    int amount, {
+    DateTime? time,
+    String funding = 'investment',
+  }) => DebtorCommand(
+    commandId: id,
+    kind: 'loan',
+    debtorId: debtor,
+    amountMinor: amount,
+    paymentOptionId: funding,
+    occurredAtUtc: time ?? at,
+  );
+
+  test(
+    'repeated owner loans increase only debt and investment; ordinary mixed repayments never count as sales',
+    () async {
+      final id = await person(
+        'Ana',
+        amount: 5000,
+        source: PreviousDebtSource.includedInLegacy,
+      );
+      final before = await SqliteTreasuryStore(app).load();
+      final command = loan('loan-1', id, 10000);
+      await run(command);
+      final saved = await snapshot();
+      await store.prepare(command);
+      expect(await store.confirm('loan-1'), id);
+      expect(await snapshot(), saved);
+      await run(
+        loan('loan-2', id, 5000, time: at.add(const Duration(minutes: 10))),
+      );
+      var data = await store.load();
+      expect(data.debtors.single.balanceMinor, 20000);
+      expect(data.debtors.single.hasOpening, isTrue);
+      expect(
+        data.charges.where((c) => c.label == 'Préstamo desde inversión').length,
+        2,
+      );
+      var treasury = await SqliteTreasuryStore(app).load();
+      expect(treasury.investmentMinor, before.investmentMinor + 15000);
+      expect(treasury.cashMinor, before.cashMinor);
+      expect(treasury.nequiMinor, before.nequiMinor);
+      expect(
+        treasury.movements
+            .where((m) => m.concept.startsWith('Préstamo desde inversión'))
+            .length,
+        2,
+      );
+      expect(await app.database.query('sales'), isEmpty);
+      expect(await app.database.query('inventory_movements'), isEmpty);
+      await pay(id, 12000, command: 'cash-pay');
+      await pay(
+        id,
+        3000,
+        command: 'transfer-pay',
+        option: 'quick-default:NEQUI',
+      );
+      data = await store.load();
+      expect(data.debtors.single.balanceMinor, 5000);
+      treasury = await SqliteTreasuryStore(app).load();
+      expect(treasury.cashMinor, before.cashMinor + 12000);
+      expect(treasury.nequiMinor, before.nequiMinor + 3000);
+      expect(treasury.investmentMinor, before.investmentMinor + 15000);
+      final report = await SqliteReportsStore(app).load(
+        ReportPeriod(
+          start: DateTime.utc(2026, 10, 21),
+          end: DateTime.utc(2026, 10, 21),
+        ),
+      );
+      expect(report.salesMinor, 0);
+      expect(report.outflowTotals.totalMinor, 0);
+      expect(report.operatingExpensesMinor, 0);
+      expect(report.debtorPaymentsFor(ReportAccountRole.cash), 12000);
+      expect(report.debtorPaymentsFor(ReportAccountRole.transfer), 3000);
+      expect(
+        report.debtorBalances.singleWhere((d) => d.id == id).amountMinor,
+        5000,
+      );
+      expect(
+        report.debtChanges
+            .where((c) => c.concept.startsWith('Préstamo desde inversión'))
+            .fold(0, (int s, c) => s + c.amountMinor),
+        15000,
+      );
+      expect(await app.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+    },
+  );
+
+  test(
+    'loan rollback keeps prepared request retryable and immutable after commit',
+    () async {
+      final id = await person('Ana');
+      await store.prepare(loan('atomic-loan', id, 10000));
+      final before = await snapshot();
+      await app.database.execute(
+        "CREATE TRIGGER synthetic_fail_loan BEFORE INSERT ON journal_lines WHEN NEW.account_id='investment:owner-payable' BEGIN SELECT RAISE(ABORT,'synthetic failure'); END",
+      );
+      await expectLater(store.confirm('atomic-loan'), throwsA(anything));
+      expect(await snapshot(), before);
+      await app.database.execute('DROP TRIGGER synthetic_fail_loan');
+      await store.confirm('atomic-loan');
+      final saved = await snapshot();
+      await expectLater(
+        app.database.update('debtor_loans', {'amount_minor': 1}),
+        throwsA(anything),
+      );
+      await expectLater(app.database.delete('debtor_loans'), throwsA(anything));
+      await expectLater(
+        app.database.update('debtor_receivables', {'debtor_id': 'unknown'}),
+        throwsA(anything),
+      );
+      expect(await snapshot(), saved);
+      expect((await store.load()).debtors.single.hasOpening, isFalse);
+    },
+  );
+
+  test(
+    'loans reject invalid amounts, funding, blocked people, changed identity and monetary overflow',
+    () async {
+      final id = await person('Ana');
+      for (final c in [
+        loan('zero', id, 0),
+        loan('negative', id, -1),
+        loan('cash-loan', id, 10, funding: 'quick-default:EFECTIVO'),
+        loan('missing-person', 'unknown', 10),
+        loan('overflow', id, Money.maxMinorUnits.toInt()),
+      ]) {
+        await expectLater(
+          store.prepare(c),
+          throwsA(isA<DebtorsValidationException>()),
+        );
+      }
+      await store.prepare(loan('blocked', id, 10000));
+      await store.setActive(id, false);
+      await expectLater(
+        store.confirm('blocked'),
+        throwsA(isA<DebtorsValidationException>()),
+      );
+      await expectLater(
+        store.prepare(loan('blocked-new', id, 100)),
+        throwsA(isA<DebtorsValidationException>()),
+      );
+      await store.setActive(id, true);
+      await store.confirm('blocked');
+      await expectLater(
+        store.prepare(loan('blocked', id, 20000)),
+        throwsA(isA<DebtorsValidationException>()),
+      );
+      await expectLater(
+        store.prepare(
+          loan(
+            'earlier',
+            id,
+            100,
+            time: at.subtract(const Duration(minutes: 1)),
+          ),
+        ),
+        throwsA(isA<DebtorsValidationException>()),
+      );
+      expect((await store.load()).debtors.single.balanceMinor, 10000);
+    },
+  );
+
+  test(
+    'SQL loan proof rejects wrong journal funding and reservations survive migration',
+    () async {
+      final id = await person('Ana');
+      await store.prepare(loan('forged-loan', id, 10000));
+      final before = await snapshot();
+      await app.database.execute(
+        "CREATE TRIGGER synthetic_wrong_loan AFTER INSERT ON journal_lines WHEN NEW.account_id='investment:owner-payable' BEGIN UPDATE journal_lines SET credit_minor=credit_minor-1 WHERE id=NEW.id; END",
+      );
+      await expectLater(store.confirm('forged-loan'), throwsA(anything));
+      expect(await snapshot(), before);
+      await app.database.execute('DROP TRIGGER synthetic_wrong_loan');
+      await store.confirm('forged-loan');
+      final triggerNames = (await app.database.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='debtor_requests'",
+      )).map((r) => r['name']);
+      expect(
+        triggerNames,
+        containsAll([
+          'debtor_requests_respect_adjustment',
+          'debtor_requests_respect_investment_refund',
+          'debtor_requests_update',
+        ]),
+      );
+      final posted = await app.database.query('debtor_loans');
+      final journal = (await app.database.query(
+        'journal_entries',
+        where: 'document_id=?',
+        whereArgs: [posted.single['document_id']],
+      )).single;
+      await expectLater(
+        app.database.insert('journal_lines', {
+          'id': 'extra-loan-line',
+          'entry_id': journal['id'],
+          'sequence': 9,
+          'account_id': 'investment:owner-payable',
+          'debit_minor': 1,
+          'credit_minor': 0,
+        }),
+        throwsA(anything),
+      );
+    },
+  );
 
   test(
     'registered person starts at zero without money or debt facts',

@@ -248,6 +248,7 @@ Future<void> restoreReleasedV19ForFixture(DatabaseExecutor db) async {
 
 /// Test-only reconstruction of the released v20, without positive corrections.
 Future<void> restoreReleasedV20ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV21ForFixture(db);
   expect(await db.query('stock_additions'), isEmpty);
   for (final sql in DatabaseSchema.migration21Statements) {
     final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
@@ -319,6 +320,79 @@ Future<void> restoreReleasedV20ForFixture(DatabaseExecutor db) async {
     (await db.query(
       'schema_migrations',
       where: 'version=20',
+    )).single['schema_checksum'],
+  );
+}
+
+/// Synthetic reconstruction only: remove the empty v22 addition for old fixtures.
+Future<void> restoreReleasedV21ForFixture(DatabaseExecutor db) async {
+  expect(await db.query('debtor_loans'), isEmpty);
+  await db.execute('PRAGMA defer_foreign_keys=ON');
+  final created = <String>{};
+  for (final sql in DatabaseSchema.migration22Statements) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name != null) created.add(name);
+  }
+  for (final name in created) {
+    await db.execute('DROP TRIGGER $name');
+  }
+  await db.execute('DROP VIEW all_customer_receivables');
+  await db.execute('DROP VIEW debtor_expected_journal');
+  for (final name in ['debtor_requests', 'debtor_receivables']) {
+    final definition = DatabaseSchema.migration13Statements.singleWhere(
+      (s) => s.startsWith('CREATE TABLE $name('),
+    );
+    final columns = (await db.rawQuery('PRAGMA table_info($name)'))
+        .map((r) => r['name'] as String)
+        .where((c) => c != 'loan_document_id')
+        .join(',');
+    await db.execute(
+      'CREATE TABLE ${name}_fixture AS SELECT $columns FROM $name',
+    );
+    await db.execute('DROP TABLE $name');
+    await db.execute(definition);
+    await db.execute('INSERT INTO $name SELECT * FROM ${name}_fixture');
+    await db.execute('DROP TABLE ${name}_fixture');
+  }
+  await db.execute('DROP TABLE debtor_loans');
+  final released = [
+    ...DatabaseSchema.migration13Statements,
+    ...DatabaseSchema.migration16Statements,
+    ...DatabaseSchema.migration17Statements,
+    ...DatabaseSchema.migration19Statements,
+  ];
+  final triggers = <String, String>{};
+  for (final sql in released) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name != null && created.contains(name)) triggers[name] = sql;
+  }
+  for (final sql in triggers.values) {
+    await db.execute(sql);
+  }
+  await db.execute(
+    'CREATE INDEX idx_debtor_receivables_person ON debtor_receivables(debtor_id)',
+  );
+  for (final name in ['all_customer_receivables', 'debtor_expected_journal']) {
+    await db.execute(
+      DatabaseSchema.migration13Statements.singleWhere(
+        (s) => s.startsWith('CREATE VIEW $name '),
+      ),
+    );
+  }
+  await db.delete('schema_migrations', where: 'version=22');
+  await db.execute('PRAGMA user_version=21');
+  final schema = await db.rawQuery(
+    "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE substr(name,1,7)<>'sqlite_' ORDER BY type,name",
+  );
+  expect(
+    DatabaseSchema.checksum(
+      jsonEncode([
+        for (final s in schema) [s['type'], s['name'], s['tbl_name'], s['sql']],
+      ]),
+    ),
+    (await db.query(
+      'schema_migrations',
+      where: 'version=21',
     )).single['schema_checksum'],
   );
 }

@@ -105,6 +105,70 @@ void main() {
     await t.pumpAndSettle();
   }
 
+  for (final width in [1120.0, 400.0]) {
+    testWidgets(
+      'owner loan validates funding and amount, groups thousands and uses selected person at width $width',
+      (t) async {
+        store.people.add(
+          const DebtorSummary(id: 'ana', name: 'Ana', balanceMinor: 100),
+        );
+        await open(t, size: Size(width, 1000));
+        await tap(t, find.text('Ana'));
+        await tap(t, find.byKey(const Key('debtor-add-loan')));
+        expect(find.text('Préstamo a Ana'), findsOneWidget);
+        await tap(t, find.byKey(const Key('debtor-loan-confirm')));
+        expect(store.inputs, isEmpty);
+        expect(find.text('Selecciona Inversión.'), findsOneWidget);
+        await enter(t, 'debtor-loan-amount', '0');
+        await tap(t, find.byKey(const Key('debtor-loan-confirm')));
+        expect(find.text('El valor debe ser positivo.'), findsOneWidget);
+        await enter(t, 'debtor-loan-amount', '10000');
+        final field = t.widget<TextFormField>(
+          find.byKey(const Key('debtor-loan-amount')),
+        );
+        expect(field.controller!.text, '10.000');
+        await tap(t, find.byKey(const Key('debtor-loan-funding')));
+        await tap(t, find.text('Inversión').last);
+        await tap(t, find.byKey(const Key('debtor-loan-confirm')));
+        expect(store.inputs.single.kind, 'loan');
+        expect(store.inputs.single.debtorId, 'ana');
+        expect(store.inputs.single.amountMinor, 1000000);
+        expect(store.inputs.single.paymentOptionId, 'investment');
+        expect(store.people.single.balanceMinor, 1000100);
+        expect(find.text('Préstamo a Ana'), findsNothing);
+        expect(
+          find.text(
+            'Préstamo registrado. Aumentaron la deuda y la inversión por recuperar.',
+          ),
+          findsOneWidget,
+        );
+        expect(t.takeException(), isNull);
+      },
+    );
+  }
+  testWidgets(
+    'blocked people cannot borrow and cancelling a loan writes nothing',
+    (t) async {
+      store.people.add(
+        const DebtorSummary(id: 'ana', name: 'Ana', balanceMinor: 100),
+      );
+      await open(t);
+      await tap(t, find.text('Ana'));
+      await tap(t, find.byKey(const Key('debtor-add-loan')));
+      await enter(t, 'debtor-loan-amount', '10000');
+      await tap(t, find.text('Cancelar'));
+      expect(store.inputs, isEmpty);
+      await controller.setActive('ana', false);
+      await t.pumpAndSettle();
+      expect(
+        t
+            .widget<OutlinedButton>(find.byKey(const Key('debtor-add-loan')))
+            .onPressed,
+        isNull,
+      );
+    },
+  );
+
   Finder option() => find.byWidgetPredicate(
     (w) =>
         w.key is ValueKey<String> &&
