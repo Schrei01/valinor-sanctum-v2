@@ -1,6 +1,6 @@
 # Valinor Sanctum 2.0
 
-**Desarrollo 0.38.0** permite registrar préstamos desde Inversión en la cuenta de un deudor. Aumenta su deuda y la inversión por recuperar sin mover Caja/Nequi ni registrar una venta. [Detalle](docs/81-prestamos-inversion-038.md).
+**Desarrollo 0.38.1** abre la ventana maximizada automáticamente. [Inicio maximizado](docs/82-inicio-maximizado.md). Incluye los préstamos desde Inversión de la 0.38.0: aumentan la deuda del cliente y la inversión por recuperar sin mover Caja/Nequi ni registrar una venta. [Detalle](docs/81-prestamos-inversion-038.md).
 El costo fijo de Eventos financiado por Inversión se suma al saldo pendiente de recuperar y puede devolverse desde Caja o
 Nequi. Los premios consumidos no duplican la inversión. **Ver historial** reúne
 los movimientos anteriores y actuales sin un bloque adicional. Abre **Iniciar
