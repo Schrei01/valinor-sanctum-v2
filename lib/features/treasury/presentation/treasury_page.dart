@@ -132,7 +132,7 @@ class _TreasuryPageState extends State<TreasuryPage> {
     builder: (context, constraints) {
       const gap = 12.0;
       final columns = constraints.maxWidth >= 1180
-          ? 6
+          ? 5
           : constraints.maxWidth >= 700
           ? 3
           : constraints.maxWidth >= 440
@@ -192,15 +192,46 @@ class _TreasuryPageState extends State<TreasuryPage> {
                     ? 'Incluye ${_money(data.legacyReceivablesMinor)} de cartera anterior sin detalle por cliente.'
                     : null,
               ),
-              _balanceCard(
-                keyName: 'total',
-                title: 'Total disponible',
-                subtitle: 'Caja + Nequi',
-                amount: data.totalAvailableMinor,
-                icon: Icons.account_balance_wallet_outlined,
-                width: width,
-              ),
             ],
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, totalsConstraints) {
+              final totalColumns = totalsConstraints.maxWidth >= 700 ? 3 : 1;
+              final totalWidth =
+                  (totalsConstraints.maxWidth - gap * (totalColumns - 1)) /
+                  totalColumns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  _balanceCard(
+                    keyName: 'total',
+                    title: 'Total disponible',
+                    subtitle: 'Caja + Nequi + Caja mayor',
+                    amount: data.totalAvailableMinor,
+                    icon: Icons.account_balance_wallet_outlined,
+                    width: totalWidth,
+                  ),
+                  _balanceCard(
+                    keyName: 'potential',
+                    title: 'Total potencial',
+                    subtitle: 'Total disponible + Deudas',
+                    amount: data.totalPotentialMinor,
+                    icon: Icons.receipt_long_outlined,
+                    width: totalWidth,
+                  ),
+                  _balanceCard(
+                    keyName: 'net',
+                    title: 'Total',
+                    subtitle: 'Total potencial − Inversión',
+                    amount: data.totalMinor,
+                    icon: Icons.account_balance_outlined,
+                    width: totalWidth,
+                  ),
+                ],
+              );
+            },
           ),
           if (extraAccounts.isNotEmpty) ...[
             const SizedBox(height: 20),

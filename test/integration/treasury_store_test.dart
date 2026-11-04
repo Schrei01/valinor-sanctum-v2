@@ -42,6 +42,56 @@ void main() {
   });
   tearDown(() => app.close());
 
+  test('dashboard totals preserve negative reserve and net investment', () {
+    final data = TreasurySnapshot(
+      accounts: const [
+        TreasuryAccount(
+          id: 'cash',
+          name: 'Caja',
+          role: TreasuryAccountRole.cash,
+          balanceMinor: 10000,
+        ),
+        TreasuryAccount(
+          id: 'nequi',
+          name: 'Nequi',
+          role: TreasuryAccountRole.nequi,
+          balanceMinor: 20000,
+        ),
+        TreasuryAccount(
+          id: 'reserve',
+          name: 'Caja mayor',
+          role: TreasuryAccountRole.reserve,
+          balanceMinor: -5000,
+        ),
+      ],
+      receivablesMinor: 6000,
+      investmentMinor: 40000,
+      movements: const [],
+    );
+    expect(data.totalAvailableMinor, 25000);
+    expect(data.totalPotentialMinor, 31000);
+    expect(data.totalMinor, -9000);
+  });
+
+  test('potential total rejects overflow without wrapping', () {
+    final data = TreasurySnapshot(
+      accounts: [
+        TreasuryAccount(
+          id: 'cash',
+          name: 'Caja',
+          role: TreasuryAccountRole.cash,
+          balanceMinor: Money.maxMinorUnits.toInt(),
+        ),
+      ],
+      receivablesMinor: 1,
+      movements: const [],
+    );
+    expect(
+      () => data.totalPotentialMinor,
+      throwsA(isA<TreasuryValidationException>()),
+    );
+  });
+
   Future<Map<String, Object?>> option(String code) async =>
       (await app.database.query(
         'quick_payment_options',
@@ -73,7 +123,7 @@ void main() {
       expect(snapshot.reserveMinor, -50);
       expect(snapshot.receivablesMinor, 80);
       expect(snapshot.legacyReceivablesMinor, 80);
-      expect(snapshot.totalAvailableMinor, 300);
+      expect(snapshot.totalAvailableMinor, 250);
       expect(snapshot.movements, hasLength(3));
       expect(
         snapshot.movements.every(
@@ -100,7 +150,7 @@ void main() {
       );
       snapshot = await treasury.load();
       expect(snapshot.cashMinor, 125);
-      expect(snapshot.totalAvailableMinor, 325);
+      expect(snapshot.totalAvailableMinor, 275);
       expect(snapshot.receivablesMinor, 80);
       final stockIntake = SqliteStockIntakeStore(app, synthetic: true);
       final options = (await stockIntake.load()).paymentOptions;
@@ -176,7 +226,7 @@ void main() {
   );
 
   test(
-    'roles use stable option IDs and reserve and other accounts stay out of total',
+    'roles use stable option IDs and reserve is included and other accounts stay out of total',
     () async {
       await treasury.ensureDefaults();
       final cash = (await option('EFECTIVO'))['cash_account_id'] as String;
@@ -208,7 +258,7 @@ void main() {
       expect(snapshot.cashMinor, 100);
       expect(snapshot.nequiMinor, 200);
       expect(snapshot.reserveMinor, 300);
-      expect(snapshot.totalAvailableMinor, 300);
+      expect(snapshot.totalAvailableMinor, 600);
       expect(
         snapshot.accounts.singleWhere((a) => a.id == 'other').role,
         TreasuryAccountRole.other,

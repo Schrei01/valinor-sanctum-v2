@@ -120,7 +120,7 @@ void main() {
       expect(money.cashMinor, 10000);
       expect(money.nequiMinor, 25000);
       expect(money.reserveMinor, -2000);
-      expect(money.totalAvailableMinor, 35000);
+      expect(money.totalAvailableMinor, 33000);
       for (final table in [
         'cash_openings',
         'sales',

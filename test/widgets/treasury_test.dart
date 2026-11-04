@@ -76,6 +76,7 @@ void main() {
         balanceMinor: 5000,
       ),
     ],
+    investmentMinor: 50000,
     receivablesMinor: 78900,
     movements: withMovements
         ? [
@@ -151,50 +152,51 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets(
-    'balances distinguish available money, reserve and customer debt',
-    (tester) async {
-      final fake = FakeTreasuryStore(snapshot: snapshot());
-      await open(tester, fake);
-      String? amount(String role) =>
-          tester.widget<Text>(find.byKey(Key('treasury-amount-$role'))).data;
-      expect(amount('cash'), 'COP 123,00');
-      expect(amount('nequi'), 'COP 45,00');
-      expect(amount('reserve'), 'COP 987,00');
-      expect(amount('receivables'), 'COP 789,00');
-      expect(amount('other-bank'), 'COP 50,00');
-      expect(amount('total'), 'COP 168,00');
-      expect(find.text('Caja + Nequi'), findsOneWidget);
-      expect(find.text('Lo que deben los clientes'), findsOneWidget);
-      expect(
-        find.byKey(const Key('treasury-legacy-receivables-note')),
-        findsNothing,
-      );
-      expect(fake.defaultsCalls, 1);
-      expect(tester.takeException(), isNull);
+  testWidgets('balances show available, potential and net totals', (
+    tester,
+  ) async {
+    final fake = FakeTreasuryStore(snapshot: snapshot());
+    await open(tester, fake);
+    String? amount(String role) =>
+        tester.widget<Text>(find.byKey(Key('treasury-amount-$role'))).data;
+    expect(amount('cash'), 'COP 123,00');
+    expect(amount('nequi'), 'COP 45,00');
+    expect(amount('reserve'), 'COP 987,00');
+    expect(amount('receivables'), 'COP 789,00');
+    expect(amount('other-bank'), 'COP 50,00');
+    expect(amount('total'), 'COP 1.155,00');
+    expect(amount('potential'), 'COP 1.944,00');
+    expect(amount('net'), 'COP 1.444,00');
+    expect(find.text('Caja + Nequi + Caja mayor'), findsOneWidget);
+    expect(find.text('Lo que deben los clientes'), findsOneWidget);
+    expect(
+      find.byKey(const Key('treasury-legacy-receivables-note')),
+      findsNothing,
+    );
+    expect(fake.defaultsCalls, 1);
+    expect(tester.takeException(), isNull);
 
-      if (const bool.fromEnvironment('SANCTUM_CAPTURE_TREASURY_PREVIEW')) {
-        final boundary = tester.renderObject<RenderRepaintBoundary>(
-          find.byKey(const Key('treasury-preview')),
+    if (const bool.fromEnvironment('SANCTUM_CAPTURE_TREASURY_PREVIEW')) {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(const Key('treasury-preview')),
+      );
+      await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 1);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        final target = File(
+          p.join(
+            AppConfig.repositoryRootPath,
+            'tmp',
+            'previews',
+            'treasury.png',
+          ),
         );
-        await tester.runAsync(() async {
-          final image = await boundary.toImage(pixelRatio: 1);
-          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-          final target = File(
-            p.join(
-              AppConfig.repositoryRootPath,
-              'tmp',
-              'previews',
-              'treasury.png',
-            ),
-          );
-          await target.parent.create(recursive: true);
-          await target.writeAsBytes(bytes!.buffer.asUint8List());
-          image.dispose();
-        });
-      }
-    },
-  );
+        await target.parent.create(recursive: true);
+        await target.writeAsBytes(bytes!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+  });
 
   testWidgets('history shows signed amounts, Bogotá time and account filters', (
     tester,
@@ -300,7 +302,7 @@ void main() {
     );
     expect(
       tester.widget<Text>(find.byKey(const Key('treasury-amount-total'))).data,
-      'COP 168,00',
+      'COP 1.155,00',
     );
     expect(tester.takeException(), isNull);
   });

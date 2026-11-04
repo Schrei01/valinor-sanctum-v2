@@ -253,7 +253,7 @@ void main() {
       );
       final snapshot = await treasury();
       expect(snapshot.cashMinor, 99000);
-      expect(snapshot.totalAvailableMinor, 149000);
+      expect(snapshot.totalAvailableMinor, 139000);
       expect(
         snapshot.accounts
             .singleWhere((a) => a.id == 'additional-bank')
@@ -281,7 +281,7 @@ void main() {
       final snapshot = await treasury();
       expect(snapshot.cashMinor, 80000);
       expect(snapshot.nequiMinor, 70000);
-      expect(snapshot.totalAvailableMinor, 150000);
+      expect(snapshot.totalAvailableMinor, 140000);
       final movements = snapshot.movements
           .where((m) => m.documentId == result.documentId)
           .toList();
@@ -316,7 +316,7 @@ void main() {
       await record(transfer('reserve-in', destination: reserve, amount: 15000));
       var snapshot = await treasury();
       expect(snapshot.reserveMinor, 5000);
-      expect(snapshot.totalAvailableMinor, 135000);
+      expect(snapshot.totalAvailableMinor, 140000);
       await record(
         transfer(
           'reserve-funded',

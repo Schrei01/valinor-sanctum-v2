@@ -78,7 +78,7 @@ void main() {
     expect(find.byKey(const Key('treasury-supplier-payments')), findsNothing);
     expect(
       tester.widget<Text>(find.byKey(const Key('treasury-amount-total'))).data,
-      'COP 150,00',
+      'COP 1.050,00',
     );
     await tester.tap(find.text('Catálogo'));
     await tester.pumpAndSettle();
@@ -91,7 +91,7 @@ void main() {
     expect(operations.loadCalls, greaterThan(previousOperationLoads));
     expect(
       tester.widget<Text>(find.byKey(const Key('treasury-amount-total'))).data,
-      'COP 250,00',
+      'COP 1.150,00',
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

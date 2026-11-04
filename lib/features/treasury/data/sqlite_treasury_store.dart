@@ -276,6 +276,8 @@ WHERE line.account_id='system:legacy-customer-receivables'
     );
     // Reject an overflowing combined dashboard total before returning it.
     snapshot.totalAvailableMinor;
+    snapshot.totalPotentialMinor;
+    snapshot.totalMinor;
     return snapshot;
   });
 

@@ -62,8 +62,21 @@ class TreasurySnapshot {
   int get cashMinor => _sum({TreasuryAccountRole.cash});
   int get nequiMinor => _sum({TreasuryAccountRole.nequi});
   int get reserveMinor => _sum({TreasuryAccountRole.reserve});
-  int get totalAvailableMinor =>
-      _sum({TreasuryAccountRole.cash, TreasuryAccountRole.nequi});
+  int get totalAvailableMinor => _sum({
+    TreasuryAccountRole.cash,
+    TreasuryAccountRole.nequi,
+    TreasuryAccountRole.reserve,
+  });
+
+  int get totalPotentialMinor => treasuryCheckedMinor(
+    BigInt.from(totalAvailableMinor) + BigInt.from(receivablesMinor),
+    'Total potencial',
+  );
+
+  int get totalMinor => treasuryCheckedMinor(
+    BigInt.from(totalPotentialMinor) - BigInt.from(investmentMinor),
+    'Total',
+  );
 
   int _sum(Set<TreasuryAccountRole> roles) {
     final sum = accounts
