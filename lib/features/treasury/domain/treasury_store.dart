@@ -74,7 +74,9 @@ class TreasurySnapshot {
   );
 
   int get totalMinor => treasuryCheckedMinor(
-    BigInt.from(totalPotentialMinor) - BigInt.from(investmentMinor),
+    BigInt.from(totalAvailableMinor) +
+        BigInt.from(receivablesMinor) -
+        BigInt.from(investmentMinor),
     'Total',
   );
 

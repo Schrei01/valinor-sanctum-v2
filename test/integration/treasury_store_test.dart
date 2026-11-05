@@ -84,12 +84,14 @@ void main() {
         ),
       ],
       receivablesMinor: 1,
+      investmentMinor: 1,
       movements: const [],
     );
     expect(
       () => data.totalPotentialMinor,
       throwsA(isA<TreasuryValidationException>()),
     );
+    expect(data.totalMinor, Money.maxMinorUnits.toInt());
   });
 
   Future<Map<String, Object?>> option(String code) async =>

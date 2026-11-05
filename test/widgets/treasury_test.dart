@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:valinor_sanctum_2/core/domain/money.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/features/treasury/application/treasury_controller.dart';
 import 'package:valinor_sanctum_2/features/treasury/domain/treasury_store.dart';
@@ -151,6 +152,40 @@ void main() {
     await tester.tap(find.text(name).last);
     await tester.pumpAndSettle();
   }
+
+  testWidgets('oversized potential total does not hide valid balances or net', (
+    tester,
+  ) async {
+    await open(
+      tester,
+      FakeTreasuryStore(
+        snapshot: TreasurySnapshot(
+          accounts: [
+            TreasuryAccount(
+              id: 'cash',
+              name: 'Caja',
+              role: TreasuryAccountRole.cash,
+              balanceMinor: Money.maxMinorUnits.toInt(),
+            ),
+          ],
+          receivablesMinor: 1,
+          investmentMinor: 1,
+          movements: const [],
+        ),
+      ),
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('treasury-amount-potential')))
+          .data,
+      'Fuera de rango',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const Key('treasury-amount-net'))).data,
+      tester.widget<Text>(find.byKey(const Key('treasury-amount-cash'))).data,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('balances show available, potential and net totals', (
     tester,

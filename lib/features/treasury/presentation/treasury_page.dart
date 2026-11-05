@@ -76,6 +76,14 @@ class _TreasuryPageState extends State<TreasuryPage> {
 
   String _money(int value) => inventoryMoney(value, widget.profile);
 
+  String _aggregateMoney(int Function() calculate) {
+    try {
+      return _money(calculate());
+    } on TreasuryValidationException {
+      return 'Fuera de rango';
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
@@ -217,7 +225,9 @@ class _TreasuryPageState extends State<TreasuryPage> {
                     keyName: 'potential',
                     title: 'Total potencial',
                     subtitle: 'Total disponible + Deudas',
-                    amount: data.totalPotentialMinor,
+                    formattedAmount: _aggregateMoney(
+                      () => data.totalPotentialMinor,
+                    ),
                     icon: Icons.receipt_long_outlined,
                     width: totalWidth,
                   ),
@@ -225,7 +235,7 @@ class _TreasuryPageState extends State<TreasuryPage> {
                     keyName: 'net',
                     title: 'Total',
                     subtitle: 'Total potencial − Inversión',
-                    amount: data.totalMinor,
+                    formattedAmount: _aggregateMoney(() => data.totalMinor),
                     icon: Icons.account_balance_outlined,
                     width: totalWidth,
                   ),
@@ -265,7 +275,8 @@ class _TreasuryPageState extends State<TreasuryPage> {
     required String keyName,
     required String title,
     required String subtitle,
-    required int amount,
+    int? amount,
+    String? formattedAmount,
     required IconData icon,
     required double width,
     String? note,
@@ -286,7 +297,7 @@ class _TreasuryPageState extends State<TreasuryPage> {
               const SizedBox(height: 14),
               FinancialTotal(
                 label: title,
-                value: _money(amount),
+                value: formattedAmount ?? _money(amount!),
                 valueKey: Key('treasury-amount-$keyName'),
               ),
               const SizedBox(height: 8),

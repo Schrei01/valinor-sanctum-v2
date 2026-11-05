@@ -192,7 +192,7 @@ void main() {
       expect(balance(tester, 'cash'), 'COP 1.000,00');
       expect(balance(tester, 'nequi'), 'COP 376,55');
       expect(balance(tester, 'reserve'), 'COP -200,00');
-      expect(balance(tester, 'total'), 'COP 1.376,55');
+      expect(balance(tester, 'total'), 'COP 1.176,55');
       expect(projection.loadCalls, greaterThan(previousLoads));
       expect(find.textContaining('Gasto registrado.'), findsOneWidget);
       expect(tester.takeException(), isNull);
