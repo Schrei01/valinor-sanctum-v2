@@ -1,4 +1,5 @@
 import '../../../core/presentation/grouped_number_formatter.dart';
+import '../../../core/domain/money.dart';
 import 'package:flutter/material.dart';
 import '../../debtors/domain/debtors_store.dart';
 import '../../../core/presentation/financial_total.dart';
@@ -28,34 +29,69 @@ class QuickSalesPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              spacing: 20,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  'Ventas',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                FilledButton.icon(
-                  key: const Key('quick-new-account'),
-                  onPressed: data == null ? null : controller.addAccount,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Nueva cuenta'),
-                ),
-                IconButton(
-                  key: const Key('quick-refresh'),
-                  onPressed: controller.loading ? null : controller.load,
-                  tooltip: 'Actualizar productos y cuentas',
-                  icon: controller.loading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final controls = Wrap(
+                  spacing: 20,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Ventas',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    FilledButton.icon(
+                      key: const Key('quick-new-account'),
+                      onPressed: data == null ? null : controller.addAccount,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Nueva cuenta'),
+                    ),
+                    IconButton(
+                      key: const Key('quick-refresh'),
+                      onPressed: controller.loading ? null : controller.load,
+                      tooltip: 'Actualizar productos y cuentas',
+                      icon: controller.loading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh),
+                    ),
+                  ],
+                );
+                if (data == null) return controls;
+                final total = controller.openAccountsTotal;
+                final summary = SizedBox(
+                  width: 280,
+                  child: FinancialTotal(
+                    stacked: true,
+                    label: 'Total cuentas abiertas',
+                    value: total.isNegative || total > Money.maxMinorUnits
+                        ? 'Revisa cantidades'
+                        : inventoryMoney(total.toInt(), profile),
+                    valueKey: const Key('quick-open-accounts-total'),
+                  ),
+                );
+                if (constraints.maxWidth >= 760) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: controls),
+                      const SizedBox(width: 20),
+                      summary,
+                    ],
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    controls,
+                    const SizedBox(height: 12),
+                    Align(alignment: Alignment.centerRight, child: summary),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             const Text(

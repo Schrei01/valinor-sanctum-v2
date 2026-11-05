@@ -565,7 +565,7 @@ void main() {
   );
 
   testWidgets(
-    'workspace injects the reference into Catalog without changing Sales',
+    'workspace reference preserves Sales and its single automatic empty account',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(1280, 960));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -597,6 +597,9 @@ void main() {
       await controller.initialize();
       await tester.pumpWidget(SanctumApp(controller: controller));
       await tester.pumpAndSettle();
+      final initialAccount = quickSales.accounts.single;
+      expect(initialAccount.lines.single.productId, isNull);
+      expect(quickSales.savedInputs, hasLength(1));
       addTearDown(() async {
         await tester.pumpWidget(const SizedBox());
         controller.dispose();
@@ -611,7 +614,8 @@ void main() {
       expect(find.byKey(const Key('catalog-source')), findsNothing);
       expect(find.text('Producto de la copia'), findsNothing);
       expect(quickSales.products.map((product) => product.id), quickProductIds);
-      expect(quickSales.savedInputs, isEmpty);
+      expect(quickSales.accounts.single.id, initialAccount.id);
+      expect(quickSales.savedInputs, hasLength(1));
       expect(quickSales.preparedIds, isEmpty);
       expect(quickSales.confirmedIds, isEmpty);
       expect(inventory.saves, 0);
