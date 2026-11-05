@@ -15,6 +15,7 @@ void main() {
     WidgetTester tester,
     FakeQuickSalesStore? quick, {
     FakeSalesStore? sales,
+    bool enterSales = true,
   }) async {
     await tester.binding.setSurfaceSize(const Size(1120, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -39,14 +40,43 @@ void main() {
     await controller.initialize();
     await tester.pumpWidget(SanctumApp(controller: controller));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Ventas').first);
-    await tester.pumpAndSettle();
+    if (enterSales) {
+      await tester.tap(find.text('Ventas').first);
+      await tester.pumpAndSettle();
+    }
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
       controller.dispose();
     });
     return controller;
   }
+
+  testWidgets(
+    'startup creates an empty account and returning to empty sales creates only one',
+    (tester) async {
+      final quick = FakeQuickSalesStore();
+      await open(tester, quick, enterSales: false);
+      final first = quick.accounts.single;
+      expect(first.lines.single.productId, isNull);
+      await tester.tap(find.text('Catálogo'));
+      await tester.pumpAndSettle();
+      await quick.cancelAccount(
+        accountId: first.id,
+        expectedRevision: first.revision,
+      );
+      await tester.tap(find.text('Ventas').first);
+      await tester.pumpAndSettle();
+      final current = quick.accounts.where((a) => a.status == 'open').single;
+      expect(current.id, isNot(first.id));
+      await tester.tap(find.text('Ventas').first);
+      await tester.pumpAndSettle();
+      expect(
+        quick.accounts.where((a) => a.status == 'open').single.id,
+        current.id,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'Ventas only exposes the current checkout and keeps historical data untouched',
@@ -105,8 +135,6 @@ void main() {
     (tester) async {
       final quick = FakeQuickSalesStore();
       await open(tester, quick);
-      await tester.tap(find.byKey(const Key('quick-new-account')));
-      await tester.pump();
       final label = find.byWidgetPredicate(
         (widget) =>
             widget is TextField &&
@@ -126,8 +154,6 @@ void main() {
   ) async {
     final quick = FakeQuickSalesStore();
     await open(tester, quick);
-    await tester.tap(find.byKey(const Key('quick-new-account')));
-    await tester.pumpAndSettle();
     quick.saveFailure = StateError('synthetic storage unavailable');
     final label = find.byWidgetPredicate(
       (widget) =>
