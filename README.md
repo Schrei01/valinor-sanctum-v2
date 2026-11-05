@@ -1,5 +1,7 @@
 # Valinor Sanctum 2.0
 
+Los cambios se entregan en ramas `codex/<incremento>` mediante Pull Requests. Antes del merge deben pasar las pruebas completas de GitHub y, para incrementos de la app, el propietario debe revisar Desarrollo. [Flujo Git vigente](docs/90-flujo-git-pull-requests.md).
+
 **Desarrollo 0.40.2** coloca el importe debajo del título en todas las tarjetas de Tesorería. [Distribución y validación](docs/89-tarjetas-tesoreria-verticales.md). Conserva en Tesorería Total disponible (Caja + Nequi + Caja mayor), Total potencial (Disponible + Deudas) y Total (Potencial − Inversión). [Detalle](docs/87-totales-tesoreria.md). Incluye la [corrección de los casos extremos detectados por CI](docs/88-correccion-ci-totales.md). La 0.39.0 agrega **Usar valor** junto al PVP anterior en Compras y retira **Usar sugerido**. El precio recuperado se conserva al cambiar costo o unidades. [Detalle y validación](docs/86-compras-usar-pvp-anterior.md). Conserva el espacio de Registrar préstamo en Deudores y el inicio maximizado. [Inicio maximizado](docs/82-inicio-maximizado.md). Incluye los préstamos desde Inversión de la 0.38.0: aumentan la deuda del cliente y la inversión por recuperar sin mover Caja/Nequi ni registrar una venta. [Detalle](docs/81-prestamos-inversion-038.md).
 El costo fijo de Eventos financiado por Inversión se suma al saldo pendiente de recuperar y puede devolverse desde Caja o
 Nequi. Los premios consumidos no duplican la inversión. **Ver historial** reúne

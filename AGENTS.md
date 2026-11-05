@@ -1,5 +1,20 @@
 # Reglas de este repositorio
 
+## Flujo Git vigente — aprobado el 04/11/2026
+
+Esta sección sustituye las autorizaciones históricas de hacer push directo a main que aparecen más abajo.
+
+- Mantener `main` como única rama permanente para cambios verificados. Crear una rama temporal `codex/<incremento>` desde `origin/main` para cada cambio, incluidas correcciones y documentación.
+- Hacer commits y push a esa rama y abrir un Pull Request con problema, cambio, validación y límites. No hacer push directo a `main`, ni eludir o desactivar su protección para entregar un cambio.
+- Esperar el resultado completo aprobado de `verify-and-build` en GitHub antes de integrar. Las pruebas locales no sustituyen el CI completo ni permiten afirmar que un check pendiente pasó. Si cambia la base, actualizar la rama y volver a validar.
+- En cambios de la app, entregar primero una compilación de Desarrollo revisable. La integración requiere la conformidad del propietario con el incremento; no hacer merge automáticamente por el solo hecho de que el CI quede verde. El propietario puede integrar el PR desde GitHub o autorizar expresamente al agente a hacerlo.
+- Tras integrar, identificar cada versión publicada con una etiqueta inmutable que distinga edición: `dev-<versión>` o `prod-<versión>`. Los ajustes solo de documentación no crean versión de la app ni etiqueta de lanzamiento.
+- Publicar Producción únicamente cuando lo pida el propietario, desde un commit integrado y con CI aprobado. Conservar siempre la última distribución de la otra edición, con bases y configuraciones separadas.
+- Retirar las ramas temporales después del merge cuando dejen de necesitarse. No crear una rama permanente adicional para Desarrollo ni para Producción.
+- GitHub debe exigir PR y el check `verify-and-build` de GitHub Actions para `main`, con rama actualizada y protección aplicable también a administradores. Bloquear force push y eliminación. No exigir una aprobación formal de otra cuenta: en este repositorio el agente usa la misma identidad Git que el propietario; la conformidad del propietario se confirma en la conversación o mediante su merge.
+
+El primer PR de adopción solo documenta/configura este flujo; no modifica la app, sus paquetes ni sus datos. Dejarlo abierto para revisión del propietario.
+
 ## Límites obligatorios
 
 - Este repositorio es `C:\proyectos\valinor_sanctum_2`.
