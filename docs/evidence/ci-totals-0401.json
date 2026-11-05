@@ -23,5 +23,17 @@
   "privateDataIncludedInArchive": false,
   "productionVersionUnchanged": "1.4.2+67",
   "productionDatabaseAccessed": false,
-  "archiveSha256": "FAAD9C3F7F07F8C99C7FAA759BB88C6FD018D92134DB928728BF7567655C7054"
+  "archiveSha256": "FAAD9C3F7F07F8C99C7FAA759BB88C6FD018D92134DB928728BF7567655C7054",
+  "nativeVisualInspection": false,
+  "preservedProductionAndConfigurationFiles": 43,
+  "packageFilesMatched": 19,
+  "foreignKeyViolations": 0,
+  "developmentTablesRowsAndDefinitionsPreserved": 74,
+  "obsoleteArtifactsRemaining": 0,
+  "developmentOpenAndResponding": true,
+  "obsoleteDevelopmentArtifactsRemoved": 1,
+  "developmentBackupCreated": true,
+  "ownerProductionWindowPreserved": true,
+  "localBundlePublished": true,
+  "integrityOk": true
 }
