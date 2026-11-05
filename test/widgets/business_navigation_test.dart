@@ -85,9 +85,12 @@ void main() {
           final c = t
               .widget<QuickSalesPage>(find.byType(QuickSalesPage))
               .controller;
+          final initial = c.accounts.single;
+          expect(initial.lines.single.productId, isNull);
+          expect((await store.load()).accounts.single.id, initial.id);
           final ids = <String>[];
           for (var i = 0; i < 5; i++) {
-            final id = c.addAccount()!;
+            final id = i == 0 ? initial.id : c.addAccount()!;
             ids.add(id);
             if (i == 2 || i == 3) c.selectDebtor(id, person);
             final row = c.accounts.singleWhere((a) => a.id == id).lines.first;
@@ -139,6 +142,7 @@ void main() {
           await c.flushAll();
           await settleDatabaseUi(t);
           final expected = {ids[0], ids[2], ids[4], sixth};
+          expect(c.openAccountsTotal, BigInt.from(13000));
           for (var cycle = 0; cycle < 3; cycle++) {
             for (final name in [
               'Catálogo',
@@ -155,6 +159,7 @@ void main() {
             }
             await tab('Ventas');
             expect(c.accounts.map((a) => a.id).toSet(), expected);
+            expect(c.openAccountsTotal, BigInt.from(13000));
             expect(
               (await store.load()).accounts.map((a) => a.id).toSet(),
               expected,
@@ -192,6 +197,7 @@ void main() {
               .widget<QuickSalesPage>(find.byType(QuickSalesPage))
               .controller;
           expect(reopened.accounts.map((a) => a.id).toSet(), expected);
+          expect(reopened.openAccountsTotal, BigInt.from(13000));
           expect(
             reopened.snapshot!.availableProducts.any((p) => p.id == event),
             isTrue,

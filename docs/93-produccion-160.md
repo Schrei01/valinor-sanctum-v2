@@ -20,4 +20,6 @@ Antes de la entrega definitiva deben estar aprobados el CI y los ensayos privado
 
 Validación previa a actualizar el PR: 12 pruebas específicas de almacenamiento instalado, apertura y rótulos aprobadas; formato de 217 archivos sin cambios y análisis limpio. Las 63 pruebas de aplicación del incremento de Ventas ya estaban aprobadas. La aprobación final de la suite completa corresponde al nuevo commit del PR, sin reutilizar un resultado de otro commit.
 
+La suite completa del primer commit de Desarrollo detectó dos expectativas antiguas: el escenario de navegación agregaba cinco cuentas además de la nueva cuenta automática, y la prueba de catálogo esperaba que Ventas no guardara ningún borrador al iniciar. Se actualizan para utilizar la cuenta inicial entre las cinco, verificar su persistencia, y asegurar que visitar Catálogo no la cambia ni añade otra. La navegación con SQLite comprueba además el total abierto después de cobros fuera de orden y al reabrir. Las 10 pruebas de ambos archivos pasan localmente; se mantienen todas las comprobaciones financieras previas. Esta corrección solo afecta pruebas, sin cambios adicionales al comportamiento de la app.
+
 Artefacto: `dist/Valinor-Sanctum-1.6.0-Produccion-Instalar.exe`. Para instalar, el propietario cierra Producción y ejecuta el instalador; los archivos de Documentos se conservan.
