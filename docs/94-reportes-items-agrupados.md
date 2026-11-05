@@ -1,0 +1,15 @@
+# Ítems vendidos agrupados — Desarrollo 0.42.0
+
+En Reportes, los ítems vendidos del rango elegido aparecen agrupados por nombre de producto y medio de pago. Cada renglón suma las cantidades y los importes de sus ventas; si un producto se vendió a precios distintos, suma los importes registrados en cada venta. No recalcula el historial con el PVP actual.
+
+La lista se ordena alfabéticamente por producto y luego por medio de pago. Para agrupar se ignoran mayúsculas y espacios exteriores, conservando las diferencias de acentos en el nombre. El orden contempla vocales acentuadas y la ñ. Un mismo producto vendido por Efectivo y por Transferencia mantiene dos renglones. Los pagos divididos conservan la etiqueta combinada del reporte existente, sin duplicar cantidades.
+
+La paginación muestra 10 grupos por página. Se retira la columna de fecha individual porque un grupo puede incluir varias ventas; todas pertenecen al rango indicado en la cabecera. Si falta un importe histórico, el grupo muestra **Sin información**, sin presentar una suma parcial como completa. El asterisco sigue identificando importes históricos estimados. Las cantidades desconocidas también conservan su aviso.
+
+Este cambio solo agrega una vista agrupada. Conserva los ítems originales del reporte, los saldos, ventas por medio, abonos, transferencias y demás totales financieros. No modifica datos ni requiere migración: esquema 23, 74 tablas. Producción 1.6.0 permanece independiente.
+
+Validación local: 38 pruebas de modelo, controladores e interfaz y 2 pruebas de integración SQLite aprobadas. Incluyen agrupación antes de paginar, orden, precios históricos distintos, campos desconocidos, pagos divididos, límites numéricos y selección exacta del rango sin escrituras. Dos pruebas privadas generaron tres renders sintéticos inspeccionados, en anchos de 1120 y 400 píxeles, incluyendo desplazamiento horizontal en la vista estrecha. Formato de 218 archivos sin cambios, análisis sin incidencias y compilación Windows Release correcta. No se repitió la suite completa local; el CI completo se comprueba en el PR antes de integrar.
+
+La portable de Desarrollo 0.42.0+75 se entrega para revisión del propietario mediante rama y PR. La integración requiere su conformidad y el CI aprobado. La evidencia de publicación y conservación está en [reports-items-042.json](evidence/reports-items-042.json). Las capturas, ensayos y respaldos quedan privados.
+
+Publicación local verificada: 19 archivos iguales en ZIP y bundle estable, sin datos privados. Se retiró la distribución anterior de Desarrollo y no quedaron artefactos obsoletos pendientes. Se preservaron las 43 huellas de Producción, instalación y configuración. Con respaldo previo, el ensayo privado y la comprobación posterior al arranque conservaron todas las filas y definiciones de las 74 tablas de Desarrollo; no se añadió ningún borrador ni hubo movimientos de negocio. Integridad y claves foráneas correctas. Desarrollo quedó abierta y responde. La revisión visual corresponde a renders de widgets, sin inspección visual nativa.

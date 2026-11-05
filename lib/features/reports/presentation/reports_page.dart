@@ -211,7 +211,7 @@ class _ReportsPageState extends State<ReportsPage> {
       );
 
   Widget _items(ReportsSnapshot data) {
-    final rows = data.items;
+    final rows = data.groupedItems;
     final pages = (rows.length / 10).ceil();
     final first = _page * 10;
     final last = (first + 10).clamp(0, rows.length);
@@ -229,7 +229,7 @@ class _ReportsPageState extends State<ReportsPage> {
               const Text('No hay ítems vendidos en este rango.')
             else ...[
               const Text(
-                'Más recientes primero · * Importe histórico estimado.',
+                'Agrupados por producto y pago · Orden alfabético · * Incluye importes históricos estimados.',
               ),
               const SizedBox(height: 8),
               SingleChildScrollView(
@@ -237,7 +237,6 @@ class _ReportsPageState extends State<ReportsPage> {
                 child: DataTable(
                   columnSpacing: 20,
                   columns: const [
-                    DataColumn(label: Text('Fecha y hora')),
                     DataColumn(label: Text('Producto')),
                     DataColumn(label: Text('Cantidad'), numeric: true),
                     DataColumn(label: Text('Pago')),
@@ -248,15 +247,6 @@ class _ReportsPageState extends State<ReportsPage> {
                       DataRow(
                         key: ValueKey('report-item-${item.id}'),
                         cells: [
-                          DataCell(
-                            Text(
-                              _moment(
-                                item.occurredAtUtc.subtract(
-                                  const Duration(hours: 5),
-                                ),
-                              ),
-                            ),
-                          ),
                           DataCell(
                             SizedBox(width: 220, child: Text(item.productName)),
                           ),
@@ -286,7 +276,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 children: [
                   Expanded(
                     child: Text(
-                      '${first + 1}–$last de ${rows.length} · Página ${_page + 1} de $pages',
+                      '${first + 1}–$last de ${rows.length} grupos · Página ${_page + 1} de $pages',
                       key: const Key('report-items-page'),
                     ),
                   ),
