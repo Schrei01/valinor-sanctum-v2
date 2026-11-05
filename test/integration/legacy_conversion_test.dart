@@ -367,6 +367,15 @@ void main() {
       expect(old.saleTotals.estimatedCashMinor, 300);
       expect(old.saleTotals.estimatedSales, 1);
       expect(old.items, hasLength(2));
+      expect(old.groupedItems, hasLength(2));
+      expect(
+        old.groupedItems.where((i) => i.isEstimated).single.amountMinor,
+        300,
+      );
+      expect(
+        old.groupedItems.where((i) => i.amountMinor == null).single.productName,
+        contains('Producto eliminado'),
+      );
       expect(old.items.where((i) => i.isEstimated).single.amountMinor, 300);
       expect(
         old.items.where((i) => i.amountMinor == null).single.productName,

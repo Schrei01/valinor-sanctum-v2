@@ -115,6 +115,58 @@ void main() {
   };
 
   test(
+    'item groups sum actual sold prices by method inside the selected range without writing',
+    () async {
+      await sell(
+        'group-older',
+        price: 50,
+        date: at.subtract(const Duration(days: 1)),
+      );
+      await sell('group-first', price: 100);
+      await sell(
+        'group-second',
+        qty: 2,
+        price: 200,
+        date: at.add(const Duration(hours: 1)),
+      );
+      final person = await registerDebtor(app, 'Titular agrupación');
+      await sell(
+        'group-mixed',
+        mixed: true,
+        price: 300,
+        debtor: person,
+        date: at.add(const Duration(hours: 2)),
+      );
+      final before = await rows();
+      final data = await reports.load(period());
+      expect(data.items, hasLength(3));
+      expect(data.groupedItems, hasLength(2));
+      final cash = data.groupedItems.singleWhere(
+        (g) => g.paymentMethod == 'Efectivo',
+      );
+      expect(cash.quantity, 3);
+      expect(cash.amountMinor, 500);
+      final mixed = data.groupedItems.singleWhere(
+        (g) => g.paymentMethod == 'Transferencia / Deudas',
+      );
+      expect(mixed.quantity, 2);
+      expect(mixed.amountMinor, 600);
+      expect(data.saleTotals.transferMinor, 300);
+      expect(data.saleTotals.creditMinor, 300);
+      expect(data.saleTotals.totalMinor, 1100);
+      final minute = await reports.load(
+        ReportPeriod.timed(
+          start: DateTime.utc(2026, 10, 20, 10),
+          end: DateTime.utc(2026, 10, 20, 10),
+        ),
+      );
+      expect(minute.groupedItems.single.quantity, 2);
+      expect(minute.groupedItems.single.amountMinor, 400);
+      expect(await rows(), before);
+    },
+  );
+
+  test(
     'read model never writes defaults and native empty money starts at known zero',
     () async {
       final before = await rows();
