@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/application/quick_sales_controller.dart';
+import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/presentation/quick_sales_page.dart';
 import 'package:valinor_sanctum_2/features/workspace/domain/business_profile.dart';
 
@@ -545,4 +546,71 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  for (final width in [1280.0, 400.0]) {
+    testWidgets('open total updates live and fits header at $width', (
+      tester,
+    ) async {
+      await open(tester, size: Size(width, 1400));
+      final total = find.byKey(const Key('quick-open-accounts-total'));
+      expect(tester.widget<Text>(total).data, 'COP 0,00');
+      final first = controller.addAccount()!;
+      final second = controller.addAccount()!;
+      void fill(String id, String product, int price, String quantity) {
+        final line = controller.accounts
+            .firstWhere((a) => a.id == id)
+            .lines
+            .single;
+        controller.editLine(
+          id,
+          QuickSaleLine(
+            id: line.id,
+            productId: product,
+            quantityText: quantity,
+            unitPriceMinor: price,
+            paymentOptionId: 'cash',
+          ),
+        );
+      }
+
+      fill(first, 'water', 300000, '1');
+      fill(second, 'snack', 200000, '1');
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(total).data, 'COP 5.000,00');
+      fill(first, 'water', 300000, '2');
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(total).data, 'COP 8.000,00');
+      final label = find.text('Total cuentas abiertas');
+      expect(
+        tester.getTopLeft(label).dx,
+        greaterThan(tester.getTopLeft(find.text('Ventas')).dx),
+      );
+      expect(
+        tester.getTopLeft(total).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(label).dy),
+      );
+      expect(tester.takeException(), isNull);
+      if (const bool.fromEnvironment('SANCTUM_CAPTURE_OPEN_TOTAL')) {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(const Key('quick-preview')),
+        );
+        await tester.runAsync(() async {
+          final pic = await boundary.toImage(pixelRatio: 1);
+          final bytes = await pic.toByteData(format: ui.ImageByteFormat.png);
+          pic.dispose();
+          await File(
+            p.join(
+              AppConfig.repositoryRootPath,
+              'tmp',
+              'sales-041-${width.toInt()}.png',
+            ),
+          ).writeAsBytes(bytes!.buffer.asUint8List());
+        });
+      }
+      fill(first, 'water', 0x7fffffffffffffff, '2');
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(total).data, 'Revisa cantidades');
+      expect(tester.takeException(), isNull);
+      expect(await controller.flushAll(), isTrue);
+    });
+  }
 }

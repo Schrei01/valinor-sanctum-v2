@@ -139,7 +139,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     if (widget.controller.profile == null) return;
     if (index == 0) unawaited(_inventory?.load());
     if (index == 1) unawaited(_stockIntake?.load());
-    if (index == 2) unawaited(_quickSales?.load());
+    if (index == 2) unawaited(_quickSales?.load(ensureOpenAccount: true));
     if (index == 3) unawaited(_debtors?.load());
     if (index == 5) unawaited(_events?.load());
     if (index == 6) unawaited(_reports?.load());
@@ -215,7 +215,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
           _quickSales!.snapshot == null &&
           !_quickSales!.loading &&
           _quickSales!.loadError == null) {
-        unawaited(_quickSales!.load());
+        unawaited(_quickSales!.load(ensureOpenAccount: true));
       }
       final debtorsStore = controller.debtorsStore;
       final reportsStore = controller.reportsStore;
@@ -623,7 +623,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    isProduction ? 'Versión 1.5.0' : 'Versión 0.40.2',
+                    isProduction ? 'Versión 1.5.0' : 'Versión 0.41.0',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

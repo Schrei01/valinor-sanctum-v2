@@ -25,6 +25,7 @@ class QuickSalesController extends ChangeNotifier {
   bool _disposed = false;
   bool _defaultsReady = false;
   int _readGeneration = 0;
+  bool _ensureOpenAccountRequested = false;
 
   List<QuickSaleAccount> get accounts {
     final values = _cards.values.map((card) => card.account).toList();
@@ -49,11 +50,21 @@ class QuickSalesController extends ChangeNotifier {
   int editorEpochFor(String id) => _cards[id]?.editorEpoch ?? 0;
   PreparedQuickSale? pendingFor(String id) => _cards[id]?.pending;
 
-  Future<void> load() async {
-    if (_disposed || loading) return;
+  Future<void> load({bool ensureOpenAccount = false}) async {
+    if (_disposed) return;
+    _ensureOpenAccountRequested |= ensureOpenAccount;
+    if (loading) return;
     loading = true;
     _emit();
     await _reload();
+    if (_ensureOpenAccountRequested &&
+        !_disposed &&
+        loadError == null &&
+        _cards.isEmpty) {
+      final id = addAccount();
+      if (id != null) await flush(id);
+    }
+    _ensureOpenAccountRequested = false;
     loading = false;
     _emit();
   }
@@ -477,6 +488,9 @@ class QuickSalesController extends ChangeNotifier {
         BigInt.from(line.unitPriceMinor ?? 0) *
             BigInt.from(int.tryParse(line.quantityText) ?? 0),
   );
+
+  BigInt get openAccountsTotal =>
+      accounts.fold(BigInt.zero, (sum, account) => sum + totalFor(account));
 
   bool hasCreditFor(QuickSaleAccount account) =>
       account.lines.any((line) => line.hasCredit);

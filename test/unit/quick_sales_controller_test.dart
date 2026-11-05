@@ -19,7 +19,126 @@ void main() {
   });
   tearDown(() => controller.dispose());
 
+  void fill(String id, {String product = 'water', String payment = 'cash'}) {
+    final line = controller.accounts
+        .firstWhere((item) => item.id == id)
+        .lines
+        .first;
+    controller.editLine(
+      id,
+      QuickSaleLine(
+        id: line.id,
+        productId: product,
+        unitPriceMinor: product == 'water' ? 300000 : 200000,
+        paymentOptionId: payment,
+      ),
+    );
+  }
+
   String account() => controller.addAccount()!;
+
+  test(
+    'entering sales creates one durable empty account and reuses it on reopen',
+    () async {
+      await controller.load(ensureOpenAccount: true);
+      final first = controller.accounts.single;
+      expect(first.lines.single.productId, isNull);
+      expect(controller.openAccountsTotal, BigInt.zero);
+      expect(store.accounts.single.id, first.id);
+      await controller.load(ensureOpenAccount: true);
+      expect(controller.accounts.single.id, first.id);
+      controller.dispose();
+      controller = QuickSalesController(store: store);
+      await controller.load(ensureOpenAccount: true);
+      expect(controller.accounts.single.id, first.id);
+      expect(await controller.removeAccount(first.id), isTrue);
+      expect(controller.accounts, isEmpty);
+      await controller.load(ensureOpenAccount: true);
+      expect(controller.accounts.single.id, isNot(first.id));
+      expect(store.accounts.where((a) => a.status == 'open'), hasLength(1));
+      expect(store.confirmedIds, isEmpty);
+    },
+  );
+
+  test(
+    'concurrent entries do not duplicate the account while initial save is pending',
+    () async {
+      store.saveGate = Completer<void>();
+      final entering = controller.load(ensureOpenAccount: true);
+      await Future<void>.delayed(Duration.zero);
+      await controller.load(ensureOpenAccount: true);
+      expect(controller.accounts, hasLength(1));
+      store.saveGate!.complete();
+      await entering;
+      expect(store.accounts, hasLength(1));
+    },
+  );
+
+  test(
+    'failed load does not invent an account and unknown initial save retries its identity',
+    () async {
+      store.loadFailure = StateError('offline');
+      await controller.load(ensureOpenAccount: true);
+      expect(controller.accounts, isEmpty);
+      store.loadFailure = null;
+      store.saveBeforeFailure = true;
+      store.saveFailure = StateError('lost reply');
+      await controller.load(ensureOpenAccount: true);
+      final id = controller.accounts.single.id;
+      expect(controller.errorFor(id), isNotNull);
+      expect(store.accounts.single.id, id);
+      await controller.load(ensureOpenAccount: true);
+      expect(controller.accounts.single.id, id);
+      store.saveFailure = null;
+      expect(await controller.flush(id), isTrue);
+      expect(store.accounts, hasLength(1));
+    },
+  );
+
+  test(
+    'entering while a refresh is running still creates the missing account',
+    () async {
+      store.loadGate = Completer<void>();
+      final refreshing = controller.load();
+      await controller.load(ensureOpenAccount: true);
+      store.loadGate!.complete();
+      await refreshing;
+      expect(controller.accounts, hasLength(1));
+      expect(store.accounts, hasLength(1));
+    },
+  );
+
+  test(
+    'open total follows edits, out-of-order checkout, additions and removals',
+    () async {
+      final first = account(), second = account();
+      fill(first);
+      fill(second, product: 'snack');
+      expect(controller.openAccountsTotal, BigInt.from(500000));
+      final line = controller.accounts
+          .firstWhere((a) => a.id == first)
+          .lines
+          .single;
+      controller.editLine(
+        first,
+        QuickSaleLine(
+          id: line.id,
+          productId: 'water',
+          quantityText: '3',
+          unitPriceMinor: 300000,
+          paymentOptionId: 'cash',
+        ),
+      );
+      expect(controller.openAccountsTotal, BigInt.from(1100000));
+      expect(await controller.register(second), isTrue);
+      expect(controller.openAccountsTotal, BigInt.from(900000));
+      final third = account();
+      fill(third);
+      expect(controller.openAccountsTotal, BigInt.from(1200000));
+      expect(await controller.removeAccount(first), isTrue);
+      expect(controller.openAccountsTotal, BigInt.from(300000));
+    },
+  );
   test(
     'new accounts appear first and edits or navigation do not reorder them',
     () async {
@@ -46,21 +165,6 @@ void main() {
       ]);
     },
   );
-  void fill(String id, {String product = 'water', String payment = 'cash'}) {
-    final line = controller.accounts
-        .firstWhere((item) => item.id == id)
-        .lines
-        .first;
-    controller.editLine(
-      id,
-      QuickSaleLine(
-        id: line.id,
-        productId: product,
-        unitPriceMinor: product == 'water' ? 300000 : 200000,
-        paymentOptionId: payment,
-      ),
-    );
-  }
 
   test(
     'choosing a person names the account and persists the same debtor before any credit line',
