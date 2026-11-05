@@ -7,10 +7,12 @@ class FinancialTotal extends StatelessWidget {
     required this.label,
     required this.value,
     this.valueKey,
+    this.stacked = false,
   });
 
   final String label, value;
   final Key? valueKey;
+  final bool stacked;
 
   static TextStyle amountStyle(BuildContext context) =>
       Theme.of(context).textTheme.titleMedium!.copyWith(
@@ -28,21 +30,36 @@ class FinancialTotal extends StatelessWidget {
       color: Theme.of(context).colorScheme.primaryContainer,
       borderRadius: BorderRadius.circular(8),
     ),
-    child: Wrap(
-      spacing: 16,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      alignment: WrapAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
+    child: stacked
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(value, key: valueKey, style: amountStyle(context)),
+            ],
+          )
+        : Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
+              Text(value, key: valueKey, style: amountStyle(context)),
+            ],
           ),
-        ),
-        Text(value, key: valueKey, style: amountStyle(context)),
-      ],
-    ),
   );
 }

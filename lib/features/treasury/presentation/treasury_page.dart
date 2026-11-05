@@ -296,6 +296,7 @@ class _TreasuryPageState extends State<TreasuryPage> {
               Icon(icon, color: foreground, size: 24),
               const SizedBox(height: 14),
               FinancialTotal(
+                stacked: true,
                 label: title,
                 value: formattedAmount ?? _money(amount!),
                 valueKey: Key('treasury-amount-$keyName'),
