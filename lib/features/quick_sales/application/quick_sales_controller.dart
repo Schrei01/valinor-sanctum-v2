@@ -74,6 +74,7 @@ class QuickSalesController extends ChangeNotifier {
     try {
       if (!_defaultsReady) {
         await store.ensureDefaults();
+        await store.ensureBulkProducts();
         _defaultsReady = true;
       }
       final next = await store.load();
@@ -517,6 +518,21 @@ class QuickSalesController extends ChangeNotifier {
   Future<bool> register(String id) async {
     final card = _cards[id];
     if (_disposed || card == null || isLocked(id)) return false;
+    final seenBulk = <String>{};
+    for (final line in card.account.lines) {
+      final product = snapshot?.products
+          .where((p) => p.id == line.productId)
+          .firstOrNull;
+      if (product?.isVariablePrice != true) continue;
+      if (line.quantityText != '1' ||
+          (line.unitPriceMinor ?? 0) <= 0 ||
+          !seenBulk.add(product!.id)) {
+        card.error =
+            'Escribe un valor vendido mayor que cero y usa una sola línea por tipo de bulk. No se cuentan cartas.';
+        _emit();
+        return false;
+      }
+    }
     if (card.account.needsPaymentReview ||
         (card.account.paymentMode == 'single' &&
             card.account.accountPaymentOptionId == null)) {

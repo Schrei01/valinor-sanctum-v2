@@ -17,7 +17,16 @@ import 'sqlite_cash_opening_recorder.dart';
 
 /// A durable parent composes catalog, FIFO receipt and full supplier payment.
 /// Preparing reserves identities and snapshots without changing business data.
+part 'sqlite_purchase_batch.dart';
+
 class SqliteStockIntakeStore implements StockIntakeStore {
+  @override
+  Future<PreparedPurchaseBatch> prepareBatch(PurchaseBatchCommand command) =>
+      _batchPrepare(command);
+  @override
+  Future<void> confirmBatch(String commandId) => _batchConfirm(commandId);
+  @override
+  Future<void> discardBatch(String commandId) => _batchDiscard(commandId);
   SqliteStockIntakeStore(this._database, {this.synthetic = false});
   final AppDatabase _database;
   final bool synthetic;
@@ -135,9 +144,14 @@ WHERE l.account_id=? LIMIT 1
           canRecordOpening: false,
         ),
       );
+      final batchRows = await txn.query(
+        'purchase_batch_requests',
+        orderBy: 'occurred_at_utc DESC,command_id',
+      );
       final entries = await txn.rawQuery('''
 SELECT e.*,r.occurred_at_utc FROM paid_purchase_entries e
 JOIN paid_purchase_requests r ON r.command_id=e.request_id AND r.status='confirmed'
+WHERE NOT EXISTS(SELECT 1 FROM purchase_batch_items b WHERE b.child_command_id=e.request_id)
 ORDER BY r.occurred_at_utc DESC,e.request_id
 ''');
       return StockIntakeSnapshot(
@@ -150,6 +164,22 @@ ORDER BY r.occurred_at_utc DESC,e.request_id
         productDefaults: await _productDefaults(txn),
         paymentOptions: paymentOptions,
         pendingIntakes: pending.map(_prepared).toList(),
+        pendingBatches: batchRows
+            .where(
+              (r) => r['status'] == 'prepared' || r['status'] == 'rejected',
+            )
+            .map(_preparedBatch)
+            .toList(),
+        batches: batchRows
+            .where((r) => r['status'] == 'confirmed')
+            .map(
+              (r) => PurchaseBatchEntry(
+                command: _preparedBatch(r).command,
+                categoryName: r['category_name_snapshot'] as String,
+                paymentLabel: r['payment_label_snapshot'] as String,
+              ),
+            )
+            .toList(),
         entries: entries
             .map(
               (r) => StockIntakeEntry(
@@ -233,103 +263,132 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
 
   @override
   Future<PreparedStockIntake> prepare(StockIntakeCommand command) async {
+    return _database.database.transaction(
+      (txn) => _prepareInTransaction(txn, command),
+      exclusive: true,
+    );
+  }
+
+  Future<PreparedStockIntake> _prepareInTransaction(
+    Transaction txn,
+    StockIntakeCommand command, {
+    String? batchId,
+  }) async {
     final input = _input(command);
-    return _database.database.transaction((txn) async {
-      final profile = await _profile(txn);
-      final prior = await txn.query(
-        'paid_purchase_requests',
-        where: 'command_id=?',
-        whereArgs: [command.commandId],
+    if ((await txn.query(
+      'purchase_batch_requests',
+      where: 'command_id=?',
+      whereArgs: [command.commandId],
+    )).isNotEmpty) {
+      throw const StockIntakeValidationException(
+        'El identificador pertenece a una compra completa.',
       );
-      if (prior.isNotEmpty) {
-        final payload =
-            jsonDecode(prior.single['canonical_payload'] as String)
-                as Map<String, dynamic>;
-        if (jsonEncode(payload['input']) != jsonEncode(input)) {
-          throw const StockIntakeValidationException(
-            'El identificador ya corresponde a otro ingreso.',
-          );
-        }
-        return _prepared(prior.single);
-      }
-      await _unused(txn, command.commandId);
-      await _checkProduct(
-        txn,
-        command.productId,
-        input['expectedProduct'] as Map<String, Object?>?,
-        name: command.productName,
+    }
+    final batchReservations = await txn.query(
+      'purchase_batch_items',
+      where: 'child_command_id=?',
+      whereArgs: [command.commandId],
+    );
+    if (batchReservations.isNotEmpty &&
+        batchReservations.single['batch_id'] != batchId) {
+      throw const StockIntakeValidationException(
+        'El producto pertenece a una compra completa pendiente. Reintenta esa compra.',
       );
-      final category = await _category(txn, command.categoryId);
-      await _checkSku(txn, input['sku'] as String?, command.productId);
-      final supplierName = input['supplierName'] as String;
-      final supplier = command.supplierId == null
-          ? (await txn.query(
-                  'counterparties',
-                  where: 'is_supplier=1 AND is_active=1',
-                  orderBy: 'id',
-                ))
-                .where(
-                  (r) =>
-                      (r['name'] as String).trim().toLowerCase() ==
-                      supplierName.toLowerCase(),
-                )
-                .toList()
-          : await txn.query(
-              'counterparties',
-              where: 'id=? AND is_supplier=1 AND is_active=1',
-              whereArgs: [command.supplierId],
-            );
-      if (command.supplierId != null &&
-          (supplier.length != 1 || supplier.single['name'] != supplierName)) {
+    }
+    final profile = await _profile(txn);
+    final prior = await txn.query(
+      'paid_purchase_requests',
+      where: 'command_id=?',
+      whereArgs: [command.commandId],
+    );
+    if (prior.isNotEmpty) {
+      final payload =
+          jsonDecode(prior.single['canonical_payload'] as String)
+              as Map<String, dynamic>;
+      if (jsonEncode(payload['input']) != jsonEncode(input)) {
         throw const StockIntakeValidationException(
-          'El proveedor cambió. Selecciónalo nuevamente.',
+          'El identificador ya corresponde a otro ingreso.',
         );
       }
-      final supplierId = supplier.isEmpty
-          ? InventoryIds.next()
-          : supplier.first['id'] as String;
-      final option = await _option(txn, command.paymentOptionId);
-      final total = _nonnegative(
-        BigInt.from(command.totalCostMinor),
-        'Costo total',
+      return _prepared(prior.single);
+    }
+    await _unused(txn, command.commandId);
+    await _checkProduct(
+      txn,
+      command.productId,
+      input['expectedProduct'] as Map<String, Object?>?,
+      name: command.productName,
+    );
+    final category = await _category(txn, command.categoryId);
+    await _checkSku(txn, input['sku'] as String?, command.productId);
+    final supplierName = input['supplierName'] as String;
+    final supplier = command.supplierId == null
+        ? (await txn.query(
+                'counterparties',
+                where: 'is_supplier=1 AND is_active=1',
+                orderBy: 'id',
+              ))
+              .where(
+                (r) =>
+                    (r['name'] as String).trim().toLowerCase() ==
+                    supplierName.toLowerCase(),
+              )
+              .toList()
+        : await txn.query(
+            'counterparties',
+            where: 'id=? AND is_supplier=1 AND is_active=1',
+            whereArgs: [command.supplierId],
+          );
+    if (command.supplierId != null &&
+        (supplier.length != 1 || supplier.single['name'] != supplierName)) {
+      throw const StockIntakeValidationException(
+        'El proveedor cambió. Selecciónalo nuevamente.',
       );
-      await _funds(txn, option, total, command.occurredAtUtc);
-      final now = DateTime.now().toUtc();
-      final row = <String, Object?>{
-        'command_id': command.commandId,
-        'canonical_payload': jsonEncode({
-          'version': command.totalPurchasePriceMinor == null ? 1 : 2,
-          'profileId': profile.profileId,
-          'currency': profile.currencyCode,
-          'scale': profile.moneyScale,
-          'input': input,
-          'productId': command.productId,
-          'expectedProduct': input['expectedProduct'],
-          'productName': input['productName'],
-          'sku': input['sku'],
-          'categoryId': command.categoryId,
-          'categoryName': category['name'],
-          'supplierId': supplierId,
-          'supplierName': supplier.isEmpty
-              ? supplierName
-              : supplier.first['name'],
-          'existingSupplier': supplier.isNotEmpty,
-          'unitPurchasePriceMinor': command.exactUnitCostMinor,
-          'listPriceMinor': command.listPriceMinor,
-          'quantity': command.quantity,
-          'totalCostMinor': total,
-          'occurredAtUtc': command.occurredAtUtc.toIso8601String(),
-          ...option,
-        }),
-        'occurred_at_utc': command.occurredAtUtc.toIso8601String(),
-        'prepared_at_utc': now.toIso8601String(),
-        'status': 'prepared',
-        'purchase_command_id': InventoryIds.next(),
-        'payment_command_id': InventoryIds.next(),
-      };
-      await txn.insert('paid_purchase_requests', row);
-      return _prepared(row);
-    }, exclusive: true);
+    }
+    final supplierId = supplier.isEmpty
+        ? InventoryIds.next()
+        : supplier.first['id'] as String;
+    final option = await _option(txn, command.paymentOptionId);
+    final total = _nonnegative(
+      BigInt.from(command.totalCostMinor),
+      'Costo total',
+    );
+    await _funds(txn, option, total, command.occurredAtUtc);
+    final now = DateTime.now().toUtc();
+    final row = <String, Object?>{
+      'command_id': command.commandId,
+      'canonical_payload': jsonEncode({
+        'version': command.totalPurchasePriceMinor == null ? 1 : 2,
+        'profileId': profile.profileId,
+        'currency': profile.currencyCode,
+        'scale': profile.moneyScale,
+        'input': input,
+        'productId': command.productId,
+        'expectedProduct': input['expectedProduct'],
+        'productName': input['productName'],
+        'sku': input['sku'],
+        'categoryId': command.categoryId,
+        'categoryName': category['name'],
+        'supplierId': supplierId,
+        'supplierName': supplier.isEmpty
+            ? supplierName
+            : supplier.first['name'],
+        'existingSupplier': supplier.isNotEmpty,
+        'unitPurchasePriceMinor': command.exactUnitCostMinor,
+        'listPriceMinor': command.listPriceMinor,
+        'quantity': command.quantity,
+        'totalCostMinor': total,
+        'occurredAtUtc': command.occurredAtUtc.toIso8601String(),
+        ...option,
+      }),
+      'occurred_at_utc': command.occurredAtUtc.toIso8601String(),
+      'prepared_at_utc': now.toIso8601String(),
+      'status': 'prepared',
+      'purchase_command_id': InventoryIds.next(),
+      'payment_command_id': InventoryIds.next(),
+    };
+    await txn.insert('paid_purchase_requests', row);
+    return _prepared(row);
   }
 
   @override
@@ -717,8 +776,10 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
           where: 'product_id=?',
           whereArgs: [id],
         )).isNotEmpty) {
-      throw const StockIntakeValidationException(
-        'Pasadía es un servicio ilimitado; se vende desde Ventas.',
+      throw StockIntakeValidationException(
+        isDayPassName(name ?? '')
+            ? 'Pasadía es un servicio ilimitado; se vende desde Ventas.'
+            : 'El bulk se vende por valor en Ventas y no recibe compras.',
       );
     }
     final rows = await txn.query(

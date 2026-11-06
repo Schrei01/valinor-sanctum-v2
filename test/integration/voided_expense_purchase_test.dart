@@ -146,7 +146,7 @@ void main() {
           await app.close();
           app = null;
           app = await AppDatabase.open(path: path);
-          expect(await app.database.getVersion(), 23);
+          expect(await app.database.getVersion(), AppDatabase.schemaVersion);
           final after = await facts(app.database);
           for (final name in before.keys.where(
             (n) => n != 'schema_migrations',

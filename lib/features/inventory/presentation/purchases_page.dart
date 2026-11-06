@@ -1,8 +1,7 @@
+import 'package:flutter/material.dart';
+import '../../../core/domain/money.dart';
 import '../../../core/presentation/grouped_number_formatter.dart';
 import '../../../core/presentation/financial_total.dart';
-import 'package:flutter/material.dart';
-
-import '../../../core/domain/money.dart';
 import '../../stock_intake/application/stock_intake_controller.dart';
 import '../../stock_intake/domain/stock_intake_store.dart';
 import '../../stock_intake/domain/purchase_pricing.dart';
@@ -10,6 +9,7 @@ import '../../workspace/domain/business_profile.dart';
 import '../application/inventory_controller.dart';
 import '../domain/inventory_store.dart';
 import 'inventory_widgets.dart';
+part 'purchase_product_form.dart';
 
 class PurchasesPage extends StatefulWidget {
   const PurchasesPage({
@@ -23,93 +23,81 @@ class PurchasesPage extends StatefulWidget {
   State<PurchasesPage> createState() => _PurchasesPageState();
 }
 
-class _PurchasesPageState extends State<PurchasesPage> {
-  final _form = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _sku = TextEditingController();
-  final _supplier = TextEditingController();
-  final _cost = TextEditingController();
-  final _pvp = TextEditingController();
-  final _quantity = TextEditingController(text: '1');
-  final _productFocus = FocusNode();
-  final _supplierFocus = FocusNode();
-  CatalogProduct? _existing;
-  String? _supplierId;
-  String? _categoryId;
-  String? _paymentOptionId;
-  String? _hydratedCommand;
-  int _formVersion = 0;
-  int _confirmedVersion = 0;
-  int _historyPage = 0;
-  bool _pvpManual = false;
+class _PurchaseFormLine {
+  _PurchaseFormLine({this.initial});
+  final id = InventoryIds.next();
+  final key = GlobalKey<_PurchaseProductFormState>();
+  final StockIntakeCommand? initial;
+}
 
+class _PurchasesPageState extends State<PurchasesPage> {
+  final _header = GlobalKey<FormState>();
+  final _paid = TextEditingController();
+  final _lines = <_PurchaseFormLine>[_PurchaseFormLine()];
+  String? _categoryId, _paymentId, _hydrated, _formError;
+  bool _paidManual = false;
+  int _confirmed = 0, _version = 0, _historyPage = 0;
   @override
   void initState() {
     super.initState();
-    _confirmedVersion = widget.controller.confirmedVersion;
+    _confirmed = widget.controller.confirmedVersion;
     widget.controller.addListener(_changed);
-    _hydratePending();
+    _hydrate();
   }
 
   @override
-  void didUpdateWidget(covariant PurchasesPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_changed);
+  void didUpdateWidget(covariant PurchasesPage old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_changed);
       widget.controller.addListener(_changed);
-      _confirmedVersion = widget.controller.confirmedVersion;
-      _hydratePending();
+      _confirmed = widget.controller.confirmedVersion;
+      _hydrated = null;
+      _hydrate();
     }
   }
 
   void _changed() {
     if (!mounted) return;
-    if (_confirmedVersion != widget.controller.confirmedVersion) {
-      _confirmedVersion = widget.controller.confirmedVersion;
-      _name.clear();
-      _sku.clear();
-      _cost.clear();
-      _pvp.clear();
-      _quantity.text = '1';
-      _existing = null;
-      _pvpManual = false;
-      _hydratedCommand = null;
-      _formVersion++;
+    if (_confirmed != widget.controller.confirmedVersion) {
+      _confirmed = widget.controller.confirmedVersion;
+      _lines
+        ..clear()
+        ..add(_PurchaseFormLine());
+      _paid.clear();
+      _paidManual = false;
+      _hydrated = null;
+      _formError = null;
       _historyPage = 0;
+      _version++;
     }
-    _hydratePending();
+    _hydrate();
     setState(() {});
   }
 
-  void _hydratePending() {
-    final pending = widget.controller.pendingIntakes.firstOrNull;
-    if (pending == null || _hydratedCommand == pending.command.commandId) {
-      return;
-    }
-    final command = pending.command;
-    _hydratedCommand = command.commandId;
-    _existing = command.expectedProduct;
-    _name.text = command.productName;
-    _sku.text = command.sku ?? '';
-    _supplier.text = command.supplierName;
-    _supplierId = command.supplierId;
-    _categoryId = command.categoryId;
-    _paymentOptionId = command.paymentOptionId;
-    _quantity.text = '${command.quantity}';
-    _cost.text = _amount(command.totalCostMinor);
-    _pvp.text = _amount(command.listPriceMinor);
-    _pvpManual = true;
-    _formVersion++;
+  void _hydrate() {
+    final batch = widget.controller.pendingBatches.firstOrNull?.command,
+        old = widget.controller.pendingIntakes.firstOrNull?.command;
+    final id = batch?.commandId ?? old?.commandId;
+    if (id == null || id == _hydrated) return;
+    _hydrated = id;
+    _categoryId = batch?.categoryId ?? old!.categoryId;
+    _paymentId = batch?.paymentOptionId ?? old!.paymentOptionId;
+    _paid.text = _amount(batch?.totalPaidMinor ?? old!.totalCostMinor);
+    _paidManual = true;
+    _lines
+      ..clear()
+      ..addAll([
+        for (final item in batch?.items ?? [old!])
+          _PurchaseFormLine(initial: item),
+      ]);
+    _version++;
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
-    for (final field in [_name, _sku, _supplier, _cost, _pvp, _quantity]) {
-      field.dispose();
-    }
-    _productFocus.dispose();
-    _supplierFocus.dispose();
+    _paid.dispose();
     super.dispose();
   }
 
@@ -118,643 +106,394 @@ class _PurchasesPageState extends State<PurchasesPage> {
     currency: widget.profile.currencyCode,
     scale: widget.profile.moneyScale,
   ).formatEsCo();
-
-  bool _isPurchaseCategory(InventoryCategory category) =>
-      category.name.trim().toLowerCase() != 'evento';
-
-  IntakePaymentOption? _payment(StockIntakeSnapshot data) =>
-      data.paymentOptions
-          .where((item) => item.id == _paymentOptionId && item.isActive)
-          .firstOrNull ??
-      data.paymentOptions.where((item) => item.isActive).firstOrNull;
-
-  BigInt? get _total {
+  int? get _paidValue {
     try {
-      final quantity = BigInt.tryParse(
-        _quantity.text.trim().replaceAll('.', ''),
-      );
-      if (quantity == null ||
-          quantity <= BigInt.zero ||
-          !RegExp(
-            r'^[0-9]+$',
-          ).hasMatch(_quantity.text.trim().replaceAll('.', ''))) {
-        return null;
-      }
-      final cost = Money.parseEsCo(
-        _cost.text,
+      return Money.parseEsCo(
+        _paid.text,
         currency: widget.profile.currencyCode,
         scale: widget.profile.moneyScale,
-      );
-      if (cost.minorUnits <= 0) return null;
-      return cost.asBigInt;
-    } on FormatException {
-      return null;
-    } on RangeError {
+      ).minorUnits;
+    } catch (_) {
       return null;
     }
   }
 
-  int? get _suggestedPvp {
-    final total = _total;
-    final quantity = BigInt.tryParse(_quantity.text.trim().replaceAll('.', ''));
-    if (total == null ||
-        total > Money.maxMinorUnits ||
-        quantity == null ||
-        quantity <= BigInt.zero ||
-        quantity > Money.maxMinorUnits) {
-      return null;
-    }
-    try {
-      return suggestedRetailPriceMinor(
-        totalCostMinor: total.toInt(),
-        quantity: quantity.toInt(),
-      );
-    } on RangeError {
-      return null;
-    }
-  }
-
-  void _suggest() {
-    final price = _suggestedPvp;
-    if (!_pvpManual && price != null) _pvp.text = _amount(price);
+  BigInt get _costTotal => _lines.fold(
+    BigInt.zero,
+    (sum, line) =>
+        sum +
+        BigInt.from(
+          line.key.currentState?.enteredCost ??
+              line.initial?.totalCostMinor ??
+              0,
+        ),
+  );
+  IntakePaymentOption? _payment(StockIntakeSnapshot data) =>
+      data.paymentOptions
+          .where((o) => o.id == _paymentId && o.isActive)
+          .firstOrNull ??
+      data.paymentOptions.where((o) => o.isActive).firstOrNull;
+  void _lineChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (!_paidManual && _costTotal <= Money.maxMinorUnits) {
+        _paid.text = _costTotal > BigInt.zero
+            ? _amount(_costTotal.toInt())
+            : '';
+      }
+      _formError = null;
+    });
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.controller,
-    builder: (context, _) {
-      final controller = widget.controller;
-      final data = controller.snapshot;
-      final locked = controller.formLocked;
-      return FocusTraversalGroup(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            InventoryPageHeading(
-              title: 'Compras',
-              subtitle:
-                  'Ingresa productos al catálogo y sus cantidades. La compra se paga completa desde la cuenta elegida.',
-              busy: controller.busy,
-              onRefresh: controller.load,
+  Widget build(BuildContext context) {
+    final c = widget.controller, data = c.snapshot, locked = c.formLocked;
+    return FocusTraversalGroup(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InventoryPageHeading(
+            title: 'Compras',
+            subtitle:
+                'Registra juntos los productos de una compra y el total que pagaste.',
+            busy: c.busy,
+            onRefresh: c.load,
+          ),
+          if (c.loadError != null)
+            InventoryNotice(
+              text: c.loadError!,
+              onRetry: c.busy ? null : c.load,
             ),
-            if (controller.loadError != null)
-              InventoryNotice(
-                text: controller.loadError!,
-                onRetry: controller.busy ? null : controller.load,
+          if (c.operationError != null)
+            InventoryNotice(text: c.operationError!),
+          if (_formError != null) InventoryNotice(text: _formError!),
+          if (c.operationNotice != null)
+            InventoryNotice(
+              key: const Key('intake-notice'),
+              text: c.operationNotice!,
+              kind: InventoryNoticeKind.information,
+            ),
+          if (data == null)
+            c.loading
+                ? const Center(child: CircularProgressIndicator())
+                : const Text('Los productos y saldos no están disponibles.')
+          else ...[
+            if (c.pendingOpening != null) _pendingOpening(data),
+            for (final pending in c.pendingBatches)
+              _pendingCard(
+                pending.command.commandId,
+                pending.status,
+                pending.rejectionReason,
+                '${pending.command.items.length} productos · ${inventoryMoney(pending.command.totalPaidMinor, widget.profile)}',
+                batch: true,
               ),
-            if (controller.operationError != null)
-              InventoryNotice(text: controller.operationError!),
-            if (controller.operationNotice != null)
-              InventoryNotice(
-                key: const Key('intake-notice'),
-                text: controller.operationNotice!,
-                kind: InventoryNoticeKind.information,
+            for (final pending in c.pendingIntakes)
+              _pendingCard(
+                pending.command.commandId,
+                pending.status,
+                pending.rejectionReason,
+                '${pending.command.productName} · ${pending.command.quantity} unidades',
+                batch: false,
               ),
-            if (data == null)
-              if (controller.loading)
-                const Center(child: CircularProgressIndicator())
-              else
-                const Text('Los productos y saldos no están disponibles.')
-            else ...[
-              for (final pending in controller.pendingIntakes)
-                _pending(pending, data),
-              if (controller.pendingOpening != null) _pendingOpening(data),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Form(
-                    key: _form,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Ingreso de productos',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Escribe un producto nuevo o elige uno existente para completar sus datos y reponerlo.',
-                        ),
-                        const SizedBox(height: 20),
-                        _productField(data, locked),
-                        if (_existing != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              'Reponer producto · existencias: ${data.stock.where((item) => item.productId == _existing!.id).firstOrNull?.quantity ?? 0}',
-                              key: const Key('intake-existing'),
-                            ),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _header,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ingreso de productos',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 16),
+                      _fields([
+                        TextFormField(
+                          key: const Key('intake-paid'),
+                          controller: _paid,
+                          inputFormatters: [const GroupedNumberFormatter()],
+                          enabled: !locked,
+                          decoration: InputDecoration(
+                            labelText:
+                                'Total pagado (${widget.profile.currencyCode})',
                           ),
-                        const SizedBox(height: 16),
-                        _fields([
-                          TextFormField(
-                            key: const Key('intake-sku'),
-                            controller: _sku,
-                            enabled: !locked,
-                            maxLength: 64,
-                            decoration: const InputDecoration(
-                              labelText: 'SKU (opcional)',
-                            ),
-                            validator: (value) =>
-                                RegExp(r'[\x00-\x1f]').hasMatch(value ?? '')
-                                ? 'Escribe un SKU válido.'
-                                : null,
-                          ),
-                          DropdownButtonFormField<String>(
-                            key: ValueKey('intake-category-$_formVersion'),
-                            initialValue:
-                                data.categories.any(
-                                  (item) =>
-                                      item.id == _categoryId &&
-                                      _isPurchaseCategory(item),
-                                )
-                                ? _categoryId
-                                : null,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Categoría',
-                            ),
-                            items: [
-                              for (final category in data.categories.where(
-                                (item) =>
-                                    _isPurchaseCategory(item) &&
-                                    (item.isActive || item.id == _categoryId),
-                              ))
-                                DropdownMenuItem(
-                                  value: category.id,
-                                  enabled: category.isActive,
-                                  child: Text(
-                                    category.name,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
-                            onChanged: locked
-                                ? null
-                                : (value) =>
-                                      setState(() => _categoryId = value),
-                            validator: (value) =>
-                                data.categories.any(
-                                  (item) =>
-                                      item.id == value &&
-                                      item.isActive &&
-                                      _isPurchaseCategory(item),
-                                )
-                                ? null
-                                : 'Elige una categoría activa.',
-                          ),
-                        ]),
-                        const SizedBox(height: 16),
-                        _supplierField(data, locked),
-                        const SizedBox(height: 16),
-                        _fields([
-                          TextFormField(
-                            key: const Key('intake-quantity'),
-                            controller: _quantity,
-                            inputFormatters: [
-                              const GroupedNumberFormatter(integerOnly: true),
-                            ],
-                            enabled: !locked,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Unidades',
-                            ),
-                            validator: _quantityError,
-                            onChanged: (_) => setState(_suggest),
-                          ),
-                          TextFormField(
-                            key: const Key('intake-cost'),
-                            controller: _cost,
-                            inputFormatters: [const GroupedNumberFormatter()],
-                            enabled: !locked,
-                            decoration: InputDecoration(
-                              labelText:
-                                  'Costo total de las unidades (${widget.profile.currencyCode})',
-                            ),
-                            validator: (value) => _positiveAmountError(value),
-                            onChanged: (_) => setState(_suggest),
-                          ),
-                          TextFormField(
-                            key: const Key('intake-pvp'),
-                            controller: _pvp,
-                            inputFormatters: [const GroupedNumberFormatter()],
-                            enabled: !locked,
-                            decoration: InputDecoration(
-                              labelText:
-                                  'PVP unitario (${widget.profile.currencyCode})',
-                            ),
-                            validator: (value) =>
-                                inventoryAmountError(value, widget.profile),
-                            onChanged: (_) => setState(() => _pvpManual = true),
-                          ),
-                        ]),
-                        const SizedBox(height: 8),
-                        if (_existing != null)
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 8,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Text(
-                                'PVP anterior: ${inventoryMoney(_existing!.listPriceMinor, widget.profile)}',
-                                key: const Key('intake-previous-pvp'),
-                              ),
-                              TextButton(
-                                key: const Key('intake-use-previous-pvp'),
-                                onPressed: locked
+                          validator: (value) {
+                            final error = inventoryAmountError(
+                              value,
+                              widget.profile,
+                            );
+                            return error ??
+                                ((_paidValue ?? 0) > 0
                                     ? null
-                                    : () => setState(() {
-                                        _pvp.text = _amount(
-                                          _existing!.listPriceMinor,
-                                        );
-                                        _pvpManual = true;
-                                      }),
-                                child: const Text('Usar valor'),
-                              ),
-                            ],
-                          ),
-                        Text(
-                          _suggestedPvp == null
-                              ? 'PVP sugerido: completa costo total y cantidad'
-                              : 'PVP sugerido: ${inventoryMoney(_suggestedPvp!, widget.profile)}',
-                          key: const Key('intake-suggested-pvp'),
+                                    : 'Escribe un total pagado mayor que cero.');
+                          },
+                          onChanged: (_) => setState(() => _paidManual = true),
                         ),
-                        const Text(
-                          'Sugerencia = costo total ÷ cantidad ÷ 0,65. Puedes elegir un PVP menor. El PVP elegido aplica a todas las existencias y sus cambios quedan guardados.',
-                          style: TextStyle(fontSize: 12, height: 1.4),
-                        ),
-                        const SizedBox(height: 20),
-                        _fields([
-                          DropdownButtonFormField<String>(
-                            key: ValueKey('intake-payment-$_formVersion'),
-                            initialValue: _payment(data)?.id,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Pagar desde',
-                            ),
-                            items: [
-                              for (final option in data.paymentOptions.where(
-                                (item) => item.isActive,
-                              ))
-                                DropdownMenuItem(
-                                  value: option.id,
-                                  child: Text(option.label),
-                                ),
-                            ],
-                            onChanged: locked
-                                ? null
-                                : (value) =>
-                                      setState(() => _paymentOptionId = value),
-                            validator: (value) =>
-                                data.paymentOptions.any(
-                                  (item) => item.id == value && item.isActive,
-                                )
-                                ? null
-                                : 'Elige una cuenta.',
+                        DropdownButtonFormField<String>(
+                          key: ValueKey('intake-payment-$_version'),
+                          initialValue: _payment(data)?.id,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Pagar desde',
                           ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Text(
-                              '${_payment(data)?.isInvestment == true ? 'Inversión por recuperar' : 'Saldo disponible'}: ${inventoryMoney(_payment(data)?.balanceMinor ?? 0, widget.profile)}',
-                              key: const Key('intake-balance'),
-                            ),
-                          ),
-                        ]),
-                        const SizedBox(height: 16),
-                        FinancialTotal(
-                          label: 'Total de compra',
-                          value: _total == null
-                              ? 'Completa costo y cantidad'
-                              : _total! > Money.maxMinorUnits
-                              ? 'Supera el límite permitido'
-                              : inventoryMoney(_total!.toInt(), widget.profile),
-                          valueKey: const Key('intake-total'),
-                        ),
-                        if (_payment(data)?.isInvestment != true &&
-                            _total != null &&
-                            _total! >
-                                BigInt.from(_payment(data)?.balanceMinor ?? 0))
-                          const Padding(
-                            padding: EdgeInsets.only(top: 8),
-                            child: Text(
-                              'El saldo no alcanza para pagar esta compra.',
-                              key: Key('intake-insufficient'),
-                            ),
-                          ),
-                        const SizedBox(height: 20),
-                        Wrap(
-                          spacing: 16,
-                          runSpacing: 12,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            FilledButton.icon(
-                              key: const Key('intake-submit'),
-                              onPressed: locked || controller.loadError != null
-                                  ? null
-                                  : _receive,
-                              icon: Icon(
-                                controller.confirming
-                                    ? Icons.hourglass_empty
-                                    : Icons.inventory_2_outlined,
-                              ),
-                              label: Text(
-                                controller.confirming
-                                    ? 'Guardando ingreso…'
-                                    : 'Ingresar producto',
-                              ),
-                            ),
-                            if (data.paymentOptions.any(
-                              (item) => item.isActive && item.canRecordOpening,
+                          items: [
+                            for (final option in data.paymentOptions.where(
+                              (o) => o.isActive,
                             ))
-                              OutlinedButton.icon(
-                                key: const Key('intake-opening'),
-                                onPressed:
-                                    locked ||
-                                        controller.loadError != null ||
-                                        !data.paymentOptions.any(
-                                          (item) =>
-                                              item.isActive &&
-                                              item.canRecordOpening,
-                                        )
-                                    ? null
-                                    : () => _opening(data),
-                                icon: const Icon(
-                                  Icons.account_balance_wallet_outlined,
-                                ),
-                                label: const Text('Saldo inicial'),
+                              DropdownMenuItem(
+                                value: option.id,
+                                child: Text(option.label),
                               ),
                           ],
+                          onChanged: locked
+                              ? null
+                              : (value) => setState(() => _paymentId = value),
+                          validator: (value) =>
+                              value == null ? 'Elige una cuenta.' : null,
                         ),
-                      ],
-                    ),
+                      ]),
+                      const SizedBox(height: 12),
+                      Text(
+                        '${_payment(data)?.isInvestment == true ? 'Inversión por recuperar' : 'Saldo disponible'}: ${inventoryMoney(_payment(data)?.balanceMinor ?? 0, widget.profile)}',
+                        key: const Key('intake-balance'),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('intake-category-$_version'),
+                        initialValue: _categoryId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Categoría de la compra',
+                          helperText:
+                              'Todos los productos deben tener esta categoría.',
+                        ),
+                        items: [
+                          for (final category in data.categories.where(
+                            (cat) =>
+                                cat.isActive &&
+                                cat.name.trim().toLowerCase() != 'evento',
+                          ))
+                            DropdownMenuItem(
+                              value: category.id,
+                              child: Text(category.name),
+                            ),
+                        ],
+                        onChanged: locked
+                            ? null
+                            : (value) => setState(() {
+                                if (_lines.any(
+                                  (line) =>
+                                      line.key.currentState?.existingCategory !=
+                                          null &&
+                                      line.key.currentState!.existingCategory !=
+                                          value,
+                                )) {
+                                  _formError =
+                                      'Retira los productos de otra categoría antes de cambiar la categoría de la compra.';
+                                  _version++;
+                                } else {
+                                  _categoryId = value;
+                                  _formError = null;
+                                }
+                              }),
+                        validator: (value) =>
+                            data.categories.any(
+                              (cat) =>
+                                  cat.id == value &&
+                                  cat.isActive &&
+                                  cat.name.trim().toLowerCase() != 'evento',
+                            )
+                            ? null
+                            : 'Elige una categoría activa.',
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 32),
-              Text(
-                'Historial de ingresos',
-                style: Theme.of(context).textTheme.titleLarge,
+            ),
+            for (var index = 0; index < _lines.length; index++)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Producto ${index + 1}',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          if (_lines.length > 1)
+                            IconButton(
+                              key: Key('intake-remove-${_lines[index].id}'),
+                              tooltip: 'Quitar producto',
+                              onPressed: locked
+                                  ? null
+                                  : () => setState(() {
+                                      _lines.removeAt(index);
+                                      _lineChanged();
+                                    }),
+                              icon: const Icon(Icons.close),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _PurchaseProductForm(
+                        key: _lines[index].key,
+                        id: _lines[index].id,
+                        first: index == 0,
+                        data: data,
+                        profile: widget.profile,
+                        locked: locked,
+                        categoryId: _categoryId,
+                        onChanged: _lineChanged,
+                        onCategorySelected: (category) => setState(() {
+                          _categoryId = category;
+                          _version++;
+                        }),
+                        initial: _lines[index].initial,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 12),
-              _history(data),
-            ],
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              key: const Key('intake-add-product'),
+              onPressed: locked || _lines.length >= 100
+                  ? null
+                  : () => setState(() => _lines.add(_PurchaseFormLine())),
+              icon: const Icon(Icons.add),
+              label: const Text('Agregar producto'),
+            ),
+            const SizedBox(height: 16),
+            _fields([
+              FinancialTotal(
+                label: 'Costo de los productos',
+                value: _costTotal > Money.maxMinorUnits
+                    ? 'Supera el límite permitido'
+                    : inventoryMoney(_costTotal.toInt(), widget.profile),
+                valueKey: const Key('intake-products-total'),
+              ),
+              FinancialTotal(
+                label: 'Total pagado',
+                value: _paidValue == null
+                    ? 'Completa el total pagado'
+                    : inventoryMoney(_paidValue!, widget.profile),
+                valueKey: const Key('intake-total'),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            Text(
+              'Diferencia (pagado − costos): ${_paidValue == null || _costTotal > Money.maxMinorUnits ? '—' : inventoryMoney(_paidValue! - _costTotal.toInt(), widget.profile)}',
+              key: const Key('intake-difference'),
+            ),
+            if (_payment(data)?.isInvestment != true &&
+                (_paidValue ?? 0) > (_payment(data)?.balanceMinor ?? 0))
+              const Text(
+                'El saldo no alcanza para pagar esta compra.',
+                key: Key('intake-insufficient'),
+              ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                FilledButton.icon(
+                  key: const Key('intake-submit'),
+                  onPressed: locked || c.loadError != null ? null : _receive,
+                  icon: Icon(
+                    c.confirming
+                        ? Icons.hourglass_empty
+                        : Icons.inventory_2_outlined,
+                  ),
+                  label: Text(
+                    c.confirming ? 'Guardando compra…' : 'Registrar compra',
+                  ),
+                ),
+                if (data.paymentOptions.any(
+                  (o) => o.isActive && o.canRecordOpening,
+                ))
+                  OutlinedButton.icon(
+                    key: const Key('intake-opening'),
+                    onPressed: locked
+                        ? null
+                        : () => showDialog<void>(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) => _OpeningDialog(
+                              controller: c,
+                              profile: widget.profile,
+                              options: data.paymentOptions
+                                  .where(
+                                    (o) => o.isActive && o.canRecordOpening,
+                                  )
+                                  .toList(),
+                              selected: _payment(data)?.id,
+                            ),
+                          ),
+                    icon: const Icon(Icons.account_balance_wallet_outlined),
+                    label: const Text('Saldo inicial'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Historial de ingresos',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            _history(data),
           ],
-        ),
-      );
-    },
-  );
-
-  Widget _fields(List<Widget> fields) => LayoutBuilder(
-    builder: (context, constraints) {
-      final columns = constraints.maxWidth >= 900
-          ? fields.length
-          : constraints.maxWidth >= 580
-          ? 2
-          : 1;
-      final width = (constraints.maxWidth - (columns - 1) * 16) / columns;
-      return Wrap(
-        spacing: 16,
-        runSpacing: 16,
-        children: [
-          for (final field in fields) SizedBox(width: width, child: field),
         ],
-      );
-    },
-  );
-
-  Widget _productField(StockIntakeSnapshot data, bool locked) =>
-      RawAutocomplete<CatalogProduct>(
-        textEditingController: _name,
-        focusNode: _productFocus,
-        displayStringForOption: (item) => item.name,
-        optionsBuilder: (text) {
-          final query = text.text.trim().toLowerCase();
-          return query.isEmpty
-              ? const Iterable<CatalogProduct>.empty()
-              : data.products
-                    .where(
-                      (item) =>
-                          item.isActive &&
-                          (item.name.toLowerCase().contains(query) ||
-                              (item.sku?.toLowerCase().contains(query) ??
-                                  false)),
-                    )
-                    .take(8);
-        },
-        onSelected: (product) => setState(() {
-          _existing = product;
-          _sku.text = product.sku ?? '';
-          _categoryId =
-              data.categories.any(
-                (item) =>
-                    item.id == product.categoryId && _isPurchaseCategory(item),
-              )
-              ? product.categoryId
-              : null;
-          _pvp.text = _amount(product.listPriceMinor);
-          _pvpManual = false;
-          final defaults = data.productDefaults[product.id];
-          _cost.clear();
-          _supplier.text = defaults?.supplierName ?? '';
-          _supplierId = defaults?.supplierId;
-          _formVersion++;
-        }),
-        fieldViewBuilder: (context, controller, focus, submit) => TextFormField(
-          key: const Key('intake-name'),
-          controller: controller,
-          focusNode: focus,
-          enabled: !locked,
-          maxLength: 120,
-          decoration: const InputDecoration(
-            labelText: 'Nombre del producto',
-            hintText: 'Nuevo producto o buscar por nombre / SKU',
-          ),
-          validator: (value) => isDayPassName(value ?? '')
-              ? 'Pasadía es un servicio ilimitado; se vende desde Ventas.'
-              : inventoryNameError(value),
-          onFieldSubmitted: (_) => submit(),
-          onChanged: (value) {
-            if (_existing != null && value != _existing!.name) {
-              setState(() {
-                _existing = null;
-                _sku.clear();
-                _pvp.clear();
-                _pvpManual = false;
-                _cost.clear();
-                _supplier.clear();
-                _supplierId = null;
-                _categoryId = null;
-                _formVersion++;
-              });
-            }
-          },
-        ),
-        optionsViewBuilder: (context, selected, options) => _suggestions([
-          for (final product in options)
-            ListTile(
-              dense: true,
-              title: Text(product.name),
-              subtitle: product.sku == null ? null : Text(product.sku!),
-              onTap: () => selected(product),
-            ),
-        ]),
-      );
-
-  Widget _supplierField(StockIntakeSnapshot data, bool locked) =>
-      RawAutocomplete<InventorySupplier>(
-        textEditingController: _supplier,
-        focusNode: _supplierFocus,
-        displayStringForOption: (item) => item.name,
-        optionsBuilder: (text) {
-          final query = text.text.trim().toLowerCase();
-          return query.isEmpty
-              ? const Iterable<InventorySupplier>.empty()
-              : data.suppliers
-                    .where(
-                      (item) =>
-                          item.isActive &&
-                          item.name.toLowerCase().contains(query),
-                    )
-                    .take(8);
-        },
-        onSelected: (supplier) => setState(() => _supplierId = supplier.id),
-        fieldViewBuilder: (context, controller, focus, submit) => TextFormField(
-          key: const Key('intake-supplier'),
-          controller: controller,
-          focusNode: focus,
-          enabled: !locked,
-          maxLength: 120,
-          decoration: const InputDecoration(
-            labelText: 'Proveedor',
-            helperText: 'Elige uno existente o escribe el nombre de uno nuevo.',
-          ),
-          validator: inventoryNameError,
-          onFieldSubmitted: (_) => submit(),
-          onChanged: (value) {
-            if (_supplierId != null &&
-                !data.suppliers.any(
-                  (item) => item.id == _supplierId && item.name == value,
-                )) {
-              setState(() => _supplierId = null);
-            }
-          },
-        ),
-        optionsViewBuilder: (context, selected, options) => _suggestions([
-          for (final supplier in options)
-            ListTile(
-              dense: true,
-              title: Text(supplier.name),
-              onTap: () => selected(supplier),
-            ),
-        ]),
-      );
-
-  Widget _suggestions(List<Widget> children) => Align(
-    alignment: Alignment.topLeft,
-    child: Material(
-      elevation: 4,
-      borderRadius: BorderRadius.circular(8),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 280),
-        child: ListView(
-          padding: EdgeInsets.zero,
-          shrinkWrap: true,
-          children: children,
-        ),
       ),
-    ),
-  );
-
-  String? _positiveAmountError(String? value) {
-    final error = inventoryAmountError(value, widget.profile);
-    if (error != null) return error;
-    return Money.parseEsCo(
-              value!,
-              currency: widget.profile.currencyCode,
-              scale: widget.profile.moneyScale,
-            ).minorUnits <=
-            0
-        ? 'Escribe un precio mayor que cero.'
-        : null;
-  }
-
-  String? _quantityError(String? value) {
-    final text = value?.trim().replaceAll('.', '') ?? '';
-    final quantity = BigInt.tryParse(text);
-    return !RegExp(r'^[0-9]+$').hasMatch(text) ||
-            quantity == null ||
-            quantity <= BigInt.zero ||
-            quantity > Money.maxMinorUnits
-        ? 'Escribe una cantidad entera positiva.'
-        : null;
-  }
-
-  Future<void> _receive() async {
-    if (!_form.currentState!.validate()) return;
-    final payment = _payment(widget.controller.snapshot!);
-    if (payment == null) return;
-    await widget.controller.receive(
-      expectedProduct: _existing,
-      productName: _name.text,
-      sku: _sku.text,
-      categoryId: _categoryId!,
-      supplierId: _supplierId,
-      supplierName: _supplier.text,
-      totalPurchasePriceMinor: Money.parseEsCo(
-        _cost.text,
-        currency: widget.profile.currencyCode,
-        scale: widget.profile.moneyScale,
-      ).minorUnits,
-      listPriceMinor: Money.parseEsCo(
-        _pvp.text,
-        currency: widget.profile.currencyCode,
-        scale: widget.profile.moneyScale,
-      ).minorUnits,
-      quantity: BigInt.parse(_quantity.text.trim().replaceAll('.', '')).toInt(),
-      paymentOptionId: payment.id,
     );
   }
 
-  Widget _pending(PreparedStockIntake pending, StockIntakeSnapshot data) {
-    final command = pending.command;
-    final payment = data.paymentOptions
-        .where((item) => item.id == command.paymentOptionId)
-        .firstOrNull;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      color: Theme.of(context).colorScheme.secondaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              pending.status == 'rejected'
-                  ? 'Ingreso por corregir'
-                  : 'Ingreso pendiente de confirmar',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${command.productName} · ${command.quantity} unidades · ${payment?.label ?? 'Cuenta guardada'}',
-            ),
-            if (pending.rejectionReason != null) Text(pending.rejectionReason!),
-            const SizedBox(height: 12),
-            FilledButton(
-              key: ValueKey('intake-retry-${command.commandId}'),
-              onPressed: widget.controller.busy
-                  ? null
-                  : () => pending.status == 'rejected'
-                        ? widget.controller.discardRejected(command.commandId)
-                        : widget.controller.retry(command.commandId),
-              child: Text(
-                pending.status == 'rejected'
-                    ? 'Corregir ingreso'
-                    : 'Reintentar el mismo ingreso',
-              ),
-            ),
-          ],
-        ),
+  Widget _fields(List<Widget> fields) => LayoutBuilder(
+    builder: (context, box) => Wrap(
+      spacing: 16,
+      runSpacing: 16,
+      children: [
+        for (final field in fields)
+          SizedBox(
+            width: box.maxWidth >= 580 ? (box.maxWidth - 16) / 2 : box.maxWidth,
+            child: field,
+          ),
+      ],
+    ),
+  );
+  Future<void> _receive() async {
+    var valid = _header.currentState!.validate();
+    final payment = _payment(widget.controller.snapshot!);
+    if (_categoryId == null || payment == null) return;
+    final at = DateTime.now().toUtc(), items = <StockIntakeCommand>[];
+    for (final line in _lines) {
+      final item = line.key.currentState?.command(
+        category: _categoryId!,
+        payment: payment.id,
+        at: at,
+      );
+      if (item == null) {
+        valid = false;
+      } else {
+        items.add(item);
+      }
+    }
+    if (!valid) return;
+    setState(() => _formError = null);
+    await widget.controller.receiveBatch(
+      PurchaseBatchCommand(
+        commandId: InventoryIds.next(),
+        categoryId: _categoryId!,
+        paymentOptionId: payment.id,
+        totalPaidMinor: _paidValue!,
+        occurredAtUtc: at,
+        items: items,
       ),
     );
   }
@@ -788,66 +527,113 @@ class _PurchasesPageState extends State<PurchasesPage> {
     );
   }
 
-  Future<void> _opening(StockIntakeSnapshot data) => showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => _OpeningDialog(
-      controller: widget.controller,
-      profile: widget.profile,
-      options: data.paymentOptions
-          .where((item) => item.isActive && item.canRecordOpening)
-          .toList(),
-      selected: _payment(data)?.id,
+  Widget _pendingCard(
+    String id,
+    String status,
+    String? reason,
+    String description, {
+    required bool batch,
+  }) => Card(
+    color: Theme.of(context).colorScheme.secondaryContainer,
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            status == 'rejected'
+                ? 'Ingreso por corregir'
+                : 'Ingreso pendiente de confirmar',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(description),
+          if (reason != null) Text(reason),
+          const SizedBox(height: 12),
+          FilledButton(
+            key: ValueKey('intake-retry-$id'),
+            onPressed: widget.controller.busy
+                ? null
+                : () => batch
+                      ? (status == 'rejected'
+                            ? widget.controller.discardBatch(id)
+                            : widget.controller.retryBatch(id))
+                      : (status == 'rejected'
+                            ? widget.controller.discardRejected(id)
+                            : widget.controller.retry(id)),
+            child: Text(
+              status == 'rejected'
+                  ? 'Corregir ingreso'
+                  : 'Reintentar el mismo ingreso',
+            ),
+          ),
+        ],
+      ),
     ),
   );
-
   Widget _history(StockIntakeSnapshot data) {
-    final rows = data.entries;
-    if (rows.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text('Aún no hay ingresos de productos.'),
-        ),
-      );
-    }
-    const pageSize = 10;
-    final page = _historyPage.clamp(0, (rows.length - 1) ~/ pageSize);
-    return Column(
-      children: [
-        for (final entry in rows.skip(page * pageSize).take(pageSize))
-          Card(
-            margin: const EdgeInsets.only(bottom: 10),
+    final cards = <({DateTime at, Widget Function() build})>[
+      for (final entry in data.batches)
+        (
+          at: entry.command.occurredAtUtc,
+          build: () => Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        '${entry.productName} · ${entry.quantity} unidades',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Chip(label: Text('Pagada · ${entry.paymentLabel}')),
-                      Text(
-                        inventoryMoney(entry.totalCostMinor, widget.profile),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ],
+                  Text(
+                    '${entry.command.items.length} productos · ${entry.categoryName} · Pagada · ${entry.paymentLabel}',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 12),
+                  FinancialTotal(
+                    label: 'Total pagado',
+                    value: inventoryMoney(
+                      entry.command.totalPaidMinor,
+                      widget.profile,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Costo de los productos: ${inventoryMoney(entry.command.itemsTotalMinor, widget.profile)} · Diferencia: ${inventoryMoney(entry.command.differenceMinor, widget.profile)}',
+                  ),
+                  for (final item in entry.command.items)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        '${item.productName} · ${item.quantity} unidades\n${item.supplierName} · Costo total: ${inventoryMoney(item.totalCostMinor, widget.profile)} · PVP unitario: ${inventoryMoney(item.listPriceMinor, widget.profile)}',
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Ingreso: ${InventoryController.isoDate(entry.command.occurredAtUtc.subtract(const Duration(hours: 5)))}',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      for (final entry in data.entries)
+        (
+          at: entry.occurredAtUtc,
+          build: () => Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${entry.productName} · ${entry.quantity} unidades',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Chip(label: Text('Pagada · ${entry.paymentLabel}')),
                   Text(
                     '${entry.supplierName} · ${entry.categoryName}${entry.sku == null ? '' : ' · ${entry.sku}'}',
                   ),
-                  const SizedBox(height: 6),
                   Text(
                     'Costo total: ${inventoryMoney(entry.totalCostMinor, widget.profile)} · PVP unitario: ${inventoryMoney(entry.listPriceMinor, widget.profile)}',
                   ),
-                  const SizedBox(height: 6),
                   Text(
                     'Ingreso: ${InventoryController.isoDate(entry.occurredAtUtc.subtract(const Duration(hours: 5)))}',
                   ),
@@ -855,11 +641,25 @@ class _PurchasesPageState extends State<PurchasesPage> {
               ),
             ),
           ),
+        ),
+    ]..sort((a, b) => b.at.compareTo(a.at));
+    if (cards.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('Aún no hay ingresos de productos.'),
+        ),
+      );
+    }
+    final page = _historyPage.clamp(0, (cards.length - 1) ~/ 10);
+    return Column(
+      children: [
+        for (final entry in cards.skip(page * 10).take(10)) entry.build(),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Text(
-              '${page * pageSize + 1}–${(page * pageSize + pageSize).clamp(0, rows.length)} de ${rows.length}',
+              '${page * 10 + 1}–${(page * 10 + 10).clamp(0, cards.length)} de ${cards.length}',
             ),
             IconButton(
               tooltip: 'Ingresos anteriores',
@@ -870,7 +670,7 @@ class _PurchasesPageState extends State<PurchasesPage> {
             ),
             IconButton(
               tooltip: 'Ingresos siguientes',
-              onPressed: (page + 1) * pageSize >= rows.length
+              onPressed: (page + 1) * 10 >= cards.length
                   ? null
                   : () => setState(() => _historyPage = page + 1),
               icon: const Icon(Icons.chevron_right),

@@ -6,6 +6,8 @@ import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart
 import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
 
 class FakeQuickSalesStore implements QuickSalesStore {
+  @override
+  Future<void> ensureBulkProducts() async {}
   final debtors = <DebtorSummary>[
     for (final name in [
       'Cliente sintético',
@@ -312,6 +314,9 @@ class FakeQuickSalesStore implements QuickSalesStore {
           (current) => current + amount,
           ifAbsent: () => amount,
         );
+      }
+      if (products.firstWhere((p) => p.id == line.productId).isUnlimited) {
+        continue;
       }
       final stockIndex = stock.indexWhere(
         (item) => item.productId == line.productId,

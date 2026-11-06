@@ -40,7 +40,7 @@ class SqliteSalesStore implements SalesStore {
       orderBy: 'prepared_at_utc, command_id',
     );
     final products = await txn.rawQuery('''
-SELECT c.*, EXISTS(SELECT 1 FROM events WHERE product_id=c.id) is_event, EXISTS(SELECT 1 FROM catalog_services WHERE product_id=c.id) is_service FROM catalog_items c
+SELECT c.*, EXISTS(SELECT 1 FROM events WHERE product_id=c.id) is_event, EXISTS(SELECT 1 FROM catalog_services WHERE product_id=c.id) is_service, EXISTS(SELECT 1 FROM catalog_services WHERE product_id=c.id AND kind='bulk') is_variable_price FROM catalog_items c
 LEFT JOIN categories k ON k.id = c.category_id
 WHERE c.is_active = 1 AND (c.category_id IS NULL OR k.is_active = 1)
 ORDER BY c.name COLLATE NOCASE, c.id
@@ -116,6 +116,7 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
             (row) => CatalogProduct(
               isEvent: row['is_event'] == 1,
               isService: row['is_service'] == 1,
+              isVariablePrice: row['is_variable_price'] == 1,
               id: row['id'] as String,
               name: row['name'] as String,
               sku: row['sku'] as String?,
@@ -502,6 +503,12 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
         whereArgs: [line.productId],
       );
       if (service.isNotEmpty) {
+        if (service.single['kind'] == 'bulk' &&
+            (line.quantity != 1 || line.unitPriceMinor <= 0)) {
+          throw const SalesValidationException(
+            'El bulk requiere un valor vendido positivo y una sola operación.',
+          );
+        }
         planned.add(_PlannedLine(line, product['name'] as String, 0, []));
         continue;
       }

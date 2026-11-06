@@ -1,5 +1,6 @@
 import '../../inventory/domain/inventory_store.dart';
 import '../../../core/domain/money.dart';
+part 'purchase_batch.dart';
 
 class IntakePaymentOption {
   const IntakePaymentOption({
@@ -159,6 +160,8 @@ class StockIntakeSnapshot {
     required List<PreparedStockIntake> pendingIntakes,
     required List<StockIntakeEntry> entries,
     Map<String, ProductIntakeDefaults> productDefaults = const {},
+    List<PreparedPurchaseBatch> pendingBatches = const [],
+    List<PurchaseBatchEntry> batches = const [],
   }) : categories = List.unmodifiable(categories),
        suppliers = List.unmodifiable(suppliers),
        products = List.unmodifiable(products),
@@ -166,7 +169,11 @@ class StockIntakeSnapshot {
        paymentOptions = List.unmodifiable(paymentOptions),
        pendingIntakes = List.unmodifiable(pendingIntakes),
        entries = List.unmodifiable(entries),
-       productDefaults = Map.unmodifiable(productDefaults);
+       productDefaults = Map.unmodifiable(productDefaults),
+       pendingBatches = List.unmodifiable(pendingBatches),
+       batches = List.unmodifiable(batches);
+  final List<PreparedPurchaseBatch> pendingBatches;
+  final List<PurchaseBatchEntry> batches;
   final List<InventoryCategory> categories;
   final List<InventorySupplier> suppliers;
   final List<CatalogProduct> products;
@@ -191,6 +198,9 @@ class CashOpeningCommand {
 }
 
 abstract interface class StockIntakeStore {
+  Future<PreparedPurchaseBatch> prepareBatch(PurchaseBatchCommand command);
+  Future<void> confirmBatch(String commandId);
+  Future<void> discardBatch(String commandId);
   Future<void> ensureDefaults();
   Future<StockIntakeSnapshot> load();
   Future<PreparedStockIntake> prepare(StockIntakeCommand command);

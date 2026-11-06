@@ -209,7 +209,7 @@ void main() {
       expect(find.textContaining('Vencimiento'), findsNothing);
       expect(find.textContaining('crédito'), findsNothing);
       await fill(tester);
-      expect(find.text('Total de compra'), findsOneWidget);
+      expect(find.text('Total pagado'), findsWidgets);
       expect(
         tester.widget<Text>(find.byKey(const Key('intake-total'))).data,
         'COP 1.234,50',
@@ -226,9 +226,12 @@ void main() {
       expect(store.entries.single.totalCostMinor, 123450);
       expect(store.stock.single.quantity, 3);
       expect(store.products.single.listPriceMinor, 250000);
-      expect(find.text('Agua sintética · 3 unidades'), findsOneWidget);
+      expect(
+        find.textContaining('Agua sintética · 3 unidades'),
+        findsOneWidget,
+      );
       expect(store.entries.single.paymentLabel, 'Nequi');
-      expect(find.text('Pagada · Nequi'), findsOneWidget);
+      expect(find.textContaining('Pagada · Nequi'), findsOneWidget);
       expect(value(tester, 'intake-name'), isEmpty);
       expect(value(tester, 'intake-quantity'), '1');
       expect(tester.takeException(), isNull);
@@ -304,7 +307,7 @@ void main() {
   );
 
   testWidgets(
-    'switching products clears unavailable category and stale defaults but preserves quantity and payment',
+    'category filters product choices and switching names clears stale defaults while keeping payment and quantity',
     (tester) async {
       store.products.addAll([
         const CatalogProduct(
@@ -345,22 +348,17 @@ void main() {
         'nequi',
       );
       await enter(tester, 'intake-name', 'sin ingreso');
-      await tap(tester, find.text('Artículo sin ingreso previo').last);
+      expect(find.text('Artículo sin ingreso previo'), findsNothing);
       expect(value(tester, 'intake-cost'), isEmpty);
       expect(value(tester, 'intake-supplier'), isEmpty);
       expect(value(tester, 'intake-sku'), isEmpty);
-      expect(value(tester, 'intake-pvp'), '1.500,00');
+      expect(value(tester, 'intake-pvp'), isEmpty);
       expect(
         tester
             .widget<DropdownButtonFormField<String>>(keyed('intake-category-'))
             .initialValue,
-        isNull,
+        'item',
       );
-      await enter(tester, 'intake-cost', '10');
-      await enter(tester, 'intake-supplier', 'Proveedor de prueba');
-      await tap(tester, find.byKey(const Key('intake-submit')));
-      expect(find.text('Elige una categoría activa.'), findsOneWidget);
-      expect(store.preparedCommands, isEmpty);
       expect(store.products.last.categoryId, 'event');
       await enter(tester, 'intake-name', 'KNOWN');
       await tap(tester, find.text('Artículo conocido').last);
@@ -411,7 +409,7 @@ void main() {
       await open(tester);
       await fill(tester);
       await tap(tester, find.byKey(const Key('intake-submit')));
-      final command = store.preparedCommands.single;
+      final command = store.batchCommands.single;
       expect(store.entries, hasLength(1));
       expect(
         tester
@@ -425,9 +423,10 @@ void main() {
         find.byKey(ValueKey('intake-retry-${command.commandId}')),
       );
       expect(store.entries, hasLength(1));
-      expect(store.confirmedIds, [command.commandId, command.commandId]);
+      expect(store.batchEntries, hasLength(1));
+      expect(store.confirmedIds, hasLength(1));
       expect(value(tester, 'intake-name'), isEmpty);
-      expect(controller.pendingIntakes, isEmpty);
+      expect(controller.pendingBatches, isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
@@ -586,6 +585,125 @@ void main() {
       expect(find.text('Evento'), findsNothing);
       await tap(tester, find.text('Artículo'));
       await tester.ensureVisible(find.byKey(const Key('intake-submit')));
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'multiple products keep costs and suggested prices separate from the single actual payment',
+    (tester) async {
+      await open(tester, size: const Size(1120, 1400));
+      await fill(tester);
+      await enter(tester, 'intake-name', 'Cocacola sintética');
+      await enter(tester, 'intake-cost', '11,34');
+      await enter(tester, 'intake-quantity', '12');
+      await enter(tester, 'intake-paid', '12,00');
+      await tap(tester, find.byKey(const Key('intake-add-product')));
+      Future<void> last(String prefix, String text) async {
+        final field = keyed('$prefix-').last;
+        await tester.ensureVisible(field);
+        await tester.enterText(field, text);
+        await tester.pumpAndSettle();
+      }
+
+      await last('intake-name', 'Agua sintética');
+      await last('intake-supplier', 'PTO sintético');
+      await last('intake-quantity', '10');
+      await last('intake-cost', '0,60');
+      expect(
+        tester
+            .widget<TextFormField>(keyed('intake-pvp-').last)
+            .controller!
+            .text,
+        '0,09',
+      );
+      await last('intake-pvp', '1,00');
+      expect(value(tester, 'intake-paid'), '12,00');
+      expect(
+        find.text('Diferencia (pagado − costos): COP 0,06'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.byKey(const Key('intake-paid')));
+      expect(
+        tester.getTopLeft(find.byKey(const Key('intake-paid'))).dx,
+        lessThan(tester.getTopLeft(keyed('intake-payment-')).dx),
+      );
+      await tap(tester, find.byKey(const Key('intake-submit')));
+      expect(store.batchEntries, hasLength(1));
+      final command = store.batchEntries.single.command;
+      expect(command.items.map((item) => item.quantity), [12, 10]);
+      expect(command.items.map((item) => item.totalCostMinor), [1134, 60]);
+      expect(command.totalPaidMinor, 1200);
+      expect(command.differenceMinor, 6);
+      expect(store.paymentOptions.first.balanceMinor, 1000000 - 1200);
+      expect(find.textContaining('2 productos · Comestible'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'removing a form preserves the remaining product and manual total',
+    (tester) async {
+      await open(tester);
+      await fill(tester);
+      await enter(tester, 'intake-paid', '20,00');
+      await tap(tester, find.byKey(const Key('intake-add-product')));
+      final name = keyed('intake-name-').last;
+      await tester.ensureVisible(name);
+      await tester.enterText(name, 'Producto restante');
+      await tester.pumpAndSettle();
+      await tap(tester, keyed('intake-remove-').first);
+      expect(value(tester, 'intake-name'), 'Producto restante');
+      expect(value(tester, 'intake-paid'), '20,00');
+      expect(keyed('intake-remove-'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'existing category prevents mixing categories across purchase forms',
+    (tester) async {
+      store.products.addAll([
+        const CatalogProduct(
+          id: 'cola',
+          name: 'Cocacola sintética',
+          categoryId: 'food',
+          listPriceMinor: 3000,
+        ),
+        const CatalogProduct(
+          id: 'magic',
+          name: 'Booster sintético',
+          categoryId: 'item',
+          listPriceMinor: 20000,
+        ),
+      ]);
+      await open(tester);
+      await enter(tester, 'intake-name', 'Cocacola');
+      await tap(tester, find.text('Cocacola sintética').last);
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(keyed('intake-category-'))
+            .initialValue,
+        'food',
+      );
+      await tap(tester, find.byKey(const Key('intake-add-product')));
+      final field = keyed('intake-name-').last;
+      await tester.ensureVisible(field);
+      await tester.enterText(field, 'Booster');
+      await tester.pumpAndSettle();
+      expect(find.text('Booster sintético'), findsNothing);
+      await tap(tester, keyed('intake-category-'));
+      await tap(tester, find.text('Artículo').last);
+      expect(
+        find.textContaining('Retira los productos de otra categoría'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(keyed('intake-category-'))
+            .initialValue,
+        'food',
+      );
+      expect(store.preparedCommands, isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
