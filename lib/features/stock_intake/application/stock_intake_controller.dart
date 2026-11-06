@@ -18,6 +18,8 @@ class StockIntakeController extends ChangeNotifier {
   bool _disposed = false;
   StockIntakeCommand? _preparation;
   PreparedStockIntake? _localPending;
+  PurchaseBatchCommand? _batchPreparation;
+  PreparedPurchaseBatch? _localBatch;
   CashOpeningCommand? _opening;
   final _resolved = <String>{};
 
@@ -31,7 +33,155 @@ class StockIntakeController extends ChangeNotifier {
           !_resolved.contains(item.command.commandId),
     ),
   ];
-  bool get formLocked => busy || pendingIntakes.isNotEmpty || _opening != null;
+  List<PreparedPurchaseBatch> get pendingBatches => [
+    ?_localBatch,
+    ...?snapshot?.pendingBatches.where(
+      (item) =>
+          item.command.commandId != _localBatch?.command.commandId &&
+          !_resolved.contains(item.command.commandId),
+    ),
+  ];
+  bool get formLocked =>
+      busy ||
+      pendingIntakes.isNotEmpty ||
+      pendingBatches.isNotEmpty ||
+      _opening != null;
+
+  Future<bool> receiveBatch(PurchaseBatchCommand command) async {
+    if (formLocked || _disposed || snapshot == null || loadError != null) {
+      return false;
+    }
+    operationNotice = null;
+    operationError = null;
+    try {
+      command.validate();
+      final costs = command.settlementCosts;
+      final option = snapshot!.paymentOptions
+          .where((o) => o.id == command.paymentOptionId && o.isActive)
+          .firstOrNull;
+      if (option == null ||
+          (!option.isInvestment &&
+              command.totalPaidMinor > option.balanceMinor)) {
+        throw ArgumentError('El saldo no alcanza para el total pagado.');
+      }
+      for (var index = 0; index < command.items.length; index++) {
+        final item = command.items[index];
+        _validate(
+          item.productName,
+          item.sku,
+          item.categoryId,
+          item.supplierName,
+          null,
+          costs[index],
+          item.listPriceMinor,
+          item.quantity,
+          item.paymentOptionId,
+        );
+      }
+      _batchPreparation = command;
+      _localBatch = PreparedPurchaseBatch(
+        command: command,
+        status: 'prepared',
+        preparedAtUtc: DateTime.now().toUtc(),
+      );
+    } catch (error) {
+      operationError = error is StockIntakeValidationException
+          ? error.message
+          : error is ArgumentError
+          ? error.message.toString()
+          : 'Revisa los datos de la compra.';
+      _emit();
+      return false;
+    }
+    return _dispatchBatch(_localBatch!);
+  }
+
+  Future<bool> retryBatch(String id) async {
+    if (busy || _disposed || _opening != null) return false;
+    final pending = pendingBatches
+        .where((item) => item.command.commandId == id)
+        .firstOrNull;
+    return pending == null || pending.status == 'rejected'
+        ? false
+        : _dispatchBatch(pending);
+  }
+
+  Future<bool> _dispatchBatch(PreparedPurchaseBatch pending) async {
+    confirming = true;
+    operationError = null;
+    operationNotice = null;
+    _emit();
+    try {
+      if (_batchPreparation?.commandId == pending.command.commandId) {
+        _localBatch = await store.prepareBatch(_batchPreparation!);
+        _batchPreparation = null;
+      }
+      await store.confirmBatch(pending.command.commandId);
+      _markBatchConfirmed(pending.command.commandId);
+      await _reload();
+      operationNotice =
+          'Compra registrada. Productos, existencias y total pagado guardados.';
+      return true;
+    } on StockIntakeValidationException catch (error) {
+      if (_batchPreparation != null) {
+        _batchPreparation = null;
+        _localBatch = null;
+      } else {
+        _localBatch = PreparedPurchaseBatch(
+          command: pending.command,
+          status: 'rejected',
+          preparedAtUtc: pending.preparedAtUtc,
+          rejectionReason: error.message,
+        );
+      }
+      operationError = error.message;
+      await _reload();
+      return false;
+    } catch (_) {
+      operationError =
+          'No pudimos confirmar la compra. Conservamos todos sus productos: reintenta la misma solicitud. Si quedó guardada, se recuperará al volver a abrir.';
+      return false;
+    } finally {
+      confirming = false;
+      _emit();
+    }
+  }
+
+  Future<bool> discardBatch(String id) async {
+    if (busy ||
+        _disposed ||
+        !pendingBatches.any(
+          (item) => item.command.commandId == id && item.status == 'rejected',
+        )) {
+      return false;
+    }
+    confirming = true;
+    _emit();
+    try {
+      await store.discardBatch(id);
+      _resolved.add(id);
+      _localBatch = null;
+      _batchPreparation = null;
+      operationError = null;
+      operationNotice =
+          'Puedes corregir los productos y volver a registrar la compra.';
+      await _reload();
+      return true;
+    } catch (_) {
+      operationError =
+          'No se pudo habilitar la corrección. Vuelve a intentarlo.';
+      return false;
+    } finally {
+      confirming = false;
+      _emit();
+    }
+  }
+
+  void _markBatchConfirmed(String id) {
+    if (_resolved.add(id)) confirmedVersion++;
+    if (_localBatch?.command.commandId == id) _localBatch = null;
+    if (_batchPreparation?.commandId == id) _batchPreparation = null;
+  }
 
   Future<void> load() async {
     if (busy || _disposed) return;
@@ -324,6 +474,27 @@ class StockIntakeController extends ChangeNotifier {
       if (_disposed) return;
       snapshot = next;
       loadError = null;
+      final batch = _localBatch;
+      if (batch != null) {
+        if (next.batches.any(
+          (item) => item.command.commandId == batch.command.commandId,
+        )) {
+          _markBatchConfirmed(batch.command.commandId);
+          operationError = null;
+          operationNotice =
+              'Compra recuperada como confirmada. Productos y pago ya están guardados.';
+        } else {
+          final persisted = next.pendingBatches
+              .where(
+                (item) => item.command.commandId == batch.command.commandId,
+              )
+              .firstOrNull;
+          if (persisted != null) {
+            _localBatch = persisted;
+            _batchPreparation = null;
+          }
+        }
+      }
       final local = _localPending;
       if (local != null) {
         if (next.entries.any(

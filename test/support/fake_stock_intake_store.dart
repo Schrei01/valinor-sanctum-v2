@@ -4,6 +4,112 @@ import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart
 import 'package:valinor_sanctum_2/features/stock_intake/domain/stock_intake_store.dart';
 
 class FakeStockIntakeStore implements StockIntakeStore {
+  final batchCommands = <PurchaseBatchCommand>[];
+  final batchPending = <PreparedPurchaseBatch>[];
+  final batchEntries = <PurchaseBatchEntry>[];
+  @override
+  Future<PreparedPurchaseBatch> prepareBatch(
+    PurchaseBatchCommand command,
+  ) async {
+    batchCommands.add(command);
+    if (prepareFailure != null && !persistBeforePrepareFailure) {
+      throw prepareFailure!;
+    }
+    final prior = batchPending
+        .where((item) => item.command.commandId == command.commandId)
+        .firstOrNull;
+    final prepared =
+        prior ??
+        PreparedPurchaseBatch(
+          command: command,
+          status: 'prepared',
+          preparedAtUtc: command.occurredAtUtc,
+        );
+    if (prior == null) batchPending.add(prepared);
+    if (prepareFailure != null) throw prepareFailure!;
+    return prepared;
+  }
+
+  @override
+  Future<void> confirmBatch(String id) async {
+    if (confirmGate != null) await confirmGate!.future;
+    if (batchEntries.any((entry) => entry.command.commandId == id)) return;
+    final prepared = batchPending.firstWhere(
+      (item) => item.command.commandId == id,
+    );
+    if (confirmFailure is StockIntakeValidationException) {
+      batchPending.remove(prepared);
+      batchPending.add(
+        PreparedPurchaseBatch(
+          command: prepared.command,
+          status: 'rejected',
+          preparedAtUtc: prepared.preparedAtUtc,
+          rejectionReason:
+              (confirmFailure as StockIntakeValidationException).message,
+        ),
+      );
+      throw confirmFailure!;
+    }
+    if (confirmFailure != null && !commitBeforeConfirmFailure) {
+      throw confirmFailure!;
+    }
+    final command = prepared.command, costs = command.settlementCosts;
+    final failure = confirmFailure;
+    confirmFailure = null;
+    try {
+      for (var index = 0; index < command.items.length; index++) {
+        final item = command.items[index];
+        final child = StockIntakeCommand(
+          commandId: item.commandId,
+          productId: item.productId,
+          expectedProduct: item.expectedProduct,
+          productName: item.productName,
+          sku: item.sku,
+          categoryId: item.categoryId,
+          supplierId: item.supplierId,
+          supplierName: item.supplierName,
+          totalPurchasePriceMinor: costs[index],
+          listPriceMinor: item.listPriceMinor,
+          quantity: item.quantity,
+          paymentOptionId: item.paymentOptionId,
+          occurredAtUtc: item.occurredAtUtc,
+        );
+        pending.add(
+          PreparedStockIntake(
+            command: child,
+            status: 'prepared',
+            preparedAtUtc: command.occurredAtUtc,
+          ),
+        );
+        preparedCommands.add(child);
+        await confirmPrepared(child.commandId);
+      }
+    } finally {
+      confirmFailure = failure;
+    }
+    batchPending.remove(prepared);
+    batchEntries.insert(
+      0,
+      PurchaseBatchEntry(
+        command: command,
+        categoryName: categories
+            .firstWhere((cat) => cat.id == command.categoryId)
+            .name,
+        paymentLabel: paymentOptions
+            .firstWhere((o) => o.id == command.paymentOptionId)
+            .label,
+      ),
+    );
+    if (confirmFailure != null) throw confirmFailure!;
+  }
+
+  @override
+  Future<void> discardBatch(String id) async {
+    batchPending.removeWhere(
+      (item) => item.command.commandId == id && item.status == 'rejected',
+    );
+  }
+
   final categories = <InventoryCategory>[
     const InventoryCategory(id: 'food', name: 'Comestible'),
     const InventoryCategory(id: 'item', name: 'Artículo'),
@@ -67,7 +173,17 @@ class FakeStockIntakeStore implements StockIntakeStore {
       productDefaults: productDefaults,
       paymentOptions: paymentOptions,
       pendingIntakes: pending,
-      entries: entries,
+      entries: entries
+          .where(
+            (entry) => !batchEntries.any(
+              (batch) => batch.command.items.any(
+                (item) => item.commandId == entry.commandId,
+              ),
+            ),
+          )
+          .toList(),
+      pendingBatches: batchPending,
+      batches: batchEntries,
     );
   }
 
