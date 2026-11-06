@@ -236,36 +236,47 @@ void main() {
   );
 
   testWidgets(
-    'sold items show ten records per page, including unknown and estimated prices, and reset after a new report',
+    'sold items group before alphabetical pagination and preserve unknown and estimated prices',
     (tester) async {
       store.itemRows = [
         for (var i = 0; i < 21; i++)
           ReportItem(
             id: 'row-$i',
-            productName: 'Producto $i',
+            productName: 'Producto ${i.toString().padLeft(2, '0')}',
             occurredAtUtc: DateTime.utc(2026, 10, 26, 15, i),
             quantity: i == 20 ? 1000 : 1,
             amountMinor: i == 0 ? null : 1000,
             paymentMethod: 'Efectivo',
             isEstimated: i == 1,
           ),
+        ReportItem(
+          id: 'duplicate-10',
+          productName: 'Producto 10',
+          occurredAtUtc: DateTime.utc(2026, 10, 26, 15, 59),
+          quantity: 4,
+          amountMinor: 500,
+          paymentMethod: 'Efectivo',
+          isEstimated: true,
+        ),
       ];
       await open(tester);
       DataTable table() =>
           tester.widget<DataTable>(find.byType(DataTable).last);
       expect(table().rows, hasLength(10));
-      expect(find.text('Producto 20'), findsOneWidget);
+      expect(find.text('Producto 00'), findsOneWidget);
       expect(find.text('Producto 10'), findsNothing);
-      expect(find.text('1.000'), findsOneWidget);
+      expect(find.text('Sin información'), findsOneWidget);
+      expect(find.text('COP 10,00 *'), findsOneWidget);
+      expect(find.text('1–10 de 21 grupos · Página 1 de 3'), findsOneWidget);
       await tap(tester, find.byKey(const Key('report-items-next')));
       expect(table().rows, hasLength(10));
       expect(find.text('Producto 10'), findsOneWidget);
       expect(find.text('Producto 20'), findsNothing);
-      expect(find.text('COP 10,00 *'), findsOneWidget);
+      expect(find.text('COP 15,00 *'), findsOneWidget);
       await tap(tester, find.byKey(const Key('report-items-next')));
       expect(table().rows, hasLength(1));
-      expect(find.text('Producto 0'), findsOneWidget);
-      expect(find.text('Sin información'), findsOneWidget);
+      expect(find.text('Producto 20'), findsOneWidget);
+      expect(find.text('1.000'), findsOneWidget);
       expect(
         tester
             .widget<IconButton>(find.byKey(const Key('report-items-next')))
@@ -277,7 +288,7 @@ void main() {
       await controller.generate(start: controller.today, end: controller.today);
       await tester.pumpAndSettle();
       expect(table().rows, hasLength(10));
-      expect(find.text('Producto 20'), findsOneWidget);
+      expect(find.text('Producto 00'), findsOneWidget);
       expect(
         tester
             .widget<IconButton>(find.byKey(const Key('report-items-previous')))

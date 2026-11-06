@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../../core/domain/money.dart';
 
 int reportSum(Iterable<int> values) => reportMinor(
@@ -190,6 +191,94 @@ class ReportItem {
   final bool isEstimated;
 }
 
+/// A display group; source items and financial report totals stay unchanged.
+class ReportItemGroup {
+  const ReportItemGroup({
+    required this.id,
+    required this.productName,
+    required this.paymentMethod,
+    required this.quantity,
+    required this.amountMinor,
+    required this.isEstimated,
+  });
+  final String id, productName, paymentMethod;
+  final int? quantity, amountMinor;
+  final bool isEstimated;
+
+  static List<ReportItemGroup> fromItems(Iterable<ReportItem> items) {
+    final groups = <(String, String), _ReportItemGroupSum>{};
+    for (final item in items) {
+      final key = (
+        item.productName.trim().toLowerCase(),
+        item.paymentMethod.trim().toLowerCase(),
+      );
+      final sum = groups.putIfAbsent(key, () => _ReportItemGroupSum(item));
+      sum.add(item);
+    }
+    final result = [
+      for (final entry in groups.entries)
+        entry.value.finish(jsonEncode([entry.key.$1, entry.key.$2])),
+    ];
+    result.sort((a, b) {
+      final name = _reportAlphabeticalKey(
+        a.productName,
+      ).compareTo(_reportAlphabeticalKey(b.productName));
+      if (name != 0) return name;
+      final exactName = a.productName.toLowerCase().compareTo(
+        b.productName.toLowerCase(),
+      );
+      return exactName != 0
+          ? exactName
+          : _reportAlphabeticalKey(
+              a.paymentMethod,
+            ).compareTo(_reportAlphabeticalKey(b.paymentMethod));
+    });
+    return List.unmodifiable(result);
+  }
+}
+
+String _reportAlphabeticalKey(String value) => value
+    .trim()
+    .toLowerCase()
+    .replaceAll('á', 'a')
+    .replaceAll('é', 'e')
+    .replaceAll('í', 'i')
+    .replaceAll('ó', 'o')
+    .replaceAll('ú', 'u')
+    .replaceAll('ü', 'u')
+    .replaceAll('ñ', 'n\uFFFF');
+
+class _ReportItemGroupSum {
+  _ReportItemGroupSum(ReportItem first)
+    : name = first.productName.trim(),
+      method = first.paymentMethod.trim();
+  final String name, method;
+  BigInt quantity = BigInt.zero, amount = BigInt.zero;
+  bool quantityKnown = true, amountKnown = true, estimated = false;
+  void add(ReportItem item) {
+    if (item.quantity == null) {
+      quantityKnown = false;
+    } else {
+      quantity += BigInt.from(item.quantity!);
+    }
+    if (item.amountMinor == null) {
+      amountKnown = false;
+    } else {
+      amount += BigInt.from(item.amountMinor!);
+    }
+    estimated |= item.isEstimated;
+  }
+
+  ReportItemGroup finish(String id) => ReportItemGroup(
+    id: id,
+    productName: name,
+    paymentMethod: method,
+    quantity: quantityKnown ? reportMinor(quantity) : null,
+    amountMinor: amountKnown ? reportMinor(amount) : null,
+    isEstimated: estimated,
+  );
+}
+
 class ReportProduct {
   const ReportProduct({
     required this.productId,
@@ -339,6 +428,9 @@ class ReportsSnapshot {
              return date == 0 ? a.id.compareTo(b.id) : date;
            }),
        ),
+       groupedItems = ReportItemGroup.fromItems(
+         items ?? sales.map(ReportItem.fromSale),
+       ),
        debtorBalances = List.unmodifiable(debtorBalances),
        accounts = List.unmodifiable(accounts),
        movements = List.unmodifiable(movements),
@@ -353,6 +445,7 @@ class ReportsSnapshot {
   final List<ReportMovement> movements;
   final List<ReportSaleLine> sales;
   final List<ReportItem> items;
+  final List<ReportItemGroup> groupedItems;
 
   /// Outstanding ownership at the final cutoff, including unassigned debt.
   final List<ReportDebtorBalance> debtorBalances;
