@@ -267,6 +267,7 @@ class QuickSalesSnapshot {
 }
 
 abstract interface class QuickSalesStore {
+  Future<void> ensureBulkProducts();
   Future<void> ensureDefaults();
   Future<QuickSalesSnapshot> load();
   Future<QuickSaleAccount> saveAccount(SaveQuickSaleAccount account);

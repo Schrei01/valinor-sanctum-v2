@@ -343,7 +343,7 @@ void main() {
         };
         await raw.close();
         disk = await AppDatabase.open(path: path);
-        expect(await disk.database.getVersion(), 24);
+        expect(await disk.database.getVersion(), AppDatabase.schemaVersion);
         for (final entry in prior.entries) {
           expect(
             jsonEncode(

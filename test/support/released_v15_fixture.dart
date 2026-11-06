@@ -429,6 +429,7 @@ Future<void> restoreReleasedV22ForFixture(DatabaseExecutor db) async {
 
 /// Synthetic fixture only. No runtime downgrade path.
 Future<void> restoreReleasedV23ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV24ForFixture(db);
   expect(await db.query('purchase_batch_requests'), isEmpty);
   for (final sql in DatabaseSchema.migration24Statements) {
     final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
@@ -454,4 +455,78 @@ Future<void> restoreReleasedV23ForFixture(DatabaseExecutor db) async {
       where: 'version=23',
     )).single['schema_checksum'],
   );
+}
+
+/// Test-only reconstruction of v24; never an application downgrade.
+Future<void> restoreReleasedV24ForFixture(DatabaseExecutor db) async {
+  for (final name in [
+    'services_validate_insert',
+    'services_no_update',
+    'services_no_delete',
+    'services_no_replace',
+    'bulk_sale_posting',
+  ]) {
+    await db.execute('DROP TRIGGER $name');
+  }
+  final bulk = await db.query('catalog_services', where: "kind='bulk'");
+  for (final row in bulk) {
+    expect(
+      await db.query(
+        'sale_lines',
+        where: 'product_id=?',
+        whereArgs: [row['product_id']],
+      ),
+      isEmpty,
+    );
+    await db.delete(
+      'catalog_services',
+      where: 'product_id=?',
+      whereArgs: [row['product_id']],
+    );
+  }
+  if (bulk.isNotEmpty) {
+    await db.execute('DROP TRIGGER product_price_history_no_delete');
+    for (final row in bulk) {
+      await db.delete(
+        'product_price_history',
+        where: 'product_id=?',
+        whereArgs: [row['product_id']],
+      );
+      await db.delete(
+        'catalog_items',
+        where: 'id=?',
+        whereArgs: [row['product_id']],
+      );
+    }
+    await db.execute(
+      DatabaseSchema.migration15Statements.singleWhere(
+        (s) => s.startsWith('CREATE TRIGGER product_price_history_no_delete '),
+      ),
+    );
+    await db.delete(
+      'categories',
+      where:
+          "id='bulk:category:articles' AND NOT EXISTS(SELECT 1 FROM catalog_items WHERE category_id=categories.id)",
+    );
+  }
+  await db.execute(
+    'CREATE TABLE catalog_services_fixture AS SELECT * FROM catalog_services',
+  );
+  await db.execute('DROP TABLE catalog_services');
+  await db.execute(
+    DatabaseSchema.migration16Statements.singleWhere(
+      (s) => s.startsWith('CREATE TABLE catalog_services ('),
+    ),
+  );
+  await db.execute(
+    'INSERT INTO catalog_services SELECT * FROM catalog_services_fixture',
+  );
+  await db.execute('DROP TABLE catalog_services_fixture');
+  for (final sql in DatabaseSchema.migration16Statements.where(
+    (s) => s.startsWith('CREATE TRIGGER services_'),
+  )) {
+    await db.execute(sql);
+  }
+  await db.delete('schema_migrations', where: 'version=25');
+  await db.execute('PRAGMA user_version=24');
 }

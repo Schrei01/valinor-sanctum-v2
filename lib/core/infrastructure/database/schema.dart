@@ -9,11 +9,12 @@ import 'event_investment_schema.dart';
 import 'stock_correction_schema.dart';
 import 'debtor_loan_schema.dart';
 import 'purchase_batch_schema.dart';
+import 'bulk_sales_schema.dart';
 part 'split_payment_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 24;
+  static const int version = 25;
   static String utcSortKey(String expression) => _utcSortKey(expression);
 
   // ASCII VS20: a file-format marker, independent of the original POS.
@@ -89,6 +90,7 @@ abstract final class DatabaseSchema {
     22 => 'owner_funded_debtor_loans_v22',
     23 => 'supplier_payments_ignore_voided_cash_documents_v23',
     24 => 'multi_product_paid_purchase_batches_v24',
+    25 => 'variable_price_non_stock_bulk_sales_v25',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -117,8 +119,13 @@ abstract final class DatabaseSchema {
     22 => checksum(migration22Statements.join('\n;\n')),
     23 => checksum(migration23Statements.join('\n;\n')),
     24 => checksum(migration24Statements.join('\n;\n')),
+    25 => checksum(migration25Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
+
+  static final List<String> migration25Statements = List.unmodifiable(
+    BulkSalesSchema.build(migration16Statements),
+  );
 
   static final List<String> migration24Statements = List.unmodifiable(
     PurchaseBatchSchema.statements,

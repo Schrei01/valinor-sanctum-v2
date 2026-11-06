@@ -776,8 +776,10 @@ LEFT JOIN counterparties supplier ON supplier.id = history.supplier_id
           where: 'product_id=?',
           whereArgs: [id],
         )).isNotEmpty) {
-      throw const StockIntakeValidationException(
-        'Pasadía es un servicio ilimitado; se vende desde Ventas.',
+      throw StockIntakeValidationException(
+        isDayPassName(name ?? '')
+            ? 'Pasadía es un servicio ilimitado; se vende desde Ventas.'
+            : 'El bulk se vende por valor en Ventas y no recibe compras.',
       );
     }
     final rows = await txn.query(

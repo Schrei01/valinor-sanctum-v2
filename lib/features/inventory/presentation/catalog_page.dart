@@ -699,10 +699,12 @@ class CatalogPageState extends State<CatalogPage> {
                       ),
                       DataCell(
                         Text(
-                          inventoryMoney(
-                            product.listPriceMinor,
-                            widget.profile,
-                          ),
+                          product.isVariablePrice
+                              ? 'Variable'
+                              : inventoryMoney(
+                                  product.listPriceMinor,
+                                  widget.profile,
+                                ),
                         ),
                       ),
                       DataCell(

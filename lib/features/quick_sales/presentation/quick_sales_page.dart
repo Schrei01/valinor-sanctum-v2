@@ -773,6 +773,17 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
   );
   final _productFocus = FocusNode();
   final _quantityFocus = FocusNode();
+  late final _value = TextEditingController(
+    text: _soldValue(widget.line.unitPriceMinor),
+  );
+  final _valueFocus = FocusNode();
+  String _soldValue(int? value) => value == null
+      ? ''
+      : Money.fromMinorUnits(
+          value,
+          currency: widget.profile.currencyCode,
+          scale: widget.profile.moneyScale,
+        ).formatEsCo();
 
   CatalogProduct? _productFor(String? id) =>
       widget.data.products.where((item) => item.id == id).firstOrNull;
@@ -789,6 +800,10 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
             GroupedNumberFormatter.format(widget.line.quantityText)) {
       _quantity.text = GroupedNumberFormatter.format(widget.line.quantityText);
     }
+    if (!_valueFocus.hasFocus &&
+        _value.text != _soldValue(widget.line.unitPriceMinor)) {
+      _value.text = _soldValue(widget.line.unitPriceMinor);
+    }
   }
 
   @override
@@ -797,6 +812,8 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
     _quantity.dispose();
     _productFocus.dispose();
     _quantityFocus.dispose();
+    _value.dispose();
+    _valueFocus.dispose();
     super.dispose();
   }
 
@@ -829,12 +846,23 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
       QuickSaleLine(
         id: widget.line.id,
         productId: product.id,
-        quantityText: widget.line.quantityText,
-        unitPriceMinor: priorPrice ?? product.listPriceMinor,
+        quantityText: product.isVariablePrice ? '1' : widget.line.quantityText,
+        unitPriceMinor: product.isVariablePrice
+            ? (product.id == widget.line.productId
+                  ? widget.line.unitPriceMinor
+                  : null)
+            : priorPrice ?? product.listPriceMinor,
         paymentOptionId: widget.line.paymentOptionId,
         paymentParts: widget.line.paymentParts,
       ),
     );
+    if (product.isVariablePrice) {
+      _value.text = _soldValue(
+        product.id == widget.line.productId ? widget.line.unitPriceMinor : null,
+      );
+      _valueFocus.requestFocus();
+      return;
+    }
     _quantityFocus.requestFocus();
     _quantity.selection = TextSelection(
       baseOffset: 0,
@@ -842,9 +870,15 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
     );
   }
 
-  String _availability(CatalogProduct product) => product.isUnlimited
+  String _availability(CatalogProduct product) => product.isVariablePrice
+      ? 'Valor variable'
+      : product.isUnlimited
       ? 'Ilimitado'
       : 'Unidades: ${GroupedNumberFormatter.format('${widget.data.stockQuantityFor(product.id)}')}';
+  String _bulkSearch(String value) => value
+      .toLowerCase()
+      .replaceAll('é', 'e')
+      .replaceAll(RegExp(r'[^a-z0-9]'), '');
 
   @override
   Widget build(BuildContext context) {
@@ -860,9 +894,18 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
         final value = query.text.trim().toLowerCase();
         return widget.data.availableProducts.where(
           (item) =>
-              value.isEmpty ||
-              item.name.toLowerCase().contains(value) ||
-              (item.sku?.toLowerCase().contains(value) ?? false),
+              !(item.isVariablePrice &&
+                  widget.account.lines.any(
+                    (other) =>
+                        other.id != widget.line.id &&
+                        other.productId == item.id,
+                  )) &&
+              (value.isEmpty ||
+                  item.name.toLowerCase().contains(value) ||
+                  (item.isVariablePrice &&
+                      _bulkSearch(value).isNotEmpty &&
+                      _bulkSearch(item.name).contains(_bulkSearch(value))) ||
+                  (item.sku?.toLowerCase().contains(value) ?? false)),
         );
       },
       onSelected: _selected,
@@ -877,6 +920,8 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           isDense: true,
           helperText: selected == null
               ? 'Selecciona un producto'
+              : selected.isVariablePrice
+              ? 'Bulk por valor · Sin conteo de cartas'
               : 'Precio ${inventoryMoney(line.unitPriceMinor ?? 0, widget.profile)} · ${selected.isUnlimited ? 'Disponibilidad ilimitada' : 'Stock ${GroupedNumberFormatter.format('$stock')}'}',
         ),
         onChanged: _productChanged,
@@ -917,7 +962,12 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
                       '${product.sku == null ? '' : '${product.sku} · '}${_availability(product)}',
                     ),
                     trailing: Text(
-                      inventoryMoney(product.listPriceMinor, widget.profile),
+                      product.isVariablePrice
+                          ? 'Valor vendido'
+                          : inventoryMoney(
+                              product.listPriceMinor,
+                              widget.profile,
+                            ),
                     ),
                     onTap: () => select(product),
                   );
@@ -954,6 +1004,46 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
         ),
       ),
     );
+    final valueField = TextField(
+      key: ValueKey('quick-bulk-value-${line.id}'),
+      controller: _value,
+      focusNode: _valueFocus,
+      enabled: !widget.locked,
+      keyboardType: TextInputType.number,
+      inputFormatters: [const GroupedNumberFormatter()],
+      decoration: InputDecoration(
+        labelText: 'Valor vendido (${widget.profile.currencyCode})',
+        isDense: true,
+        helperText: 'Total de las cartas',
+        errorText:
+            _value.text.isNotEmpty &&
+                (line.unitPriceMinor == null || line.unitPriceMinor! <= 0)
+            ? 'Ingresa un valor positivo'
+            : null,
+      ),
+      onChanged: (text) {
+        int? amount;
+        try {
+          amount = Money.parseEsCo(
+            text,
+            currency: widget.profile.currencyCode,
+            scale: widget.profile.moneyScale,
+          ).minorUnits;
+        } catch (_) {
+          amount = null;
+        }
+        widget.onChanged(
+          QuickSaleLine(
+            id: line.id,
+            productId: line.productId,
+            quantityText: '1',
+            unitPriceMinor: amount,
+            paymentOptionId: line.paymentOptionId,
+            paymentParts: line.paymentParts,
+          ),
+        );
+      },
+    );
     final amount =
         BigInt.from(line.unitPriceMinor ?? 0) *
         BigInt.from(int.tryParse(line.quantityText) ?? 0);
@@ -984,15 +1074,25 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
               children: [
                 productField,
                 const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 68, child: quantityField),
-                    const SizedBox(width: 12),
-                    Expanded(child: subtotal),
-                    remove,
-                  ],
-                ),
+                if (selected?.isVariablePrice == true) ...[
+                  valueField,
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: subtotal),
+                      remove,
+                    ],
+                  ),
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 68, child: quantityField),
+                      const SizedBox(width: 12),
+                      Expanded(child: subtotal),
+                      remove,
+                    ],
+                  ),
               ],
             ),
           );
@@ -1002,7 +1102,12 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           children: [
             Expanded(flex: 4, child: productField),
             const SizedBox(width: 12),
-            SizedBox(width: 68, child: quantityField),
+            SizedBox(
+              width: selected?.isVariablePrice == true ? 210 : 68,
+              child: selected?.isVariablePrice == true
+                  ? valueField
+                  : quantityField,
+            ),
             const SizedBox(width: 12),
             SizedBox(
               width: 116,

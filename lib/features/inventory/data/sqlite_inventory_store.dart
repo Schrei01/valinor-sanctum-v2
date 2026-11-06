@@ -50,7 +50,7 @@ class SqliteInventoryStore implements InventoryStore, StockAdjustmentStore {
       orderBy: 'name COLLATE NOCASE, id',
     );
     final products = await txn.rawQuery(
-      'SELECT product.*, EXISTS(SELECT 1 FROM events WHERE product_id=product.id) is_event, EXISTS(SELECT 1 FROM catalog_services WHERE product_id=product.id) is_service FROM catalog_items product ORDER BY name COLLATE NOCASE,id',
+      "SELECT product.*, EXISTS(SELECT 1 FROM events WHERE product_id=product.id) is_event, EXISTS(SELECT 1 FROM catalog_services WHERE product_id=product.id) is_service, EXISTS(SELECT 1 FROM catalog_services WHERE product_id=product.id AND kind='bulk') is_variable_price FROM catalog_items product ORDER BY name COLLATE NOCASE,id",
     );
     final stock = await _stock(txn);
     final supplierLinks = await txn.rawQuery('''
@@ -136,6 +136,7 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
             (r) => CatalogProduct(
               isEvent: r['is_event'] == 1,
               isService: r['is_service'] == 1,
+              isVariablePrice: r['is_variable_price'] == 1,
               id: r['id'] as String,
               name: r['name'] as String,
               sku: r['sku'] as String?,

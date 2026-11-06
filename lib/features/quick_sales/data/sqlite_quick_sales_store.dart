@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'bulk_catalog_defaults.dart';
 import '../../debtors/domain/debtors_store.dart';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -17,6 +18,31 @@ import '../domain/quick_sales_store.dart';
 /// A quick sale composes the established FIFO sale and its paid portion inside
 /// one transaction. Its durable parent request precedes every business effect.
 class SqliteQuickSalesStore implements QuickSalesStore {
+  Future<void> _validateBulkLine(
+    DatabaseExecutor txn,
+    String productId,
+    int quantity,
+    int price,
+    Set<String> seen,
+  ) async {
+    final bulk = await txn.query(
+      'catalog_services',
+      where: "product_id=? AND kind='bulk'",
+      whereArgs: [productId],
+    );
+    if (bulk.isEmpty) return;
+    if (quantity != 1 || price <= 0) {
+      throw const QuickSalesValidationException(
+        'Escribe un valor vendido mayor que cero para el bulk. No se cuentan cartas.',
+      );
+    }
+    if (!seen.add(productId)) {
+      throw const QuickSalesValidationException(
+        'Usa una sola línea por tipo de bulk y suma allí el valor vendido.',
+      );
+    }
+  }
+
   SqliteQuickSalesStore(this._database, {this.synthetic = false});
   final AppDatabase _database;
   final bool synthetic;
@@ -24,6 +50,13 @@ class SqliteQuickSalesStore implements QuickSalesStore {
       SqliteSalesStore(_database, synthetic: synthetic);
   SqliteCollectionsStore get _collections =>
       SqliteCollectionsStore(_database, synthetic: synthetic);
+
+  @override
+  Future<void> ensureBulkProducts() =>
+      _database.database.transaction((txn) async {
+        await _profile(txn);
+        await BulkCatalogDefaults.ensure(txn);
+      }, exclusive: true);
 
   @override
   Future<void> ensureDefaults() => _database.database.transaction((txn) async {
@@ -540,6 +573,7 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
       }
       final lines = <Map<String, Object?>>[];
       final prices = <String, int>{};
+      final seenBulk = <String>{};
       var total = BigInt.zero;
       var creditTotal = BigInt.zero;
       final hasCredit = account.lines.any(
@@ -586,6 +620,13 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
           price,
           currency: profile.currencyCode,
           scale: profile.moneyScale,
+        );
+        await _validateBulkLine(
+          txn,
+          line.productId!,
+          quantity,
+          price,
+          seenBulk,
         );
         if (prices.containsKey(line.productId) &&
             prices[line.productId] != price) {
@@ -1038,6 +1079,7 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
   ) async {
     final lines = <Map<String, Object?>>[], tenders = <Map<String, Object?>>[];
     final prices = <String, int>{};
+    final seenBulk = <String>{};
     var total = BigInt.zero, credit = BigInt.zero;
     for (var sequence = 0; sequence < account.lines.length; sequence++) {
       final line = account.lines[sequence];
@@ -1058,6 +1100,7 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         currency: profile.currencyCode,
         scale: profile.moneyScale,
       );
+      await _validateBulkLine(txn, line.productId!, quantity, price, seenBulk);
       if (prices.containsKey(line.productId) &&
           prices[line.productId] != price) {
         throw const QuickSalesValidationException(

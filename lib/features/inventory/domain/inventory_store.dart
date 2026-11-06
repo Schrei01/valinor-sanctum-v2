@@ -37,6 +37,7 @@ class CatalogProduct {
     this.isActive = true,
     this.isEvent = false,
     this.isService = false,
+    this.isVariablePrice = false,
   });
   final String id;
   final String name;
@@ -46,7 +47,8 @@ class CatalogProduct {
   final bool isActive;
   final bool isEvent;
   final bool isService;
-  bool get isUnlimited => isEvent || isService;
+  final bool isVariablePrice;
+  bool get isUnlimited => isEvent || isService || isVariablePrice;
 }
 
 class StockPosition {
