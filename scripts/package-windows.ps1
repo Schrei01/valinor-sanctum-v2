@@ -107,15 +107,18 @@ Conserva las DLL y la carpeta data junto al ejecutable.
 La app abre en Ventas. El menú contiene Catálogo, Compras, Ventas, Deudores,
 Tesorería, Eventos y Reportes. Si la base es nueva, Valinor se configura
 automáticamente con COP, 0 decimales y hora de Bogotá, sin formularios de alta.
-En Compras ingresa nombre, costo total de las unidades, cantidad, PVP, proveedor,
-categoría Comestible o Artículo y SKU opcional. Puedes crear el producto o reponer uno existente.
-Al elegir un producto se completan SKU, categoría, PVP y proveedor y se muestra
-el PVP anterior. Ingresa lo pagado por todas las unidades: se sugiere un PVP
-con total/cantidad/0,65. Puedes escribir un precio menor; la sugerencia no limita.
+En Compras indica arriba Total pagado, Pagar desde y una categoría común.
+Agrega los productos con Agregar producto; puedes crear o reponer cada uno.
+Cada formulario conserva proveedor, SKU opcional, unidades, costo total y PVP.
+Se sugiere un PVP con costo de las unidades/cantidad/0,65; puedes elegir otro valor.
+Usar valor recupera el PVP anterior y lo conserva al cambiar costo o unidades.
 El PVP elegido aplica a todas las existencias y sus cambios quedan en historial.
-Elige Efectivo o Nequi para pagar: el ingreso y la salida de dinero se guardan juntos.
-Si pagaste los productos con tu dinero, elige Inversión: aumenta el inventario
-y la Inversión por recuperar, sin descontar Caja ni Nequi ni dejar deuda al proveedor.
+No mezcles categorías ni repitas un producto: suma sus unidades en un formulario.
+El total pagado puede diferir de la suma de costos; ambos quedan guardados y
+se muestra la diferencia. Registrar compra guarda todos los productos y el pago juntos.
+Efectivo descuenta Caja y Nequi descuenta Nequi por el total pagado.
+Si pagaste con tu dinero, elige Inversión: aumenta Inversión por recuperar
+por el total pagado, sin descontar Caja/Nequi ni dejar deuda al proveedor.
 Registra el saldo inicial real antes del primer movimiento de cada cuenta si corresponde.
 Consulta el Historial de ingresos desde la misma sección Compras.
 Catálogo muestra productos: filtra por Categoría y Proveedor, y busca por nombre o SKU.
@@ -131,6 +134,10 @@ En Ventas crea varias cuentas, agrega productos y elige la forma de pago junto a
 Las cuentas nuevas aparecen primero y conservan su posición al editarlas.
 El selector muestra existencias y ofrece productos físicos activos con unidades;
 los agotados se ocultan. Pasadía y eventos activos se muestran como Ilimitado.
+Bulk Magic, Bulk Pokémon y Bulk Yu-Gi-Oh! muestran Valor vendido: escribe el
+importe positivo de las cartas de ese juego, sin contar cartas ni descontar inventario.
+Se suman a la misma cuenta y comparten su pago o división. Usa una línea por
+tipo de bulk y aumenta ese importe si el cliente agrega más cartas del mismo juego.
 Elige Efectivo, Transferencia o Deudas. Transferencia usa la cuenta de Nequi;
 ese nombre aparece en el selector, resumen e historial de Ventas.
 Registrar venta guarda entrega, stock, costo y cobro en una sola operación.
@@ -161,7 +168,8 @@ desde Ventas, sin límite de stock y sin repetir costos. Reintenta las solicitud
 pendientes desde Eventos si se interrumpe el guardado.
 Desactivar retira el evento de Catálogo y Ventas, sin devolver dinero ni productos.
 Tesorería reemplaza Pagos: consulta Caja, Nequi, Caja mayor y Deudas de clientes.
-Total disponible suma Caja y Nequi; la reserva y las deudas se muestran aparte.
+Total disponible suma Caja + Nequi + Caja mayor. Total potencial añade las deudas
+de clientes; Total resta la Inversión por recuperar al Total potencial.
 En Tesorería usa Registrar gasto para pagar Arriendo, Aseo, Servicios u Otro
 desde Caja o Nequi. Indica valor, motivo y una observación opcional.
 Transferir dinero permite elegir cuentas de origen y destino distintas,
@@ -175,13 +183,16 @@ Filtra los últimos movimientos por cuenta y pulsa Actualizar para consultar de 
 Los pagos anteriores a proveedores conservan sus registros y movimientos en el historial.
 Los saldos de una copia verificada se cargan como apertura única, no como ventas.
 Deudas identifica la cartera anterior sin detalle cuando la fuente no trae clientes.
-Historial de la copia es consulta separada y no vuelve a mover dinero.
+Ver historial reúne los movimientos anteriores y actuales sin volver a mover dinero.
 Las confirmaciones pendientes se recuperan al reabrir para reintentar sin duplicar.
 Los cobros pendientes de confirmar se recuperan al reabrir sin duplicarse.
 Las compras se pagan al ingresar los productos. Tesorería permite devolver
 la inversión con Registrar devolución; no contiene un formulario de pagos a proveedores.
 En Reportes elige la fecha inicial y, al aceptar, la hora en formato AM/PM.
 El resultado se presenta como comprobante compacto con saldos, ventas y egresos.
+Los ítems vendidos se agrupan por nombre y medio de pago, se ordenan
+alfabéticamente y muestran cantidades e importes sumados, de a 10 grupos por página.
+En los bulks la cantidad representa operaciones, no cartas individuales.
 Las devoluciones de inversión aparecen por separado y no se suman a los egresos
 del negocio ni reducen la ganancia nuevamente.
 Incluye transferencias del rango agrupadas por origen y destino, número de
