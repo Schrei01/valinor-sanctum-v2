@@ -527,6 +527,6 @@ Future<void> restoreReleasedV24ForFixture(DatabaseExecutor db) async {
   )) {
     await db.execute(sql);
   }
-  await db.delete('schema_migrations', where: 'version=25');
+  await db.delete('schema_migrations', where: 'version>=25');
   await db.execute('PRAGMA user_version=24');
 }

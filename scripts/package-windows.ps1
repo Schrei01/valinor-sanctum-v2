@@ -138,6 +138,8 @@ Bulk Magic, Bulk Pokémon y Bulk Yu-Gi-Oh! muestran Valor vendido: escribe el
 importe positivo de las cartas de ese juego, sin contar cartas ni descontar inventario.
 Se suman a la misma cuenta y comparten su pago o división. Usa una línea por
 tipo de bulk y aumenta ese importe si el cliente agrega más cartas del mismo juego.
+Alquiler funciona por valor variable: ingresa el importe cobrado mayor que cero.
+Comparte el pago de la cuenta, sin cantidades de juegos ni descuento de inventario.
 Elige Efectivo, Transferencia o Deudas. Transferencia usa la cuenta de Nequi;
 ese nombre aparece en el selector, resumen e historial de Ventas.
 Registrar venta guarda entrega, stock, costo y cobro en una sola operación.

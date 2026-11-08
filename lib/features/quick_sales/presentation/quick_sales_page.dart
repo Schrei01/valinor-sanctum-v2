@@ -921,7 +921,7 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           helperText: selected == null
               ? 'Selecciona un producto'
               : selected.isVariablePrice
-              ? 'Bulk por valor · Sin conteo de cartas'
+              ? 'Valor variable · Sin inventario'
               : 'Precio ${inventoryMoney(line.unitPriceMinor ?? 0, widget.profile)} · ${selected.isUnlimited ? 'Disponibilidad ilimitada' : 'Stock ${GroupedNumberFormatter.format('$stock')}'}',
         ),
         onChanged: _productChanged,
@@ -1014,7 +1014,7 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
       decoration: InputDecoration(
         labelText: 'Valor vendido (${widget.profile.currencyCode})',
         isDense: true,
-        helperText: 'Total de las cartas',
+        helperText: 'Importe mayor que cero',
         errorText:
             _value.text.isNotEmpty &&
                 (line.unitPriceMinor == null || line.unitPriceMinor! <= 0)

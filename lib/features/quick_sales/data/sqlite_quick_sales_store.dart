@@ -33,12 +33,12 @@ class SqliteQuickSalesStore implements QuickSalesStore {
     if (bulk.isEmpty) return;
     if (quantity != 1 || price <= 0) {
       throw const QuickSalesValidationException(
-        'Escribe un valor vendido mayor que cero para el bulk. No se cuentan cartas.',
+        'Escribe un valor vendido mayor que cero para este ítem.',
       );
     }
     if (!seen.add(productId)) {
       throw const QuickSalesValidationException(
-        'Usa una sola línea por tipo de bulk y suma allí el valor vendido.',
+        'Usa una sola línea por ítem de valor variable y suma allí el importe.',
       );
     }
   }

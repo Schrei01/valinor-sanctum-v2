@@ -613,56 +613,73 @@ void main() {
       expect(await controller.flushAll(), isTrue);
     });
   }
-  for (final width in [1120.0, 400.0]) {
-    testWidgets(
-      'bulk sold value shares the physical account without card quantities at $width',
-      (tester) async {
-        store.products.add(
-          const CatalogProduct(
-            id: 'bulk:sales:magic',
-            name: 'Bulk Magic',
-            categoryId: 'item',
-            listPriceMinor: 0,
-            isService: true,
-            isVariablePrice: true,
-          ),
-        );
-        await open(tester, size: Size(width, 1300));
-        final id = controller.addAccount()!;
-        await tester.pumpAndSettle();
-        await select(tester, 0, 'Agua sintética');
-        await tap(tester, keyed('quick-add-line-').first);
-        await select(tester, 1, 'Bulk Magic');
-        final line = controller.accounts.single.lines.last;
-        final field = find.byKey(ValueKey('quick-bulk-value-${line.id}'));
-        expect(field, findsOneWidget);
-        expect(find.byKey(ValueKey('quick-quantity-${line.id}')), findsNothing);
-        expect(line.unitPriceMinor, isNull);
-        expect(line.quantityText, '1');
-        controller.selectAccountPayment(id, 'cash');
-        await controller.flushAll();
-        await tester.pumpAndSettle();
-        await tap(tester, find.byKey(ValueKey('quick-register-$id')));
-        expect(controller.errorFor(id), contains('valor vendido'));
-        expect(store.sales, isEmpty);
-        await enter(tester, field, '5000,00');
-        expect(tester.widget<TextField>(field).controller!.text, '5.000,00');
-        expect(
-          controller.totalFor(controller.accounts.single),
-          BigInt.from(800000),
-        );
-        expect(store.products.last.listPriceMinor, 0);
-        await tap(tester, find.byKey(ValueKey('quick-register-$id')));
-        expect(store.sales, hasLength(1));
-        expect(store.sales.single.result.totalMinor, 800000);
-        expect(store.sales.single.lines.map((l) => l.quantity), [1, 1]);
-        expect(
-          store.stock.singleWhere((s) => s.productId == 'water').quantity,
-          19,
-        );
-        expect(tester.takeException(), isNull);
-      },
-    );
+  for (final item in [
+    ('bulk:sales:magic', 'Bulk Magic'),
+    ('rental:sales:games', 'Alquiler'),
+  ]) {
+    for (final width in [1120.0, 400.0]) {
+      testWidgets(
+        '${item.$2} shares the physical account with a strictly positive value at $width',
+        (tester) async {
+          store.products.add(
+            CatalogProduct(
+              id: item.$1,
+              name: item.$2,
+              categoryId: 'item',
+              listPriceMinor: 0,
+              isService: true,
+              isVariablePrice: true,
+            ),
+          );
+          await open(tester, size: Size(width, 1300));
+          final id = controller.addAccount()!;
+          await tester.pumpAndSettle();
+          await select(tester, 0, 'Agua sintética');
+          await tap(tester, keyed('quick-add-line-').first);
+          await select(tester, 1, item.$2);
+          final line = controller.accounts.single.lines.last;
+          final field = find.byKey(ValueKey('quick-bulk-value-${line.id}'));
+          expect(field, findsOneWidget);
+          expect(
+            find.byKey(ValueKey('quick-quantity-${line.id}')),
+            findsNothing,
+          );
+          expect(line.unitPriceMinor, isNull);
+          expect(line.quantityText, '1');
+          controller.selectAccountPayment(id, 'cash');
+          await controller.flushAll();
+          await tester.pumpAndSettle();
+          await tap(tester, find.byKey(ValueKey('quick-register-$id')));
+          expect(controller.errorFor(id), contains('valor vendido'));
+          expect(store.sales, isEmpty);
+          for (final invalid in ['0', '-1000']) {
+            await enter(tester, field, invalid);
+            await controller.flushAll();
+            await tester.pumpAndSettle();
+            await tap(tester, find.byKey(ValueKey('quick-register-$id')));
+            expect(controller.errorFor(id), contains('mayor que cero'));
+            expect(find.text('Ingresa un valor positivo'), findsOneWidget);
+            expect(store.sales, isEmpty);
+          }
+          await enter(tester, field, '5000,00');
+          expect(tester.widget<TextField>(field).controller!.text, '5.000,00');
+          expect(
+            controller.totalFor(controller.accounts.single),
+            BigInt.from(800000),
+          );
+          expect(store.products.last.listPriceMinor, 0);
+          await tap(tester, find.byKey(ValueKey('quick-register-$id')));
+          expect(store.sales, hasLength(1));
+          expect(store.sales.single.result.totalMinor, 800000);
+          expect(store.sales.single.lines.map((l) => l.quantity), [1, 1]);
+          expect(
+            store.stock.singleWhere((s) => s.productId == 'water').quantity,
+            19,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
   }
   testWidgets(
     'bulk value survives draft reload and a different type starts without a previous value',

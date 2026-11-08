@@ -1,10 +1,12 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 abstract final class BulkCatalogDefaults {
+  static const rentalId = 'rental:sales:games';
   static const products = {
     'bulk:sales:magic': 'Bulk Magic',
     'bulk:sales:pokemon': 'Bulk Pokémon',
     'bulk:sales:yugioh': 'Bulk Yu-Gi-Oh!',
+    rentalId: 'Alquiler',
   };
   static Future<void> ensure(Transaction txn) async {
     final categories = await txn.query(
@@ -59,7 +61,9 @@ abstract final class BulkCatalogDefaults {
           whereArgs: [item.key],
         );
         if (classification.length != 1) {
-          throw StateError('Identidad de bulk ocupada por otro producto.');
+          throw StateError(
+            'Identidad de venta variable ocupada por otro producto.',
+          );
         }
       }
     }
