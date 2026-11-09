@@ -528,7 +528,7 @@ class QuickSalesController extends ChangeNotifier {
           (line.unitPriceMinor ?? 0) <= 0 ||
           !seenBulk.add(product!.id)) {
         card.error =
-            'Escribe un valor vendido mayor que cero y usa una sola línea por tipo de bulk. No se cuentan cartas.';
+            'Escribe un valor vendido mayor que cero y usa una sola línea por ítem de valor variable.';
         _emit();
         return false;
       }

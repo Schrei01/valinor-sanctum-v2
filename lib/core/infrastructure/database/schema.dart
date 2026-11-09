@@ -14,7 +14,7 @@ part 'split_payment_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 25;
+  static const int version = 26;
   static String utcSortKey(String expression) => _utcSortKey(expression);
 
   // ASCII VS20: a file-format marker, independent of the original POS.
@@ -91,6 +91,7 @@ abstract final class DatabaseSchema {
     23 => 'supplier_payments_ignore_voided_cash_documents_v23',
     24 => 'multi_product_paid_purchase_batches_v24',
     25 => 'variable_price_non_stock_bulk_sales_v25',
+    26 => 'variable_price_game_rental_sales_v26',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -120,8 +121,22 @@ abstract final class DatabaseSchema {
     23 => checksum(migration23Statements.join('\n;\n')),
     24 => checksum(migration24Statements.join('\n;\n')),
     25 => checksum(migration25Statements.join('\n;\n')),
+    26 => checksum(migration26Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
+
+  // Reuse the variable-price service engine; released v25 stays immutable.
+  static final List<String> migration26Statements = List.unmodifiable([
+    'DROP TRIGGER services_validate_insert',
+    migration25Statements
+        .singleWhere(
+          (s) => s.startsWith('CREATE TRIGGER services_validate_insert '),
+        )
+        .replaceFirst(
+          "'bulk:sales:yugioh')",
+          "'bulk:sales:yugioh','rental:sales:games')",
+        ),
+  ]);
 
   static final List<String> migration25Statements = List.unmodifiable(
     BulkSalesSchema.build(migration16Statements),

@@ -506,7 +506,7 @@ JOIN journal_entries j ON j.document_id = d.id AND j.status = 'posted'
         if (service.single['kind'] == 'bulk' &&
             (line.quantity != 1 || line.unitPriceMinor <= 0)) {
           throw const SalesValidationException(
-            'El bulk requiere un valor vendido positivo y una sola operación.',
+            'Este ítem requiere un valor vendido mayor que cero y una sola operación.',
           );
         }
         planned.add(_PlannedLine(line, product['name'] as String, 0, []));
