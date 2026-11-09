@@ -160,6 +160,32 @@ void main() {
         ),
       );
 
+  for (final reason in ['Agua', 'Energía', 'Envíos']) {
+    testWidgets(
+      'expense selector separates $reason from historical Servicios',
+      (tester) async {
+        await open(tester);
+        await tap(tester, find.byKey(const Key('treasury-register-expense')));
+        final reasons = dropdown(
+          tester,
+          find.byKey(const Key('treasury-operation-reason')),
+        );
+        expect(
+          reasons.items!.map((i) => i.value),
+          containsAll(['Agua', 'Energía', 'Envíos']),
+        );
+        expect(
+          reasons.items!.map((i) => i.value),
+          isNot(contains('Servicios')),
+        );
+        await choose(tester, 'treasury-operation-source', 'Nequi');
+        await enter(tester, 'treasury-operation-amount', '10,00');
+        await choose(tester, 'treasury-operation-reason', reason);
+        await submit(tester);
+        expect(store.preparedCommands.single.reason, reason);
+      },
+    );
+  }
   testWidgets(
     'expense uses the selected account and refreshes dashboard balances',
     (tester) async {

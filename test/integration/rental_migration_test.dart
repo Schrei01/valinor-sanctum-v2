@@ -11,6 +11,7 @@ import 'package:valinor_sanctum_2/features/quick_sales/data/bulk_catalog_default
 import 'package:valinor_sanctum_2/features/quick_sales/data/sqlite_quick_sales_store.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
 import 'quick_sales_store_test.dart' show fixture;
+import '../support/released_v15_fixture.dart' show restoreReleasedV26ForFixture;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,7 @@ void main() {
         app = await AppDatabase.open(path: path);
         await fixture(app, moneyScale: 0);
         final db = app.database;
+        await restoreReleasedV26ForFixture(db);
         // Reconstruct released v25 only inside this disposable fixture.
         await db.execute('DROP TRIGGER services_validate_insert');
         await db.execute(
@@ -95,7 +97,7 @@ void main() {
         await app.close();
         app = null;
         app = await AppDatabase.open(path: path);
-        expect(await app.database.getVersion(), 26);
+        expect(await app.database.getVersion(), DatabaseSchema.version);
         for (final table in before.entries) {
           expect(
             rows(

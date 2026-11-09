@@ -653,7 +653,7 @@ WHERE l.account_id=?
         : _text(c.note!, 'Observación', 500);
     if (c.kind == TreasuryOperationKind.expense) {
       if (c.destinationAccountId != null ||
-          !['Arriendo', 'Aseo', 'Servicios', 'Otro'].contains(reason)) {
+          !TreasuryExpenseReasons.supported.contains(reason)) {
         throw const TreasuryValidationException(
           'Selecciona un motivo de gasto válido.',
         );

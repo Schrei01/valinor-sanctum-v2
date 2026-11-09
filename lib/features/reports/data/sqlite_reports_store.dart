@@ -90,6 +90,30 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
     final eventByDoc = {
       for (final r in eventRows) r['document_id'] as String: r,
     };
+    final eventCorrections = await txn.query(
+      'catalog_corrections',
+      where: "kind='event'",
+      orderBy: 'sequence',
+    );
+    final correctionPayments = {
+      for (final p in await txn.query('event_correction_payments'))
+        p['document_id'] as String: p,
+    };
+    final correctionByStockCommand = <String, String>{};
+    for (final correction in eventCorrections) {
+      final request = (await txn.query(
+        'catalog_correction_requests',
+        where: 'command_id=?',
+        whereArgs: [correction['command_id']],
+      )).single;
+      final plan =
+          jsonDecode(request['canonical_payload'] as String)
+              as Map<String, dynamic>;
+      for (final stock in plan['stockChanges'] as List) {
+        correctionByStockCommand[stock['commandId'] as String] =
+            (plan['after'] as Map)['name'] as String;
+      }
+    }
     final debtPayments = await txn.query('debtor_payments');
     final debtorByDoc = {
       for (final r in debtPayments)
@@ -159,7 +183,8 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
         'investment_refund' => ReportMovementKind.investmentRefund,
         'cash_transfer' => ReportMovementKind.transfer,
         'cash_expense' => ReportMovementKind.expense,
-        'event_creation' => ReportMovementKind.eventPayment,
+        'event_creation' ||
+        'event_correction_payment' => ReportMovementKind.eventPayment,
         'debtor_collection' => ReportMovementKind.debtorPayment,
         'customer_collection'
             when immediateCollections.contains(row['command_id']) =>
@@ -179,7 +204,7 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
           'Pago de compra: ${supplier?['supplier_name_snapshot'] ?? 'Proveedor'}',
         ReportMovementKind.expense => 'Gasto: ${op?['reason'] ?? 'Otro'}',
         ReportMovementKind.eventPayment =>
-          'Costo fijo de evento: ${event?['name_snapshot'] ?? 'Evento'}',
+          'Costo fijo de evento: ${event?['name_snapshot'] ?? correctionPayments[doc]?['name_snapshot'] ?? 'Evento'}',
         ReportMovementKind.transfer =>
           'Transferencia: ${op?['source_account_name_snapshot'] ?? 'Origen'} → ${op?['destination_account_name_snapshot'] ?? 'Destino'}',
         ReportMovementKind.other => 'Movimiento: $type',
@@ -309,13 +334,24 @@ ORDER BY document.occurred_at_utc,document.id,line.sequence''',
           documentId: expense.row['document_id'] as String,
           occurredAtUtc: _date(expense.row['occurred_at_utc']),
           reason:
-              treasuryByDoc[expense.row['document_id']]?['reason'] as String? ??
-              'Otro',
+              correctionPayments.containsKey(expense.row['document_id']) ||
+                  correctionByStockCommand.containsKey(
+                    expense.row['command_id'],
+                  )
+              ? 'Evento'
+              : treasuryByDoc[expense.row['document_id']]?['reason']
+                        as String? ??
+                    'Otro',
           concept:
+              correctionPayments[expense.row['document_id']]?['name_snapshot']
+                  as String? ??
+              correctionByStockCommand[expense.row['command_id']] ??
               treasuryByDoc[expense.row['document_id']]?['note'] as String? ??
               'Gasto registrado',
           amountMinor: reportMinor(expense.amount),
-          isEvent: false,
+          isEvent:
+              correctionPayments.containsKey(expense.row['document_id']) ||
+              correctionByStockCommand.containsKey(expense.row['command_id']),
         ),
       for (final event in eventRows.where(
         (e) => period.contains(_date(e['occurred_at_utc'])),
@@ -375,7 +411,20 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
           createdAtUtc: _date(event['occurred_at_utc']),
           quantity: reportSum(lines.map((l) => l['quantity'] as int)),
           salesMinor: reportSum(lines.map((l) => l['total_minor'] as int)),
-          costMinor: event['total_cost_minor'] as int,
+          costMinor: reportSum([
+            event['total_cost_minor'] as int,
+            for (final change in eventCorrections.where(
+              (c) =>
+                  c['product_id'] == event['product_id'] &&
+                  _date(c['occurred_at_utc']).isBefore(period.endExclusiveUtc),
+            ))
+              ((jsonDecode(change['after_json'] as String)
+                          as Map)['stockCostDelta']
+                      as int) +
+                  ((jsonDecode(change['after_json'] as String)
+                          as Map)['additionalFixedCost']
+                      as int),
+          ]),
         ),
       );
     }

@@ -468,11 +468,9 @@ class _OperationDialogState extends State<_OperationDialog> {
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Motivo'),
                       items: [
-                        for (final reason in const [
-                          'Arriendo',
-                          'Aseo',
-                          'Servicios',
-                          'Otro',
+                        for (final reason in [
+                          ...TreasuryExpenseReasons.current,
+                          if (_reason == 'Servicios') 'Servicios',
                         ])
                           DropdownMenuItem(value: reason, child: Text(reason)),
                       ],

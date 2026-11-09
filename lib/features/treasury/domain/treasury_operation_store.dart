@@ -4,6 +4,19 @@ export 'treasury_store.dart' show TreasuryValidationException;
 
 enum TreasuryOperationKind { expense, transfer, investmentRefund }
 
+abstract final class TreasuryExpenseReasons {
+  static const current = [
+    'Arriendo',
+    'Aseo',
+    'Agua',
+    'Energía',
+    'Envíos',
+    'Otro',
+  ];
+  // Existing and prepared records retain their original classification.
+  static const supported = [...current, 'Servicios'];
+}
+
 class TreasuryOperationCommand {
   const TreasuryOperationCommand({
     required this.commandId,

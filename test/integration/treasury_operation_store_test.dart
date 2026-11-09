@@ -114,6 +114,32 @@ void main() {
     });
   }
 
+  for (final reason in ['Agua', 'Energía', 'Envíos', 'Servicios']) {
+    test(
+      'expense reason $reason persists once and spends its selected cash account',
+      () async {
+        await opening();
+        final command = expense(
+          'reason-test',
+          reason: reason,
+          source: nequi,
+          amount: 1000,
+        );
+        await store.prepare(command);
+        await store.confirmPrepared(command.commandId);
+        await store.confirmPrepared(command.commandId);
+        final state = await store.load();
+        expect(
+          state.accounts.singleWhere((a) => a.id == nequi).balanceMinor,
+          49000,
+        );
+        expect(
+          (await app.database.query('treasury_operations')).single['reason'],
+          reason,
+        );
+      },
+    );
+  }
   test(
     'defaults are idempotent and configure expense ledger without financial facts',
     () async {

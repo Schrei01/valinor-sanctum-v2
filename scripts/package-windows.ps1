@@ -172,7 +172,7 @@ Desactivar retira el evento de Catálogo y Ventas, sin devolver dinero ni produc
 Tesorería reemplaza Pagos: consulta Caja, Nequi, Caja mayor y Deudas de clientes.
 Total disponible suma Caja + Nequi + Caja mayor. Total potencial añade las deudas
 de clientes; Total resta la Inversión por recuperar al Total potencial.
-En Tesorería usa Registrar gasto para pagar Arriendo, Aseo, Servicios u Otro
+En Tesorería usa Registrar gasto para pagar Arriendo, Aseo, Agua, Energía, Envíos u Otro
 desde Caja o Nequi. Indica valor, motivo y una observación opcional.
 Transferir dinero permite elegir cuentas de origen y destino distintas,
 incluyendo Caja mayor. El dinero sale del origen y entra al destino junto.

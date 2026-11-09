@@ -459,6 +459,9 @@ Future<void> restoreReleasedV23ForFixture(DatabaseExecutor db) async {
 
 /// Test-only reconstruction of v24; never an application downgrade.
 Future<void> restoreReleasedV24ForFixture(DatabaseExecutor db) async {
+  if ((await db.rawQuery('PRAGMA user_version')).single.values.single == 27) {
+    await restoreReleasedV26ForFixture(db);
+  }
   for (final name in [
     'services_validate_insert',
     'services_no_update',
@@ -529,4 +532,36 @@ Future<void> restoreReleasedV24ForFixture(DatabaseExecutor db) async {
   }
   await db.delete('schema_migrations', where: 'version>=25');
   await db.execute('PRAGMA user_version=24');
+}
+
+/// Test-only reconstruction of v26 before any new correction is recorded.
+Future<void> restoreReleasedV26ForFixture(DatabaseExecutor db) async {
+  final replacements = <String>{};
+  for (final sql in DatabaseSchema.migration27Statements) {
+    final trigger = RegExp(r'CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (trigger != null) await db.execute('DROP TRIGGER $trigger');
+    if (sql.startsWith('DROP TRIGGER ')) {
+      replacements.add(sql.substring('DROP TRIGGER '.length));
+    }
+  }
+  await db.execute('DROP VIEW event_current_components');
+  await db.execute('DROP VIEW event_current_settings');
+  for (final name in [
+    'event_correction_payments',
+    'event_return_values',
+    'catalog_corrections',
+    'catalog_correction_requests',
+  ]) {
+    expect(await db.query(name), isEmpty);
+    await db.execute('DROP TABLE $name');
+  }
+  for (final sql in [
+    ...DatabaseSchema.migration10Statements,
+    ...DatabaseSchema.migration21Statements,
+  ]) {
+    final name = RegExp(r'CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (replacements.contains(name)) await db.execute(sql);
+  }
+  await db.delete('schema_migrations', where: 'version>=27');
+  await db.execute('PRAGMA user_version=26');
 }
