@@ -1,6 +1,8 @@
 import '../../../core/presentation/grouped_number_formatter.dart';
 import '../../../core/presentation/financial_total.dart';
 import 'stock_adjustment_dialog.dart';
+import 'catalog_correction_dialog.dart';
+import '../domain/catalog_corrections_store.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -124,22 +126,75 @@ class CatalogPageState extends State<CatalogPage> {
     }
     _adjustmentOpen = true;
     try {
+      var action = 'quantity';
+      if (widget.controller.corrections != null) {
+        final choice = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Corregir catálogo'),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final item in [
+                    (
+                      'quantity',
+                      'Corregir cantidad',
+                      Icons.inventory_2_outlined,
+                    ),
+                    ('name', 'Corregir nombre', Icons.edit_outlined),
+                    ('price', 'Corregir PVP', Icons.price_change_outlined),
+                    ('event', 'Corregir evento', Icons.event_outlined),
+                  ])
+                    ListTile(
+                      key: Key('catalog-correction-${item.$1}'),
+                      leading: Icon(item.$3),
+                      title: Text(item.$2),
+                      onTap: () => Navigator.pop(context, item.$1),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || choice == null) return;
+        action = choice;
+      }
+      if (!mounted) return;
       final done = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => StockAdjustmentDialog(
-          controller: widget.controller,
-          store: widget.controller.adjustments!,
-        ),
+        builder: (_) => action == 'quantity'
+            ? StockAdjustmentDialog(
+                controller: widget.controller,
+                store: widget.controller.adjustments!,
+              )
+            : CatalogCorrectionDialog(
+                controller: widget.controller,
+                store: widget.controller.corrections!,
+                profile: widget.profile,
+                kind: CatalogCorrectionKind.values.byName(action),
+              ),
       );
       await widget.controller.load();
       if (done == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             backgroundColor: InventoryNotice.informationBackground,
             content: Text(
-              'Inventario corregido. No se registró una compra ni una venta, ni se movió dinero.',
-              style: TextStyle(color: InventoryNotice.informationForeground),
+              action == 'quantity'
+                  ? 'Inventario corregido. No se registró una compra ni una venta, ni se movió dinero.'
+                  : 'Corrección guardada. El historial anterior se conserva.',
+              style: const TextStyle(
+                color: InventoryNotice.informationForeground,
+              ),
             ),
           ),
         );

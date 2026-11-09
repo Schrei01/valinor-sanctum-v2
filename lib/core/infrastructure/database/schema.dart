@@ -10,11 +10,12 @@ import 'stock_correction_schema.dart';
 import 'debtor_loan_schema.dart';
 import 'purchase_batch_schema.dart';
 import 'bulk_sales_schema.dart';
+import 'catalog_corrections_schema.dart';
 part 'split_payment_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 26;
+  static const int version = 27;
   static String utcSortKey(String expression) => _utcSortKey(expression);
 
   // ASCII VS20: a file-format marker, independent of the original POS.
@@ -92,6 +93,7 @@ abstract final class DatabaseSchema {
     24 => 'multi_product_paid_purchase_batches_v24',
     25 => 'variable_price_non_stock_bulk_sales_v25',
     26 => 'variable_price_game_rental_sales_v26',
+    27 => 'catalog_event_corrections_and_expense_reasons_v27',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -122,8 +124,16 @@ abstract final class DatabaseSchema {
     24 => checksum(migration24Statements.join('\n;\n')),
     25 => checksum(migration25Statements.join('\n;\n')),
     26 => checksum(migration26Statements.join('\n;\n')),
+    27 => checksum(migration27Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
+
+  static final List<String> migration27Statements = List.unmodifiable(
+    CatalogCorrectionsSchema.build(
+      migration10Statements,
+      migration21Statements,
+    ),
+  );
 
   // Reuse the variable-price service engine; released v25 stays immutable.
   static final List<String> migration26Statements = List.unmodifiable([

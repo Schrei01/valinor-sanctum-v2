@@ -9,9 +9,22 @@ import '../domain/inventory_store.dart';
 import '../domain/stock_adjustment_store.dart';
 
 class SqliteStockAdjustmentStore implements StockAdjustmentStore {
-  SqliteStockAdjustmentStore(this.database, {this.synthetic = false});
+  SqliteStockAdjustmentStore(
+    this.database, {
+    this.synthetic = false,
+    this.transaction,
+  });
   final AppDatabase database;
   final bool synthetic;
+  final Transaction? transaction;
+  Future<T> _transaction<T>(
+    Future<T> Function(Transaction) action, {
+    bool exclusive = false,
+  }) => transaction != null
+      ? action(transaction!)
+      : database.database.transaction(action, exclusive: exclusive);
+  Future<int> quoteCost(StockAdjustmentCommand command) =>
+      _transaction((txn) async => (await _plan(txn, command)).cost);
   static const _actor = 'system:local-operator';
 
   @override
@@ -32,7 +45,7 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
   @override
   Future<void> prepareAdjustment(StockAdjustmentCommand command) async {
     _validate(command);
-    await database.database.transaction((txn) async {
+    await _transaction((txn) async {
       final prior = await txn.query(
         'stock_adjustment_requests',
         where: 'command_id=?',
@@ -73,9 +86,7 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
   }
 
   @override
-  Future<void> confirmAdjustment(
-    String commandId,
-  ) => database.database.transaction((txn) async {
+  Future<void> confirmAdjustment(String commandId) => _transaction((txn) async {
     final requests = await txn.query(
       'stock_adjustment_requests',
       where: 'command_id=?',
@@ -325,24 +336,23 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
   }, exclusive: true);
 
   @override
-  Future<void> discardAdjustment(String commandId) =>
-      database.database.transaction((txn) async {
-        if ((await txn.query(
-          'command_log',
-          where: 'id=?',
-          whereArgs: [commandId],
-        )).isNotEmpty) {
-          throw const StockAdjustmentValidationException(
-            'El ajuste ya se registró y no se puede descartar.',
-          );
-        }
-        await txn.update(
-          'stock_adjustment_requests',
-          {'status': 'discarded'},
-          where: "command_id=? AND status='prepared'",
-          whereArgs: [commandId],
-        );
-      }, exclusive: true);
+  Future<void> discardAdjustment(String commandId) => _transaction((txn) async {
+    if ((await txn.query(
+      'command_log',
+      where: 'id=?',
+      whereArgs: [commandId],
+    )).isNotEmpty) {
+      throw const StockAdjustmentValidationException(
+        'El ajuste ya se registró y no se puede descartar.',
+      );
+    }
+    await txn.update(
+      'stock_adjustment_requests',
+      {'status': 'discarded'},
+      where: "command_id=? AND status='prepared'",
+      whereArgs: [commandId],
+    );
+  }, exclusive: true);
 
   static Future<BusinessProfile> _profile(DatabaseExecutor txn) async {
     final rows = await txn.query('app_profile');
@@ -520,7 +530,23 @@ class SqliteStockAdjustmentStore implements StockAdjustmentStore {
           BigInt.from(r['initial_quantity'] as int) -
           BigInt.from(r['used'] as int),
     );
-    final unitCost = reference['unit_cost_minor'] as int;
+    final returned = await txn.query(
+      'event_return_values',
+      where: 'stock_command_id=?',
+      whereArgs: [c.commandId],
+    );
+    if (returned.isNotEmpty &&
+        (returned.single['product_id'] != c.productId ||
+            returned.single['quantity'] != c.quantity)) {
+      throw const StockAdjustmentValidationException(
+        'La devolución no coincide con el evento.',
+      );
+    }
+    final unitCost =
+        (returned.isEmpty
+                ? reference['unit_cost_minor']
+                : returned.single['unit_cost_minor'])
+            as int;
     final currentCost = available.fold(
       BigInt.zero,
       (n, r) =>

@@ -71,9 +71,14 @@ class SqliteTreasuryStore implements TreasuryStore {
   }
 
   @override
-  Future<TreasurySnapshot> load({
+  Future<TreasurySnapshot> load({bool fullHistory = false}) => _database
+      .database
+      .transaction((txn) => loadInTransaction(txn, fullHistory: fullHistory));
+
+  Future<TreasurySnapshot> loadInTransaction(
+    DatabaseExecutor txn, {
     bool fullHistory = false,
-  }) => _database.database.transaction((txn) async {
+  }) async {
     await _requireProfile(txn);
     final accountRows = await txn.rawQuery('''
 SELECT c.* FROM cash_accounts c
@@ -114,7 +119,7 @@ ORDER BY c.name COLLATE NOCASE,c.id
     final lines = await txn.rawQuery('''
 SELECT l.debit_minor,l.credit_minor,c.id cash_account_id,c.name account_name,
  d.id document_id,d.occurred_at_utc,d.type,
- event.name_snapshot event_name,
+ coalesce(event.name_snapshot,correction_payment.name_snapshot) event_name,
  debtor_payment.name_snapshot debtor_name,
  col.sale_label_snapshot,col.customer_name_snapshot,
  pay.supplier_name_snapshot,
@@ -137,6 +142,7 @@ LEFT JOIN collections col ON col.document_id=d.id
 LEFT JOIN supplier_payments pay ON pay.document_id=d.id
 LEFT JOIN treasury_operations op ON op.document_id=d.id
 LEFT JOIN events event ON event.document_id=d.id
+LEFT JOIN event_correction_payments correction_payment ON correction_payment.document_id=d.id
 LEFT JOIN debtor_payments debtor_payment ON debtor_payment.document_id=d.id
 ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
 ''');
@@ -223,7 +229,10 @@ ORDER BY d.occurred_at_utc DESC,d.id,c.id,l.sequence,l.id
     final eventInvestments = await txn.rawQuery(
       '''SELECT ev.document_id,ev.name_snapshot,ev.fixed_cost_minor,d.occurred_at_utc
       FROM events ev JOIN business_documents d ON d.id=ev.document_id AND d.status='posted'
-      JOIN journal_entries e ON e.document_id=d.id AND e.status='posted' WHERE ev.funding_mode='investment' ''',
+      JOIN journal_entries e ON e.document_id=d.id AND e.status='posted' WHERE ev.funding_mode='investment'
+      UNION ALL SELECT p.document_id,p.name_snapshot,p.amount_minor,d.occurred_at_utc
+      FROM event_correction_payments p JOIN business_documents d ON d.id=p.document_id AND d.status='posted'
+      JOIN journal_entries e ON e.document_id=d.id AND e.status='posted' WHERE p.source_option_id='investment' ''',
     );
     movements.addAll(
       eventInvestments.map(
@@ -277,7 +286,7 @@ WHERE line.account_id='system:legacy-customer-receivables'
     // Reject an overflowing combined dashboard total before returning it.
     snapshot.totalAvailableMinor;
     return snapshot;
-  });
+  }
 
   static Future<int> _receivables(DatabaseExecutor txn) async {
     final rows = await txn.rawQuery('''
@@ -332,6 +341,8 @@ class _MovementAccumulator {
     final concept = switch (row['type']) {
       'cash_opening' => 'Saldo inicial',
       'event_creation' => 'Costo de evento: ${row['event_name']}',
+      'event_correction_payment' =>
+        'Costo fijo adicional: ${row['event_name']}',
       'debtor_collection' => 'Abono de: ${row['debtor_name']}',
       'treasury_opening' => 'Saldo inicial registrado',
       'investment_refund' => 'Devolución de inversión',

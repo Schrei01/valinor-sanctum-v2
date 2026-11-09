@@ -1,4 +1,6 @@
 import '../domain/stock_adjustment_store.dart';
+import '../domain/catalog_corrections_store.dart';
+import 'sqlite_catalog_corrections_store.dart';
 import 'sqlite_stock_adjustment_store.dart';
 import 'dart:convert';
 
@@ -11,10 +13,28 @@ import '../../workspace/domain/business_profile.dart';
 import '../domain/inventory_store.dart';
 
 /// Catalog edits never rewrite the snapshots or immutable receipt facts.
-class SqliteInventoryStore implements InventoryStore, StockAdjustmentStore {
+class SqliteInventoryStore
+    implements InventoryStore, StockAdjustmentStore, CatalogCorrectionsStore {
   SqliteInventoryStore(this._database, {this.synthetic = false});
   final AppDatabase _database;
   final bool synthetic;
+  CatalogCorrectionsStore get _corrections =>
+      SqliteCatalogCorrectionsStore(_database, synthetic: synthetic);
+  @override
+  Future<CatalogEventState> loadEvent(String id) => _corrections.loadEvent(id);
+  @override
+  Future<List<PreparedCatalogCorrection>> pendingCorrections() =>
+      _corrections.pendingCorrections();
+  @override
+  Future<PreparedCatalogCorrection> prepareCorrection(
+    CatalogCorrectionCommand command,
+  ) => _corrections.prepareCorrection(command);
+  @override
+  Future<void> confirmCorrection(String id) =>
+      _corrections.confirmCorrection(id);
+  @override
+  Future<void> discardCorrection(String id) =>
+      _corrections.discardCorrection(id);
 
   StockAdjustmentStore get _adjustments =>
       SqliteStockAdjustmentStore(_database, synthetic: synthetic);

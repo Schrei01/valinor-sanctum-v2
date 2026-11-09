@@ -102,12 +102,7 @@ class TreasuryOperationController extends ChangeNotifier {
       final normalizedReason = reason.trim();
       final normalizedNote = note?.trim();
       if (kind == TreasuryOperationKind.expense &&
-          !const [
-            'Arriendo',
-            'Aseo',
-            'Servicios',
-            'Otro',
-          ].contains(normalizedReason)) {
+          !TreasuryExpenseReasons.supported.contains(normalizedReason)) {
         throw ArgumentError('Elige el motivo del gasto.');
       }
       if ((normalizedNote?.length ?? 0) > 500 ||

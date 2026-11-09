@@ -38,25 +38,31 @@ ORDER BY document.occurred_at_utc DESC,document.id''',
       );
       final records = <EventRecord>[];
       for (final r in rows) {
+        final current = (await txn.query(
+          'event_current_settings',
+          where: 'product_id=?',
+          whereArgs: [r['product_id']],
+        )).single;
         final parts = await txn.query(
-          'event_products',
-          where: 'event_id=?',
-          whereArgs: [r['document_id']],
-          orderBy: 'sequence',
+          'event_current_components',
+          where: 'event_product_id=?',
+          whereArgs: [r['product_id']],
+          orderBy: 'product_id',
         );
         records.add(
           EventRecord(
             productId: r['product_id'] as String,
-            name: r['name_snapshot'] as String,
-            minimumPeople: r['minimum_people'] as int,
-            fixedCostMinor: r['fixed_cost_minor'] as int,
-            productsCostMinor: r['products_cost_minor'] as int,
-            totalCostMinor: r['total_cost_minor'] as int,
-            unitCostMinor: r['unit_cost_minor'] as int,
-            pvpMinor: r['pvp_minor'] as int,
+            name: current['name_snapshot'] as String,
+            minimumPeople: current['minimum_people'] as int,
+            fixedCostMinor: current['fixed_cost_minor'] as int,
+            productsCostMinor: current['products_cost_minor'] as int,
+            totalCostMinor: current['total_cost_minor'] as int,
+            unitCostMinor: current['unit_cost_minor'] as int,
+            pvpMinor: current['pvp_minor'] as int,
             isActive: r['is_active'] == 1,
             createdAtUtc: DateTime.parse(r['occurred_at_utc'] as String),
-            sourceAccountName: r['source_account_name_snapshot'] as String?,
+            sourceAccountName:
+                current['source_account_name_snapshot'] as String?,
             products: List.unmodifiable(
               parts.map((p) => '${p['quantity']} × ${p['name_snapshot']}'),
             ),

@@ -1,4 +1,5 @@
 import '../domain/stock_adjustment_store.dart';
+import '../domain/catalog_corrections_store.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/domain/money.dart';
@@ -10,6 +11,9 @@ class InventoryController extends ChangeNotifier {
   InventoryController({required this.store});
 
   final InventoryStore store;
+  CatalogCorrectionsStore? get corrections => store is CatalogCorrectionsStore
+      ? store as CatalogCorrectionsStore
+      : null;
   StockAdjustmentStore? get adjustments =>
       store is StockAdjustmentStore ? store as StockAdjustmentStore : null;
   InventorySnapshot? snapshot;
