@@ -9,7 +9,7 @@ El costo fijo de Eventos financiado por Inversión se suma al saldo pendiente de
 Nequi. Los premios consumidos no duplican la inversión. **Ver historial** reúne
 los movimientos anteriores y actuales sin un bloque adicional. Abre **Iniciar
 Valinor Sanctum.cmd**; usa la base de desarrollo existente, con respaldo al migrar
-al esquema 29. Producción 1.8.0 usa Documentos y el esquema 27.
+al esquema 29. Producción 1.9.0 usa Documentos y el esquema 29.
 [Funcionamiento de inversión](docs/68-inversion-por-recuperar.md). Tesorería ya no muestra Pagos a proveedores; las devoluciones de inversión usan Registrar devolución. [Ajuste 0.32.1](docs/69-tesoreria-sin-proveedores.md).
 
 Se conserva la última versión de cada edición. Publicar Producción mantiene la
@@ -35,7 +35,7 @@ Consulta [el incremento 07 y sus verificaciones](docs/23-incremento-07.md), [su 
 
 El ajuste 0.7.2 se describe en [Filtros del catálogo](docs/25-filtros-catalogo.md), con [lista de categorías](docs/images/catalog-category-options.png) y [productos filtrados](docs/images/catalog-filtered.png). Son vistas de pruebas con datos sintéticos. La entrega 0.7.1 se conserva como antecedente en [Catálogo de consulta](docs/24-catalogo-consulta.md).
 
-La **edición de Producción 1.8.0** se instala con `dist/Valinor-Sanctum-1.8.0-Produccion-Instalar.exe`. Se identifica como **Producción** en ventana, interfaz y accesos; usa `%USERPROFILE%\Documents\sanctum2.sqlite3` y `legacy-treasury.json`. Los archivos colocados por el propietario fueron verificados en solo lectura. Si falta la base, crea Valinor/COP/0 decimales; si existe, conserva sus datos. Instalación, actualización y desinstalación conservan base e historial. El paquete no incluye datos privados. [Producción 1.8.0, actualización y verificaciones](docs/100-produccion-180.md).
+La **edición de Producción 1.9.0** se instala con `dist/Valinor-Sanctum-1.9.0-Produccion-Instalar.exe`. Se identifica como **Producción** en ventana, interfaz y accesos; usa `%USERPROFILE%\Documents\sanctum2.sqlite3` y `legacy-treasury.json`. Los archivos colocados por el propietario fueron verificados en solo lectura. Si falta la base, crea Valinor/COP/0 decimales; si existe, conserva sus datos. Instalación, actualización y desinstalación conservan base e historial. El paquete no incluye datos privados. [Producción 1.9.0, actualización y verificaciones](docs/106-produccion-190.md).
 
 La **edición de desarrollo portable 0.49.2** está en `dist/ValinorSanctum2` y en `dist/valinor-sanctum-2-0.49.2-development-windows-x64.zip`. **Iniciar Valinor Sanctum.cmd** abre esta edición y usa la base `data/development/valinor/sanctum2.sqlite3`, seleccionada por `data/development/active-workspace.json`. Conserva DLL y carpeta data junto al ejecutable; el ZIP no incluye la base. [Inversión y devoluciones](docs/68-inversion-por-recuperar.md).
 
@@ -43,7 +43,7 @@ En **Eventos**, **Pagar costo fijo desde** permite elegir **Inversión** además
 
 La **forma de pago** se elige junto al total y aplica a toda la cuenta. **Dividir cuenta** reparte el total entre Efectivo, Transferencia y Deudas, usando la persona del encabezado. Al guardar bloquea el selector con **Pago dividido**. **Editar división** revisa los importes; **Volver a pago único** limpia el reparto y pide elegir un medio. Si cambia el consumo, hay que revisar la división antes de registrar, incluso tras reabrir. Reportes e historial conservan los importes por medio y los productos se entregan una sola vez. [Pago por cuenta 0.30.0](docs/64-pago-por-cuenta.md).
 
-Ambas ediciones conservan sus datos en ubicaciones distintas. Desarrollo portable 0.49.2 conserva su base independiente y la actualiza a v29 con respaldo previo. Producción 1.8.0 actualiza Documentos a v27 con respaldo previo y conserva los ingresos pendientes. Los ejecutables anteriores no pueden abrir bases de versiones más nuevas. El original permanece solo lectura y no comparte base con esta app.
+Ambas ediciones conservan sus datos en ubicaciones distintas. Desarrollo portable 0.49.2 conserva su base independiente y la actualiza a v29 con respaldo previo. Producción 1.9.0 actualiza Documentos a v29 con respaldo previo y conserva los ingresos pendientes. Los ejecutables anteriores no pueden abrir bases de versiones más nuevas. El original permanece solo lectura y no comparte base con esta app.
 
 Si aparece `database v10 is newer than supported v9` u otro aviso de base más nueva, se ha abierto un bundle antiguo. Cierra esa ventana y abre el acceso de la edición correspondiente: Producción instalada o Desarrollo desde la raíz. No borres ni reinicies la base para resolver un ejecutable antiguo.
 
