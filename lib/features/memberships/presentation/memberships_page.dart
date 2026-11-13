@@ -6,6 +6,21 @@ import '../../quick_sales/domain/quick_sales_store.dart';
 import '../../../core/domain/money.dart';
 import '../domain/membership.dart';
 
+const _birthMonths = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
 String membershipDate(DateTime? day) => day == null
     ? '—'
     : '${day.day.toString().padLeft(2, '0')}/${day.month.toString().padLeft(2, '0')}/${day.year}';
@@ -24,6 +39,7 @@ class MembershipBenefitsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now().toUtc(),
         active = member.activeAt(DateTime.now().toUtc());
+    final birthday = member.birthdayNoticeAt(now);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 10),
@@ -37,6 +53,7 @@ class MembershipBenefitsPanel extends StatelessWidget {
         runSpacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          if (birthday != null) Text(birthday),
           Text(
             'Mensualidad Élfica · ${member.statusAt(now)}\n${membershipDate(member.starts)} al ${membershipDate(member.ends)}',
           ),
@@ -57,11 +74,13 @@ class MembershipsPage extends StatefulWidget {
     required this.debtors,
     required this.sales,
     required this.onEnroll,
+    this.onPeopleChanged,
   });
   final MembershipStore store;
   final DebtorsStore debtors;
   final QuickSalesStore sales;
   final Future<void> Function(String personId) onEnroll;
+  final VoidCallback? onPeopleChanged;
   @override
   State<MembershipsPage> createState() => _MembershipsPageState();
 }
@@ -104,10 +123,8 @@ class _MembershipsPageState extends State<MembershipsPage> {
   Future<void> edit([Membership? member]) async {
     final name = TextEditingController(text: member?.name ?? ''),
         email = TextEditingController(text: member?.email ?? ''),
-        day = TextEditingController(text: member?.birthDay?.toString() ?? ''),
-        month = TextEditingController(
-          text: member?.birthMonth?.toString() ?? '',
-        );
+        day = TextEditingController(text: member?.birthDay?.toString() ?? '');
+    int? birthMonth = member?.birthMonth;
     String? personId = member?.personId, dialogError;
     bool saving = false;
     final form = GlobalKey<FormState>();
@@ -151,8 +168,7 @@ class _MembershipsPageState extends State<MembershipsPage> {
                                       .firstOrNull;
                                   email.text = saved?.email ?? '';
                                   day.text = saved?.birthDay?.toString() ?? '';
-                                  month.text =
-                                      saved?.birthMonth?.toString() ?? '';
+                                  birthMonth = saved?.birthMonth;
                                 });
                               },
                       ),
@@ -189,13 +205,29 @@ class _MembershipsPageState extends State<MembershipsPage> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: TextFormField(
-                            controller: month,
-                            enabled: !saving,
-                            keyboardType: TextInputType.number,
+                          child: DropdownButtonFormField<int>(
+                            key: ValueKey('membership-birth-month-$personId'),
+                            initialValue: birthMonth ?? 0,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Mes de nacimiento',
                             ),
+                            items: [
+                              const DropdownMenuItem(
+                                value: 0,
+                                child: Text('Sin especificar'),
+                              ),
+                              for (var i = 0; i < _birthMonths.length; i++)
+                                DropdownMenuItem(
+                                  value: i + 1,
+                                  child: Text(_birthMonths[i]),
+                                ),
+                            ],
+                            onChanged: saving
+                                ? null
+                                : (value) => update(() {
+                                    birthMonth = value == 0 ? null : value;
+                                  }),
                           ),
                         ),
                       ],
@@ -223,10 +255,8 @@ class _MembershipsPageState extends State<MembershipsPage> {
                   ? null
                   : () async {
                       if (!form.currentState!.validate()) return;
-                      if ((day.text.isNotEmpty &&
-                              int.tryParse(day.text) == null) ||
-                          (month.text.isNotEmpty &&
-                              int.tryParse(month.text) == null)) {
+                      if (day.text.isNotEmpty &&
+                          int.tryParse(day.text) == null) {
                         update(() => dialogError = 'Revisa el día y mes.');
                         return;
                       }
@@ -238,9 +268,12 @@ class _MembershipsPageState extends State<MembershipsPage> {
                           name: name.text,
                           email: email.text,
                           birthDay: int.tryParse(day.text),
-                          birthMonth: int.tryParse(month.text),
+                          birthMonth: birthMonth,
                         );
-                        if (context.mounted) Navigator.pop(context);
+                        if (context.mounted) {
+                          widget.onPeopleChanged?.call();
+                          Navigator.pop(context);
+                        }
                       } catch (e) {
                         if (context.mounted) {
                           update(() {
@@ -261,7 +294,6 @@ class _MembershipsPageState extends State<MembershipsPage> {
     name.dispose();
     email.dispose();
     day.dispose();
-    month.dispose();
     if (mounted) await reload();
   }
 

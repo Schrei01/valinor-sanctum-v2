@@ -36,6 +36,34 @@ class Membership {
   final int moneyScale;
   final String currencyCode;
   int get voucherRemainingMinor => voucherGrantedMinor - voucherUsedMinor;
+  int? daysUntilBirthday(DateTime utc) {
+    final month = birthMonth, day = birthDay;
+    if (month == null || day == null || month < 1 || month > 12 || day < 1) {
+      return null;
+    }
+    final valid = DateTime.utc(2000, month, day);
+    if (valid.month != month || valid.day != day) return null;
+    final today = membershipDay(utc);
+    DateTime occurrence(int year) {
+      final last = DateTime.utc(year, month + 1, 0).day;
+      return DateTime.utc(year, month, day > last ? last : day);
+    }
+
+    var next = occurrence(today.year);
+    if (next.isBefore(today)) next = occurrence(today.year + 1);
+    return next.difference(today).inDays;
+  }
+
+  String? birthdayNoticeAt(DateTime utc) {
+    final days = daysUntilBirthday(utc);
+    if (days == null || days > 7) return null;
+    return days == 0
+        ? 'Cumpleaños hoy'
+        : days == 1
+        ? 'Cumpleaños mañana'
+        : 'Cumpleaños en $days días';
+  }
+
   bool activeAt(DateTime utc) =>
       starts != null &&
       ends != null &&

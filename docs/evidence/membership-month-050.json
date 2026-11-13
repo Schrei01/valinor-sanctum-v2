@@ -1,0 +1,61 @@
+{
+  "version": "0.50.0+88",
+  "edition": "Development",
+  "date": "2026-11-13",
+  "schema": 29,
+  "schema_changed": false,
+  "behavior": [
+    "Spanish month names January to December",
+    "Unspecified is null; month names map to 1-12",
+    "Existing birth month preloaded in edit and existing-person selection"
+  ],
+  "validation": {
+    "images_inspected": [
+      "month-options-400",
+      "registration-1120"
+    ],
+    "format_changes": 0,
+    "format_files": 247,
+    "analysis": "No issues found",
+    "existing_widget_tests_passed": 2,
+    "verified": [
+      "March saves 3",
+      "Existing June preloaded",
+      "Unspecified saves null"
+    ],
+    "release": "success",
+    "widths": [
+      1120,
+      400
+    ]
+  },
+  "artifact": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.50.0-development-windows-x64.zip",
+    "edition": "Development",
+    "files": 19,
+    "bytes": 15497182,
+    "sha256": "E7FDC92320ECE39233DCDC31C8CC3F1C03EA603271DA33435C850A5A2C7DF4E3",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe"
+  },
+  "native": {
+    "integrity": "ok",
+    "responding": true,
+    "schema": 29,
+    "opened": true,
+    "tables": 87,
+    "foreign_key_violations": 0,
+    "pid": 17928
+  },
+  "production": {
+    "operational_database_opened": false,
+    "files_preserved": 39
+  },
+  "git": {
+    "merge": "pending owner review and full green CI",
+    "branch": "codex/membresias-selector-mes",
+    "base": "main",
+    "tag": "not_created_before_integration"
+  }
+}

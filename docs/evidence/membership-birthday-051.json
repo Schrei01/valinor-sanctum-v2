@@ -1,0 +1,69 @@
+{
+  "version": "0.51.0+89",
+  "edition": "Development",
+  "date": "2026-11-13",
+  "schema": 29,
+  "schema_changed": false,
+  "policy": {
+    "leap_day_non_leap_year": "February 28",
+    "include_birthday": true,
+    "requires_active_membership": false,
+    "only_registered_with_birth_day_and_month": true,
+    "global_and_person_card": true,
+    "refresh_after_save": true,
+    "timezone": "America/Bogota",
+    "days_before": 7
+  },
+  "validation": {
+    "release": "success",
+    "failed": 0,
+    "coverage": [
+      "0 to 7 days inclusive",
+      "next year and Bogota midnight",
+      "February 29",
+      "missing and invalid dates",
+      "expired and never-paid people",
+      "expiry and birthday alerts coexist",
+      "proximity sorting and opening memberships",
+      "profile-save refresh callback",
+      "month selector and workspace regression"
+    ],
+    "analysis": "No issues found",
+    "format_files": 250,
+    "widget_widths": [
+      1120,
+      400
+    ],
+    "format_changes": 0,
+    "selected_tests_passed": 16
+  },
+  "artifact": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.51.0-development-windows-x64.zip",
+    "edition": "Development",
+    "files": 19,
+    "bytes": 15504421,
+    "sha256": "0E605908851AF6B86969E5B692C1CA5C3945D44670CB41D1FFDD72CCB9610751",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe"
+  },
+  "native": {
+    "schema": 29,
+    "pid": 22868,
+    "tables": 87,
+    "responding": true,
+    "integrity": "ok",
+    "foreign_key_violations": 0,
+    "opened": true
+  },
+  "production": {
+    "files_preserved": 39,
+    "operational_database_opened": false
+  },
+  "git": {
+    "pull_request": 14,
+    "base": "main",
+    "tag": "not_created_before_integration",
+    "merge": "pending owner review and full green CI"
+  }
+}
