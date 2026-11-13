@@ -105,7 +105,7 @@ Valinor Sanctum 2.0 - Edición para Windows x64
 Extrae la carpeta completa y abre valinor_sanctum_2.exe.
 Conserva las DLL y la carpeta data junto al ejecutable.
 La app abre en Ventas. El menú contiene Catálogo, Compras, Ventas, Deudores,
-Tesorería, Eventos y Reportes. Si la base es nueva, Valinor se configura
+Tesorería, Eventos, Membresías y Reportes. Si la base es nueva, Valinor se configura
 automáticamente con COP, 0 decimales y hora de Bogotá, sin formularios de alta.
 En Compras indica arriba Total pagado, Pagar desde y una categoría común.
 Agrega los productos con Agregar producto; puedes crear o reponer cada uno.

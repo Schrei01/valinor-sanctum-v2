@@ -1,0 +1,53 @@
+{
+  "version": "0.49.1+85",
+  "edition": "Development",
+  "date": "2026-11-13",
+  "schema": 29,
+  "schema_changed": false,
+  "diagnosis": {
+    "failed_commit": "2744c8fa4c83ed59f3cafd6d0d1a04cfa4444083",
+    "run": "https://github.com/Schrei01/valinor-sanctum-v2/actions/runs/43378785036",
+    "passed": 964,
+    "locally_reproduced": true,
+    "test": "test/unit/account_payment_split_test.dart: controller inherits the header person and a later line selection changes only that line",
+    "cause": "Voucher calculation recreated unchanged line objects",
+    "failed": 1,
+    "existing_assertion_preserved": true
+  },
+  "validation": {
+    "new_regression": "Earlier voucher coverage always consumes remaining budget, including unchanged lines; reduced and expired grants are recalculated",
+    "release_build": "success",
+    "analysis": "No issues found",
+    "final_unit_run_passed": 6,
+    "failed": 0,
+    "focused_distinct_passed": 21,
+    "format_changes": 0,
+    "overlap": 5,
+    "format_files": 247,
+    "first_run_passed": 20
+  },
+  "artifact": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.49.1-development-windows-x64.zip",
+    "edition": "Development",
+    "files": 19,
+    "bytes": 15496039,
+    "sha256": "35A39AC796EB483DC42E57D05A16952FDE2720052E4E156FCF158138A1CEA5C8",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": null
+  },
+  "production": {
+    "process_id": 22228,
+    "operational_database_opened": false,
+    "files_unchanged": 39,
+    "app_closed": false
+  },
+  "git": {
+    "tag": "not_created_before_integration",
+    "branch": "codex/membresias-bono-tienda",
+    "base": "codex/deudores-saldo-anterior",
+    "pull_request": 12,
+    "merge": "pending_owner_review_and_complete_green_ci"
+  },
+  "local_publication_at_commit": "Archive ready; waiting for the owner to close Development so Windows releases the executable"
+}

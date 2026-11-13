@@ -137,6 +137,7 @@ class ReportSaleLine {
     required this.transferMinor,
     required this.creditMinor,
     required this.isEvent,
+    this.voucherMinor = 0,
   });
   final String id,
       documentId,
@@ -153,6 +154,7 @@ class ReportSaleLine {
       transferMinor,
       creditMinor;
   final bool isEvent;
+  final int voucherMinor;
   int get marginMinor =>
       reportMinor(BigInt.from(salesMinor) - BigInt.from(costMinor));
 }
@@ -177,12 +179,13 @@ class ReportItem {
       if (sale.cashMinor > 0) 'Efectivo',
       if (sale.transferMinor > 0) 'Transferencia',
       if (sale.creditMinor > 0) 'Deudas',
+      if (sale.voucherMinor > 0) 'Bono',
       if (BigInt.from(sale.salesMinor) >
           BigInt.from(sale.cashMinor) +
               BigInt.from(sale.transferMinor) +
               BigInt.from(sale.creditMinor))
         'Otro',
-      if (sale.salesMinor == 0) 'Sin cobro',
+      if (sale.salesMinor == 0 && sale.voucherMinor == 0) 'Sin cobro',
     ].join(' / '),
   );
   final String id, productName, paymentMethod;
@@ -397,6 +400,8 @@ class ReportDebtorBalance {
 }
 
 class ReportsSnapshot {
+  int get voucherConsumptionMinor =>
+      reportSum(sales.map((s) => s.voucherMinor));
   ReportsSnapshot({
     required this.period,
     required List<ReportAccount> accounts,

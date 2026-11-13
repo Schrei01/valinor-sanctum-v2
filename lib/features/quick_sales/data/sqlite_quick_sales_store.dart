@@ -1,4 +1,6 @@
 import 'dart:convert';
+import '../domain/account_voucher.dart';
+import '../../memberships/data/sqlite_membership_voucher_store.dart';
 import '../../memberships/data/sqlite_membership_store.dart';
 import 'bulk_catalog_defaults.dart';
 import '../../debtors/domain/debtors_store.dart';
@@ -199,24 +201,58 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
         final payload =
             jsonDecode(row['canonical_payload'] as String)
                 as Map<String, dynamic>;
+        final voucherPlans = (payload['voucherMinor'] as int? ?? 0) == 0
+            ? <Map<String, Object?>>[]
+            : await txn.query(
+                'membership_voucher_plans',
+                where: 'request_id=?',
+                whereArgs: [row['command_id']],
+              );
+        final vouchers = {
+          for (final v
+              in (voucherPlans.isEmpty
+                  ? []
+                  : jsonDecode(
+                          voucherPlans.single['allocations_json'] as String,
+                        )
+                        as List))
+            v['lineId'] as String: v['amountMinor'] as int,
+        };
         if (payload['version'] == 4) {
           for (final line
               in (payload['lines'] as List).cast<Map<String, dynamic>>()) {
             final parts = splitFacts.where(
               (f) => f['source_line_id'] == line['lineId'],
             );
+            final bonus = vouchers[line['lineId']] ?? 0;
+            final breakdown = <String, int>{};
+            for (final part in parts) {
+              final label = part['payment_option_label_snapshot'] as String;
+              breakdown.update(
+                label,
+                (v) => v + (part['total_minor'] as int),
+                ifAbsent: () => part['total_minor'] as int,
+              );
+            }
+            if (bonus > 0) {
+              final debt = (breakdown['Deudas'] ?? 0) - bonus;
+              if (debt == 0) {
+                breakdown.remove('Deudas');
+              } else {
+                breakdown['Deudas'] = debt;
+              }
+              breakdown['Bono'] = bonus;
+            }
             facts.add({
               'product_name_snapshot': line['productName'],
               'quantity': line['quantity'],
               'unit_price_minor': line['unitPriceMinor'],
               'total_minor': line['totalMinor'],
-              'payment_option_label_snapshot': 'Dividido',
-              'payment_breakdown': {
-                for (final part in parts)
-                  part['payment_option_label_snapshot'] as String:
-                      part['total_minor'] as int,
-              },
-              'is_credit': parts.any((p) => p['is_credit'] == 1) ? 1 : 0,
+              'payment_option_label_snapshot': bonus > 0
+                  ? breakdown.keys.join(' / ')
+                  : 'Dividido',
+              'payment_breakdown': breakdown,
+              'is_credit': (breakdown['Deudas'] ?? 0) > 0 ? 1 : 0,
             });
           }
         }
@@ -225,7 +261,10 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
             commandId: row['command_id'] as String,
             label: payload['label'] as String,
             soldAtUtc: DateTime.parse(row['occurred_at_utc'] as String).toUtc(),
-            result: _prior(logged, row['canonical_payload'] as String),
+            result: SqliteMembershipVoucherStore.visible(
+              _prior(logged, row['canonical_payload'] as String),
+              (payload['voucherMinor'] as int?) ?? 0,
+            ),
             lines: facts
                 .map(
                   (f) => ConfirmedQuickSaleLine(
@@ -313,6 +352,12 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
     final seen = <String>{};
     for (final line in input.lines) {
       _id(line.id);
+      if (line.voucherMinor < 0 ||
+          (!line.useVoucher && line.voucherMinor != 0)) {
+        throw const QuickSalesValidationException(
+          'Revisa el bono de la línea.',
+        );
+      }
       if (!seen.add(line.id) ||
           line.quantityText.length > 32 ||
           (line.unitPriceMinor != null && line.unitPriceMinor! < 0)) {
@@ -358,6 +403,18 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
           );
         }
         customer = person.single['name'] as String;
+      }
+      for (final line in input.lines.where((l) => l.voucherMinor > 0)) {
+        final period = await txn.query(
+          'membership_periods',
+          where: 'id=? AND person_id=?',
+          whereArgs: [line.voucherPeriodId, input.debtorId],
+        );
+        if (period.length != 1) {
+          throw const QuickSalesValidationException(
+            'El bono indicado no pertenece a esta persona. Actualiza y revisa la cuenta.',
+          );
+        }
       }
       final rows = await txn.query(
         'quick_sales_accounts',
@@ -442,6 +499,12 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
       }
       for (var i = 0; i < input.lines.length; i++) {
         final line = input.lines[i];
+        final storedParts = _storedParts(line);
+        final neutralVoucherLine =
+            input.lines.any((l) => l.voucherMinor > 0) &&
+            input.paymentMode == 'single' &&
+            input.accountPaymentOptionId == null &&
+            lineGross(line) == BigInt.zero;
         await txn.insert('quick_sales_lines', {
           'id': line.id,
           'account_id': input.id,
@@ -450,14 +513,23 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
           'quantity_text': line.quantityText,
           'unit_price_minor': line.unitPriceMinor,
           if (line.membershipDiscount) 'membership_discount': 1,
+          if (line.useVoucher || line.voucherMinor > 0) ...{
+            'voucher_selected': line.useVoucher ? 1 : 0,
+            'voucher_minor': line.voucherMinor,
+            'voucher_period_id': line.voucherPeriodId,
+          },
           'payment_split_json': jsonEncode(
-            line.paymentParts.map((p) => p.toJson()).toList(),
+            storedParts.map((p) => p.toJson()).toList(),
           ),
           'payment_option_id':
-              line.paymentOptionId == QuickPaymentOption.creditId
+              line.voucherMinor > 0 ||
+                  line.paymentOptionId == QuickPaymentOption.creditId
               ? null
               : line.paymentOptionId,
-          'is_credit': line.paymentOptionId == QuickPaymentOption.creditId
+          'is_credit':
+              neutralVoucherLine ||
+                  line.voucherMinor == 0 &&
+                      line.paymentOptionId == QuickPaymentOption.creditId
               ? 1
               : 0,
         });
@@ -560,7 +632,8 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
         );
       }
       if (account.paymentMode == 'single' &&
-          account.accountPaymentOptionId == null) {
+          account.accountPaymentOptionId == null &&
+          accountPayable(account) > BigInt.zero) {
         throw const QuickSalesValidationException(
           'Selecciona la forma de pago de la cuenta.',
         );
@@ -575,12 +648,28 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
           'Escribe un nombre y agrega productos a la cuenta.',
         );
       }
+      await SqliteMembershipVoucherStore.prepare(
+        txn,
+        account,
+        commandId,
+        occurredAtUtc,
+      );
       await SqliteMembershipStore.prepareSale(
         txn,
         account,
         commandId,
         occurredAtUtc,
       );
+      if (account.lines.any((l) => l.voucherMinor > 0)) {
+        final settlement = await _account(txn, rows.single, settlement: true);
+        return _prepareSplit(
+          txn,
+          settlement,
+          profile,
+          commandId,
+          occurredAtUtc,
+        );
+      }
       if (account.lines.any((l) => l.isSplit)) {
         return _prepareSplit(txn, account, profile, commandId, occurredAtUtc);
       }
@@ -730,10 +819,17 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
   Future<QuickSaleResult> confirmPrepared(String commandId) async {
     _id(commandId);
     try {
-      return await _database.database.transaction(
-        (txn) => _confirm(txn, commandId),
-        exclusive: true,
-      );
+      return await _database.database.transaction((txn) async {
+        final raw = await _confirm(txn, commandId);
+        final voucher = await SqliteMembershipVoucherStore.settle(
+          _database,
+          txn,
+          commandId,
+          raw,
+          synthetic: synthetic,
+        );
+        return SqliteMembershipVoucherStore.visible(raw, voucher);
+      }, exclusive: true);
     } on SalesValidationException catch (e) {
       await _reject(commandId, e.message);
       throw QuickSalesValidationException(e.message);
@@ -1217,6 +1313,8 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
       'account_revision': account.revision,
       'canonical_payload': jsonEncode({
         'version': 4,
+        if (accountVoucher(account) > BigInt.zero)
+          'voucherMinor': accountVoucher(account).toInt(),
         'profileId': profile.profileId,
         'currency': profile.currencyCode,
         'scale': profile.moneyScale,
@@ -1475,8 +1573,9 @@ WHERE line.account_id='system:legacy-customer-receivables'
 
   static Future<QuickSaleAccount> _account(
     DatabaseExecutor txn,
-    Map<String, Object?> row,
-  ) async {
+    Map<String, Object?> row, {
+    bool settlement = false,
+  }) async {
     final lines = await txn.query(
       'quick_sales_lines',
       where: 'account_id=?',
@@ -1498,28 +1597,7 @@ WHERE line.account_id='system:legacy-customer-receivables'
           ? null
           : DateTime.parse(row['created_at_utc'] as String).toUtc(),
       confirmedDocumentId: row['confirmed_document_id'] as String?,
-      lines: lines
-          .map(
-            (l) => QuickSaleLine(
-              id: l['id'] as String,
-              productId: l['product_id'] as String?,
-              quantityText: l['quantity_text'] as String,
-              unitPriceMinor: l['unit_price_minor'] as int?,
-              membershipDiscount: l['membership_discount'] == 1,
-              paymentParts: List.unmodifiable(
-                (jsonDecode(l['payment_split_json'] as String) as List).map(
-                  (p) => QuickLinePaymentPart(
-                    p['paymentOptionId'] as String,
-                    p['amountMinor'] as int,
-                  ),
-                ),
-              ),
-              paymentOptionId: l['is_credit'] == 1
-                  ? QuickPaymentOption.creditId
-                  : l['payment_option_id'] as String?,
-            ),
-          )
-          .toList(),
+      lines: lines.map((l) => _line(l, row, settlement: settlement)).toList(),
     );
   }
 
@@ -1536,7 +1614,9 @@ WHERE line.account_id='system:legacy-customer-receivables'
       preparedAtUtc: DateTime.parse(row['prepared_at_utc'] as String).toUtc(),
       status: row['status'] as String,
       rejectionReason: row['rejection_reason'] as String?,
-      creditMinor: p['creditMinor'] as int? ?? 0,
+      creditMinor:
+          (p['creditMinor'] as int? ?? 0) - (p['voucherMinor'] as int? ?? 0),
+      voucherMinor: p['voucherMinor'] as int? ?? 0,
       customerName: p['customerName'] as String? ?? '',
       debtorId: p['debtorId'] as String?,
     );
@@ -1566,6 +1646,82 @@ WHERE line.account_id='system:legacy-customer-receivables'
     );
   }
 
+  static List<QuickLinePaymentPart> _storedParts(QuickSaleLine line) {
+    if (line.voucherMinor == 0) return line.paymentParts;
+    final parts = <String, int>{};
+    if (line.isSplit) {
+      for (final p in line.paymentParts) {
+        parts[p.paymentOptionId] = p.amountMinor;
+      }
+    } else if (line.paymentOptionId != null &&
+        linePayable(line) > BigInt.zero) {
+      parts[line.paymentOptionId!] = linePayable(line).toInt();
+    }
+    parts.update(
+      QuickPaymentOption.creditId,
+      (v) => v + line.voucherMinor,
+      ifAbsent: () => line.voucherMinor,
+    );
+    return [
+      for (final p in parts.entries) QuickLinePaymentPart(p.key, p.value),
+    ];
+  }
+
+  static QuickSaleLine _line(
+    Map<String, Object?> l,
+    Map<String, Object?> account, {
+    bool settlement = false,
+  }) {
+    final voucher = l['voucher_minor'] as int? ?? 0;
+    var parts = (jsonDecode(l['payment_split_json'] as String) as List)
+        .map(
+          (p) => QuickLinePaymentPart(
+            p['paymentOptionId'] as String,
+            p['amountMinor'] as int,
+          ),
+        )
+        .toList();
+    String? option = l['is_credit'] == 1
+        ? QuickPaymentOption.creditId
+        : l['payment_option_id'] as String?;
+    if (voucher > 0 && !settlement) {
+      parts = [
+        for (final p in parts)
+          if (p.paymentOptionId != QuickPaymentOption.creditId ||
+              p.amountMinor > voucher)
+            QuickLinePaymentPart(
+              p.paymentOptionId,
+              p.amountMinor -
+                  (p.paymentOptionId == QuickPaymentOption.creditId
+                      ? voucher
+                      : 0),
+            ),
+      ];
+      if (account['payment_mode'] == 'single') {
+        parts = [];
+        option = account['account_payment_option_id'] as String?;
+      } else if (parts.isEmpty) {
+        option = null;
+      }
+    }
+    if (!settlement && account['payment_mode'] == 'single') {
+      option = account['account_payment_option_id'] as String?;
+      parts = [];
+    }
+    return QuickSaleLine(
+      id: l['id'] as String,
+      productId: l['product_id'] as String?,
+      quantityText: l['quantity_text'] as String,
+      unitPriceMinor: l['unit_price_minor'] as int?,
+      membershipDiscount: l['membership_discount'] == 1,
+      useVoucher: l['voucher_selected'] == 1,
+      voucherMinor: voucher,
+      voucherPeriodId: l['voucher_period_id'] as String?,
+      paymentParts: parts,
+      paymentOptionId: option,
+    );
+  }
+
   static bool _sameLines(List<QuickSaleLine> a, List<QuickSaleLine> b) =>
       a.length == b.length &&
       List.generate(
@@ -1576,6 +1732,9 @@ WHERE line.account_id='system:legacy-customer-receivables'
             a[i].quantityText == b[i].quantityText &&
             a[i].unitPriceMinor == b[i].unitPriceMinor &&
             a[i].membershipDiscount == b[i].membershipDiscount &&
+            a[i].useVoucher == b[i].useVoucher &&
+            a[i].voucherMinor == b[i].voucherMinor &&
+            a[i].voucherPeriodId == b[i].voucherPeriodId &&
             a[i].paymentOptionId == b[i].paymentOptionId &&
             jsonEncode(a[i].paymentParts.map((p) => p.toJson()).toList()) ==
                 jsonEncode(b[i].paymentParts.map((p) => p.toJson()).toList()),

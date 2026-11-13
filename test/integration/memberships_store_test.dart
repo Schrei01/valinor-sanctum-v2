@@ -89,7 +89,12 @@ void main() {
         customerName: a.customerName,
         debtorId: a.debtorId,
         lines: allocated,
-        paymentMode: split ? 'split' : 'legacy',
+        paymentMode: split
+            ? 'split'
+            : (lines.any((l) => l.useVoucher) ? 'single' : 'legacy'),
+        accountPaymentOptionId: !split && lines.any((l) => l.useVoucher)
+            ? 'quick-default:EFECTIVO'
+            : null,
         paymentSplitBasis: split ? quickConsumptionKey(allocated) : '',
       ),
     );
@@ -112,7 +117,9 @@ void main() {
     quantityText: '$qty',
     unitPriceMinor: price,
     paymentOptionId: 'quick-default:EFECTIVO',
-    membershipDiscount: discount,
+    useVoucher: discount,
+    voucherMinor: discount ? (price * qty > 30000 ? 30000 : price * qty) : 0,
+    voucherPeriodId: discount ? 'membership:enroll' : null,
   );
   Future<void> prepare(String id, QuickSaleAccount a) => sales.prepareSale(
     commandId: id,
@@ -187,45 +194,32 @@ void main() {
     expect((await SqliteTreasuryStore(app).load()).cashMinor, 60000);
   });
   test(
-    'included delivery consumes one unit and cost exactly once, never cash',
+    'old included booster delivery is retired and never consumes stock',
     () async {
       await enroll();
-      final period = (await members.load()).single.periodId!;
-      await members.claimIncluded(
-        commandId: 'free',
-        periodId: period,
-        productId: 'booster',
-        atUtc: now,
-      );
-      await members.claimIncluded(
-        commandId: 'free',
-        periodId: period,
-        productId: 'booster',
-        atUtc: now,
-      );
-      expect((await members.load()).single.includedClaimed, isTrue);
-      expect((await sales.load()).stockQuantityFor('booster'), 9);
-      expect((await SqliteTreasuryStore(app).load()).cashMinor, 0);
+      final member = (await members.load()).single;
+      expect(member.voucherRemainingMinor, 30000);
       await expectLater(
         members.claimIncluded(
-          commandId: 'another-free',
-          periodId: period,
+          commandId: 'old-free',
+          periodId: member.periodId!,
           productId: 'booster',
           atUtc: now,
         ),
         throwsA(isA<QuickSalesValidationException>()),
       );
+      expect((await sales.load()).stockQuantityFor('booster'), 10);
     },
   );
-  test('two discounted boosters consume stock and charge 40000 once', () async {
+  test('voucher covers 30000 of a 40000 consumption exactly once', () async {
     await enroll();
     final a = await account('discount', [booster('b-line', qty: 2)]);
     await prepare('discount-sale', a);
     await sales.confirmPrepared('discount-sale');
     await sales.confirmPrepared('discount-sale');
-    expect((await members.load()).single.discountsUsed, 2);
+    expect((await members.load()).single.voucherUsedMinor, 30000);
     expect((await sales.load()).stockQuantityFor('booster'), 8);
-    expect((await SqliteTreasuryStore(app).load()).cashMinor, 40000);
+    expect((await SqliteTreasuryStore(app).load()).cashMinor, 10000);
     final b = await account('over', [booster('over-line')]);
     await expectLater(
       prepare('over-sale', b),
@@ -240,35 +234,28 @@ void main() {
       isEmpty,
     );
   });
-  test(
-    'competing prepared accounts cannot use the same two discounts',
-    () async {
-      await enroll();
-      final a = await account('first', [booster('first-line', qty: 2)]),
-          b = await account('second', [booster('second-line', qty: 2)]);
-      await prepare('first-sale', a);
-      await prepare('second-sale', b);
-      await sales.confirmPrepared('first-sale');
-      await expectLater(
-        sales.confirmPrepared('second-sale'),
-        throwsA(isA<QuickSalesValidationException>()),
-      );
-      expect((await sales.load()).stockQuantityFor('booster'), 8);
-      expect((await SqliteTreasuryStore(app).load()).cashMinor, 40000);
-      expect((await members.load()).single.discountsUsed, 2);
-    },
-  );
+  test('competing prepared accounts cannot redeem the same voucher', () async {
+    await enroll();
+    final a = await account('first', [booster('first-line', qty: 2)]),
+        b = await account('second', [booster('second-line', qty: 2)]);
+    await prepare('first-sale', a);
+    await prepare('second-sale', b);
+    await sales.confirmPrepared('first-sale');
+    await expectLater(
+      sales.confirmPrepared('second-sale'),
+      throwsA(isA<QuickSalesValidationException>()),
+    );
+    expect((await sales.load()).stockQuantityFor('booster'), 8);
+    expect((await SqliteTreasuryStore(app).load()).cashMinor, 10000);
+    expect((await members.load()).single.voucherUsedMinor, 30000);
+  });
   test(
     'renewal appends a calendar period and does not reset current benefits',
     () async {
       await enroll();
-      final current = (await members.load()).single;
-      await members.claimIncluded(
-        commandId: 'free',
-        periodId: current.periodId!,
-        productId: 'booster',
-        atUtc: now,
-      );
+      final use = await account('use', [booster('use-line')]);
+      await prepare('use-sale', use);
+      await sales.confirmPrepared('use-sale');
       final a = await account('renew', [signup('renew-line')]);
       await prepare('renew-sale', a);
       await sales.confirmPrepared('renew-sale');
@@ -278,12 +265,12 @@ void main() {
       );
       expect(rows, hasLength(2));
       expect(rows.last['starts'], rows.first['ends']);
-      expect((await members.load()).single.includedClaimed, isTrue);
+      expect((await members.load()).single.voucherUsedMinor, 20000);
       final next = DateTime.parse('${rows.last['starts']}T05:00:00Z');
       final renewed = (await members.load(atUtc: next)).single;
       expect(renewed.activeAt(next), isTrue);
-      expect(renewed.includedClaimed, isFalse);
-      expect(renewed.discountsUsed, 0);
+      expect(renewed.voucherRemainingMinor, 30000);
+      expect(renewed.voucherUsedMinor, 0);
     },
   );
   test(
@@ -293,15 +280,17 @@ void main() {
         account('no-profile', [signup('no-profile-line')], owner: 'missing'),
         throwsA(isA<QuickSalesValidationException>()),
       );
-      final a = await account('no-membership', [booster('inactive')]);
       await expectLater(
-        prepare('inactive-sale', a),
+        account('no-membership', [booster('inactive')]),
         throwsA(isA<QuickSalesValidationException>()),
       );
       await enroll();
       final b = await account('wrong-price', [
-        booster('wrong-price-line', price: 19999),
+        booster('wrong-price-line', qty: 2, price: 20000),
       ]);
+      final other = await account('spent', [booster('spent-line')]);
+      await prepare('spent-sale', other);
+      await sales.confirmPrepared('spent-sale');
       await expectLater(
         prepare('wrong-price-sale', b),
         throwsA(isA<QuickSalesValidationException>()),

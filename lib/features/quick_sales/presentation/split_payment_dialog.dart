@@ -5,6 +5,7 @@ import '../../inventory/presentation/inventory_widgets.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../domain/quick_sales_store.dart';
 import '../domain/account_payment_split.dart';
+import '../domain/account_voucher.dart';
 
 class SplitPaymentSelection {
   const SplitPaymentSelection(this.parts);
@@ -47,13 +48,7 @@ class _SplitPaymentDialogState extends State<SplitPaymentDialog> {
       ),
   };
   String? error;
-  BigInt get total => widget.account.lines.fold(
-    BigInt.zero,
-    (sum, line) =>
-        sum +
-        BigInt.from(line.unitPriceMinor ?? 0) *
-            (BigInt.tryParse(line.quantityText.trim()) ?? BigInt.zero),
-  );
+  BigInt get total => accountPayable(widget.account);
   String _text(int minor) => Money.fromMinorUnits(
     minor,
     currency: widget.profile.currencyCode,

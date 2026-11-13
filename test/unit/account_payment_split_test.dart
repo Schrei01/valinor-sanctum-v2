@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:valinor_sanctum_2/core/domain/money.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/domain/account_payment_split.dart';
+import 'package:valinor_sanctum_2/features/quick_sales/domain/account_voucher.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/application/quick_sales_controller.dart';
 import '../support/fake_quick_sales_store.dart';
@@ -16,6 +17,39 @@ QuickSaleAccount account(List<QuickSaleLine> lines) => QuickSaleAccount(
 );
 
 void main() {
+  test(
+    'voucher coverage already assigned to earlier lines still consumes the budget',
+    () {
+      const lines = [
+        QuickSaleLine(
+          id: 'a',
+          productId: 'p',
+          unitPriceMinor: 20000,
+          useVoucher: true,
+          voucherMinor: 20000,
+          voucherPeriodId: 'period',
+        ),
+        QuickSaleLine(
+          id: 'b',
+          productId: 'q',
+          unitPriceMinor: 20000,
+          useVoucher: true,
+          voucherMinor: 10000,
+          voucherPeriodId: 'period',
+        ),
+      ];
+      final unchanged = allocateVoucher(lines, 30000, 'period');
+      expect(unchanged.map((l) => l.voucherMinor), [20000, 10000]);
+      final reduced = allocateVoucher(unchanged, 25000, 'period');
+      expect(reduced.map((l) => l.voucherMinor), [20000, 5000]);
+      final expired = allocateVoucher(reduced, 0, null);
+      expect(
+        expired.every((l) => l.voucherMinor == 0 && l.voucherPeriodId == null),
+        isTrue,
+      );
+      expect(lines.map((l) => l.unitPriceMinor), [20000, 20000]);
+    },
+  );
   test(
     'account allocation preserves both margins with deterministic rounding across 40 orders',
     () {
