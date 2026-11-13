@@ -354,7 +354,10 @@ class _DebtorsPageState extends State<DebtorsPage> {
         data.charges
             .where((d) => d.debtorId == person.id && d.originalCreditMinor > 0)
             .toList()
-          ..sort((a, b) => b.occurredAtUtc.compareTo(a.occurredAtUtc));
+          ..sort((a, b) {
+            final date = b.occurredAtUtc.compareTo(a.occurredAtUtc);
+            return date != 0 ? date : b.historyOrder.compareTo(a.historyOrder);
+          });
     final payments = data.payments
         .where((p) => p.debtorId == person.id)
         .toList();
@@ -550,7 +553,8 @@ class _DebtorsPageState extends State<DebtorsPage> {
                       '${d.isOpening ? 'Saldo anterior' : d.label} · ${_date(d.occurredAtUtc)}',
                     ),
                     Text(
-                      'Valor fiado: ${_money(d.originalCreditMinor)} · Pendiente: ${_money(d.remainingMinor)}',
+                      key: ValueKey('debtor-charge-history-${d.receivableId}'),
+                      'Valor fiado: ${_money(d.originalCreditMinor)} · Deuda anterior: ${d.balanceBeforeMinor == null ? 'Sin información' : _money(d.balanceBeforeMinor!)}',
                     ),
                     if (d.nameSnapshot != person.name)
                       Text('Registrada originalmente como ${d.nameSnapshot}'),

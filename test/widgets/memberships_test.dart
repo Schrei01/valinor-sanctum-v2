@@ -25,6 +25,7 @@ class MembersFake implements MembershipStore {
     birthDay: 12,
     birthMonth: 6,
     periodId: 'period',
+    voucherGrantedMinor: 30000,
     starts: membershipDay(now),
     ends: membershipNextMonth(membershipDay(now)),
   );
@@ -163,6 +164,12 @@ void main() {
       expect(find.text('Inscribir en Ventas'), findsNothing);
       expect(find.text('Renovar en Ventas'), findsOneWidget);
       await capture('directory');
+      await tester.tap(find.text('Registrar persona'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await capture('registration');
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
       await controller.load();
       final id = controller.addAccount()!;
       controller.selectDebtor(id, 'Cliente sintético');
@@ -191,26 +198,23 @@ void main() {
           ),
         ),
       );
-      final checkbox = find.byKey(ValueKey('membership-discount-${line.id}'));
+      final checkbox = find.byKey(ValueKey('membership-voucher-${line.id}'));
       await tester.ensureVisible(checkbox);
       await tester.tap(checkbox);
       await tester.pumpAndSettle();
-      expect(controller.accounts.single.lines.single.unitPriceMinor, 20000);
-      expect(
-        controller.accounts.single.lines.single.membershipDiscount,
-        isTrue,
-      );
+      expect(controller.accounts.single.lines.single.unitPriceMinor, 25000);
+      expect(controller.accounts.single.lines.single.useVoucher, isTrue);
       await tester.enterText(
         find.byKey(ValueKey('quick-quantity-${line.id}')),
         '2',
       );
       await tester.pumpAndSettle();
-      expect(
-        controller.accounts.single.lines.single.membershipDiscount,
-        isTrue,
-      );
+      expect(controller.accounts.single.lines.single.useVoucher, isTrue);
       expect(tester.takeException(), isNull);
       await capture('sales');
+      controller.selectAccountPayment(id, QuickPaymentOption.creditId);
+      await tester.pumpAndSettle();
+      expect(find.text('Cobrado: COP 0 · Deudas: COP 20.000'), findsOneWidget);
       await controller.flushAll();
       await tester.pumpWidget(const SizedBox.shrink());
     });

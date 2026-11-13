@@ -15,6 +15,9 @@ class QuickSaleLine {
     this.paymentOptionId,
     this.paymentParts = const [],
     this.membershipDiscount = false,
+    this.useVoucher = false,
+    this.voucherMinor = 0,
+    this.voucherPeriodId,
   });
   final String id;
   final String? productId;
@@ -23,6 +26,9 @@ class QuickSaleLine {
   final String? paymentOptionId;
   final List<QuickLinePaymentPart> paymentParts;
   final bool membershipDiscount;
+  final bool useVoucher;
+  final int voucherMinor;
+  final String? voucherPeriodId;
   bool get isSplit => paymentParts.isNotEmpty;
   bool get hasCredit => isSplit
       ? paymentParts.any(
@@ -101,6 +107,7 @@ String quickConsumptionKey(List<QuickSaleLine> lines) => jsonEncode([
       l.quantityText,
       l.unitPriceMinor,
       if (l.membershipDiscount) true,
+      if (l.useVoucher) ['voucher', l.voucherMinor, l.voucherPeriodId],
     ],
 ]);
 
@@ -163,6 +170,7 @@ class PreparedQuickSale {
     required this.status,
     this.rejectionReason,
     this.creditMinor = 0,
+    this.voucherMinor = 0,
     this.customerName = '',
     this.debtorId,
   });
@@ -176,6 +184,7 @@ class PreparedQuickSale {
   final String status;
   final String? rejectionReason;
   final int creditMinor;
+  final int voucherMinor;
   final String customerName;
   final String? debtorId;
 }
@@ -188,6 +197,7 @@ class QuickSaleResult {
     required this.totalMinor,
     required this.totalCostMinor,
     this.creditMinor = 0,
+    this.voucherMinor = 0,
     this.customerName = '',
     this.debtorId,
   });
@@ -197,6 +207,7 @@ class QuickSaleResult {
   final int totalMinor;
   final int totalCostMinor;
   final int creditMinor;
+  final int voucherMinor;
   final String customerName;
   final String? debtorId;
 }

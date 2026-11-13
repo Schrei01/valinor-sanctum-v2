@@ -396,7 +396,10 @@ class _ReportsPageState extends State<ReportsPage> {
                     _balances(data),
                   ],
                 );
-                final salesPanel = _salesPanel(sales);
+                final salesPanel = _salesPanel(
+                  sales,
+                  data.voucherConsumptionMinor,
+                );
                 final outflowPanel = _outflowPanel(outflows);
                 if (constraints.maxWidth >= 900) {
                   return Row(
@@ -741,7 +744,7 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  Widget _salesPanel(ReportSalesTotals totals) => Column(
+  Widget _salesPanel(ReportSalesTotals totals, [int voucher = 0]) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _sectionTitle('Ventas del período'),
@@ -783,6 +786,14 @@ class _ReportsPageState extends State<ReportsPage> {
         totals.unpricedSales,
         total: true,
       ),
+      if (voucher > 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            'Consumo con bono: ${inventoryMoney(voucher, widget.profile)}',
+            key: const Key('report-voucher-consumption'),
+          ),
+        ),
     ],
   );
   Widget _outflowPanel(ReportOutflowTotals totals) => Column(

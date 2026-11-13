@@ -17,7 +17,7 @@ import 'quick_sales_store_test.dart' show fixture;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
-    'durable registration, divided discount and gift survive reopen; debtor repayment does not renew benefits',
+    'durable registration and divided voucher consumption survive reopen; repayments never restore the grant',
     () async {
       final folder = await Directory(
         p.join(AppConfig.repositoryRootPath, 'tmp'),
@@ -101,18 +101,20 @@ void main() {
           revision: 0,
           status: 'open',
           updatedAtUtc: now,
-          lines: const [
+          lines: [
             QuickSaleLine(
               id: 'discount-line',
               productId: 'booster',
-              unitPriceMinor: 20000,
-              membershipDiscount: true,
+              unitPriceMinor: 40000,
+              useVoucher: true,
+              voucherMinor: 30000,
+              voucherPeriodId: period,
             ),
           ],
         );
         final lines = allocateAccountPayments(a, const [
-          QuickLinePaymentPart('quick-default:EFECTIVO', 10000),
-          QuickLinePaymentPart(QuickPaymentOption.creditId, 10000),
+          QuickLinePaymentPart('quick-default:EFECTIVO', 5000),
+          QuickLinePaymentPart(QuickPaymentOption.creditId, 5000),
         ]);
         final saved = await sales.saveAccount(
           SaveQuickSaleAccount(
@@ -137,27 +139,17 @@ void main() {
         sales = SqliteQuickSalesStore(app, synthetic: true);
         members = SqliteMembershipStore(app, synthetic: true);
         expect(
-          (await sales.load()).accounts.single.lines.single.membershipDiscount,
+          (await sales.load()).accounts.single.lines.single.useVoucher,
           isTrue,
         );
         await sales.confirmPrepared('discount-sale');
         await sales.confirmPrepared('discount-sale');
-        await members.claimIncluded(
-          commandId: 'gift',
-          periodId: period,
-          productId: 'booster',
-          atUtc: now,
-        );
+        await sales.confirmPrepared('discount-sale');
         await app.close();
         app = await AppDatabase.open(path: path);
         sales = SqliteQuickSalesStore(app, synthetic: true);
         members = SqliteMembershipStore(app, synthetic: true);
-        await members.claimIncluded(
-          commandId: 'gift',
-          periodId: period,
-          productId: 'booster',
-          atUtc: now,
-        );
+        await sales.confirmPrepared('discount-sale');
         final debtors = SqliteDebtorsStore(app, synthetic: true);
         await debtors.prepare(
           DebtorCommand(
@@ -171,14 +163,14 @@ void main() {
         );
         await debtors.confirm('repay');
         await debtors.confirm('repay');
-        expect((await debtors.load()).debtors.single.balanceMinor, 109000);
+        expect((await debtors.load()).debtors.single.balanceMinor, 104000);
         final treasury = await SqliteTreasuryStore(app).load();
-        expect(treasury.cashMinor, 10000);
+        expect(treasury.cashMinor, 5000);
         expect(treasury.nequiMinor, 10000);
-        expect((await sales.load()).stockQuantityFor('booster'), 1);
+        expect((await sales.load()).stockQuantityFor('booster'), 2);
         final member = (await members.load()).single;
-        expect(member.includedClaimed, isTrue);
-        expect(member.discountsUsed, 1);
+        expect(member.voucherUsedMinor, 30000);
+        expect(member.voucherRemainingMinor, 0);
         expect(await app.database.query('membership_periods'), hasLength(1));
         expect(
           await app.database.rawQuery('PRAGMA foreign_key_check'),

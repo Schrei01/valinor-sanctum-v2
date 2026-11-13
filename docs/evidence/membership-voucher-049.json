@@ -1,0 +1,91 @@
+{
+  "version": "0.49.0+84",
+  "edition": "Development",
+  "date": "2026-11-13",
+  "schema": 29,
+  "policy": {
+    "carry_over": false,
+    "voucher_cop": 30000,
+    "period": "calendar_month",
+    "fee_cop": 109000,
+    "prior_real_memberships": 0,
+    "partial_excess_normal_or_split": true,
+    "prior_legacy_benefits": 0,
+    "consumption_on_confirmation": true
+  },
+  "validation": {
+    "compatibility_run_passed": 71,
+    "voucher_migration_final_run_passed": 15,
+    "voucher_reports_run_passed": 30,
+    "memberships_recovery_ui_final_run_passed": 12,
+    "test_counts_overlap": true,
+    "failed": 0,
+    "analysis": "No issues found",
+    "format_files": 235,
+    "format_changes": 0,
+    "release_build": "success",
+    "widget_widths": [
+      1120,
+      400
+    ],
+    "widget_images_inspected": 4,
+    "coverage": [
+      "full voucher without payment choice",
+      "three tender remainder with real debt only",
+      "same-SKU marked and unmarked consumption",
+      "integer multi-unit remainder",
+      "two prepared carts cannot double spend",
+      "other open cart recalculates after redemption",
+      "changed consumption requires split review",
+      "stock failure consumes no grant",
+      "voucher forbidden for monthly fee and expired period",
+      "calendar renewal and real database reopen",
+      "idempotent retry and non-replaceable posted facts",
+      "net report revenue and event lifetime results",
+      "migration 27 and 28 to 29 preserves rows and backups"
+    ]
+  },
+  "artifact": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.49.0-development-windows-x64.zip",
+    "edition": "Development",
+    "files": 19,
+    "bytes": 15496064,
+    "sha256": "319A02C45133D0F141AAFE9D1A693431DCDB9A0EF48592CAEA9713FD882E180D",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe"
+  },
+  "native": {
+    "opened": true,
+    "responding": true,
+    "process_id": 23448,
+    "schemaVersion": 29,
+    "tables": 87,
+    "integrity": "ok",
+    "foreign_key_violations": 0,
+    "currency": "COP",
+    "money_scale": 0,
+    "prior_tables_existing_rows_unchanged": 83,
+    "startup_empty_accounts_added": 1,
+    "startup_empty_lines_added": 1,
+    "automatic_v28_backup_verified": true,
+    "voucher_tables_empty": true
+  },
+  "production": {
+    "distribution_and_installation_files_unchanged": 39,
+    "operational_database_opened": false,
+    "preserved_process_id": 22228,
+    "app_closed": false
+  },
+  "git": {
+    "merge": "pending_owner_review_and_complete_green_ci",
+    "branch": "codex/membresias-bono-tienda",
+    "tag": "not_created_before_integration",
+    "dependency_prs": [
+      10,
+      11
+    ],
+    "dependency_ci": "success",
+    "base": "codex/deudores-saldo-anterior"
+  }
+}

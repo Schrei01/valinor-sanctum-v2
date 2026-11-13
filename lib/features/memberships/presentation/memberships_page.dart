@@ -3,119 +3,23 @@ import '../../debtors/domain/debtors_store.dart';
 import '../../inventory/domain/inventory_store.dart';
 import '../../inventory/presentation/inventory_widgets.dart';
 import '../../quick_sales/domain/quick_sales_store.dart';
-import '../data/sqlite_membership_store.dart';
+import '../../../core/domain/money.dart';
 import '../domain/membership.dart';
 
 String membershipDate(DateTime? day) => day == null
     ? '—'
     : '${day.day.toString().padLeft(2, '0')}/${day.month.toString().padLeft(2, '0')}/${day.year}';
 
-Future<void> claimMembershipBooster(
-  BuildContext context,
-  MembershipStore store,
-  Membership member,
-  QuickSalesSnapshot data,
-  VoidCallback reload,
-) async {
-  final products = data.availableProducts
-      .where((p) => !p.isUnlimited && SqliteMembershipStore.eligible(p.name))
-      .toList();
-  String? selected;
-  final accepted = await showDialog<bool>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('Entregar booster incluido'),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${member.name} · ${membershipDate(member.starts)} al ${membershipDate(member.ends)}',
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Booster disponible',
-                ),
-                items: [
-                  for (final p in products)
-                    DropdownMenuItem(
-                      value: p.id,
-                      child: Text(
-                        '${p.name} · Stock ${data.stockQuantityFor(p.id)}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: (v) => setState(() => selected = v),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Al confirmar se entrega una unidad, se descuenta del inventario y se marca el beneficio como reclamado. No se cobra dinero.',
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: selected == null
-                ? null
-                : () => Navigator.pop(context, true),
-            child: const Text('Confirmar entrega'),
-          ),
-        ],
-      ),
-    ),
-  );
-  if (accepted != true || selected == null || !context.mounted) return;
-  try {
-    // The stable period identity also makes a lost response safe to retry.
-    await store.claimIncluded(
-      commandId: 'included:${member.periodId}',
-      periodId: member.periodId!,
-      productId: selected!,
-      atUtc: DateTime.now().toUtc(),
-    );
-    reload();
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xffcdebd8),
-          content: Text(
-            'Booster entregado.',
-            style: TextStyle(color: Color(0xff125c35)),
-          ),
-        ),
-      );
-    }
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xffffd9d4),
-          content: Text('$e', style: const TextStyle(color: Color(0xff8b2117))),
-        ),
-      );
-    }
-  }
-}
+String _voucherMoney(Membership m, int amount) => Money.fromMinorUnits(
+  amount,
+  currency: m.currencyCode,
+  scale: m.moneyScale,
+).formatEsCo(includeCurrency: true);
 
 class MembershipBenefitsPanel extends StatelessWidget {
-  const MembershipBenefitsPanel({
-    super.key,
-    required this.member,
-    this.onClaim,
-  });
+  const MembershipBenefitsPanel({super.key, required this.member});
   final Membership member;
-  final VoidCallback? onClaim;
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now().toUtc(),
@@ -136,15 +40,10 @@ class MembershipBenefitsPanel extends StatelessWidget {
           Text(
             'Mensualidad Élfica · ${member.statusAt(now)}\n${membershipDate(member.starts)} al ${membershipDate(member.ends)}',
           ),
+          Text('Acceso ${active ? 'ilimitado' : 'sin vigencia'}'),
           Text(
-            'Acceso ${active ? 'ilimitado' : 'sin vigencia'}\nBooster incluido: ${member.includedClaimed ? 'reclamado' : 'pendiente'}',
+            'Bono disponible: ${_voucherMoney(member, active ? member.voucherRemainingMinor : 0)}\nRedimido: ${_voucherMoney(member, member.voucherUsedMinor)}',
           ),
-          Text('Boosters con 20 %: ${member.discountsUsed}/2 utilizados'),
-          if (onClaim != null)
-            OutlinedButton(
-              onPressed: active && !member.includedClaimed ? onClaim : null,
-              child: const Text('Entregar booster'),
-            ),
         ],
       ),
     );
@@ -229,7 +128,7 @@ class _MembershipsPageState extends State<MembershipsPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (member == null)
+                    if (member == null) ...[
                       DropdownButtonFormField<String>(
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -257,6 +156,8 @@ class _MembershipsPageState extends State<MembershipsPage> {
                                 });
                               },
                       ),
+                      const SizedBox(height: 24),
+                    ],
                     TextFormField(
                       controller: name,
                       enabled: personId == null && !saving,
@@ -422,7 +323,7 @@ class _MembershipsPageState extends State<MembershipsPage> {
       ),
       const SizedBox(height: 12),
       const Text(
-        'Mensualidad Élfica · COP 109.000 · Un mes calendario\nAcceso ilimitado, 1 booster incluido y 20 % en otros 2 boosters de Yu-Gi-Oh!, Magic o Pokémon.',
+        'Mensualidad Élfica · COP 109.000 · Un mes calendario\nAcceso ilimitado, Bono de COP 30.000 para consumir en tienda durante el período.',
       ),
       if (error != null) InventoryNotice(text: error!),
       const SizedBox(height: 16),
@@ -458,18 +359,7 @@ class _MembershipsPageState extends State<MembershipsPage> {
                       'Cumpleaños: ${m.birthDay}/${m.birthMonth}',
                   ].join(' · '),
                 ),
-                MembershipBenefitsPanel(
-                  member: m,
-                  onClaim: data == null
-                      ? null
-                      : () => claimMembershipBooster(
-                          context,
-                          widget.store,
-                          m,
-                          data!,
-                          reload,
-                        ),
-                ),
+                MembershipBenefitsPanel(member: m),
                 Wrap(
                   spacing: 12,
                   runSpacing: 8,
