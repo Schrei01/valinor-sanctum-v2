@@ -1,5 +1,7 @@
 # Bono de Mensualidad Élfica — Desarrollo 0.49.0
 
+La revisión vigente 0.49.1 conserva este funcionamiento y corrige la recreación innecesaria de líneas de Ventas detectada por CI. [Corrección y validación](104-correccion-ci-lineas-bono.md).
+
 La mensualidad conserva COP 109.000 por un mes calendario y acceso ilimitado. Sus beneficios de tienda pasan a ser un bono de COP 30.000 por período; ya no se entregan boosters incluidos ni se ofrecen descuentos de boosters. El propietario confirmó que el diseño anterior solo se probó en Desarrollo. La comprobación previa de su base encontró cero períodos y cero beneficios.
 
 ## Uso

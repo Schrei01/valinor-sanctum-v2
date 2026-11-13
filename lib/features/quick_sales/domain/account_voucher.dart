@@ -31,6 +31,10 @@ List<QuickSaleLine> allocateVoucher(
             ? (gross < remaining ? gross : remaining).toInt()
             : 0;
         remaining -= BigInt.from(used);
+        final nextPeriodId = used > 0 ? periodId : null;
+        if (used == line.voucherMinor && nextPeriodId == line.voucherPeriodId) {
+          return line;
+        }
         return QuickSaleLine(
           id: line.id,
           productId: line.productId,
@@ -41,7 +45,7 @@ List<QuickSaleLine> allocateVoucher(
           membershipDiscount: line.membershipDiscount,
           useVoucher: line.useVoucher,
           voucherMinor: used,
-          voucherPeriodId: used > 0 ? periodId : null,
+          voucherPeriodId: nextPeriodId,
         );
       })(),
   ];
