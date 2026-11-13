@@ -17,6 +17,7 @@ import '../support/fake_quick_sales_store.dart';
 import '../support/fake_debtors_store.dart';
 
 class MembersFake implements MembershipStore {
+  int? lastSavedMonth;
   final now = DateTime.now().toUtc();
   late final person = Membership(
     personId: 'Cliente sintético',
@@ -39,7 +40,11 @@ class MembersFake implements MembershipStore {
     required String email,
     int? birthDay,
     int? birthMonth,
-  }) async => personId ?? 'new';
+  }) async {
+    lastSavedMonth = birthMonth;
+    return personId ?? 'new';
+  }
+
   @override
   Future<void> claimIncluded({
     required String commandId,
@@ -167,9 +172,29 @@ void main() {
       await tester.tap(find.text('Registrar persona'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      await capture('registration');
-      await tester.tap(find.text('Cancelar'));
+      await tester.tap(find.byType(DropdownButtonFormField<int>));
       await tester.pumpAndSettle();
+      await capture('month-options');
+      await tester.tap(find.text('Marzo').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).at(0), 'Nueva persona');
+      await tester.enterText(find.byType(TextFormField).at(2), '12');
+      await tester.pumpAndSettle();
+      await capture('registration');
+      await tester.tap(find.text('Guardar datos'));
+      await tester.pumpAndSettle();
+      expect(members.lastSavedMonth, 3);
+      await tester.tap(find.text('Editar datos'));
+      await tester.pumpAndSettle();
+      expect(find.text('Junio'), findsOneWidget);
+      await tester.tap(find.byType(DropdownButtonFormField<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sin especificar').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).at(2), '');
+      await tester.tap(find.text('Guardar datos'));
+      await tester.pumpAndSettle();
+      expect(members.lastSavedMonth, isNull);
       await controller.load();
       final id = controller.addAccount()!;
       controller.selectDebtor(id, 'Cliente sintético');
