@@ -128,7 +128,7 @@ class _MembershipsPageState extends State<MembershipsPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (member == null)
+                    if (member == null) ...[
                       DropdownButtonFormField<String>(
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -156,6 +156,8 @@ class _MembershipsPageState extends State<MembershipsPage> {
                                 });
                               },
                       ),
+                      const SizedBox(height: 24),
+                    ],
                     TextFormField(
                       controller: name,
                       enabled: personId == null && !saving,

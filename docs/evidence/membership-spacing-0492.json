@@ -1,0 +1,49 @@
+{
+  "version": "0.49.2+86",
+  "edition": "Development",
+  "date": "2026-11-13",
+  "schema": 29,
+  "schema_changed": false,
+  "change": "24px between existing-person selector and Name, only when selector is present",
+  "validation": {
+    "format_files": 247,
+    "analysis": "No issues found",
+    "release": "success",
+    "format_changes": 0,
+    "images_inspected": [
+      "registration-1120",
+      "registration-400"
+    ],
+    "existing_widget_tests_passed": 2
+  },
+  "artifact": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.49.2-development-windows-x64.zip",
+    "edition": "Development",
+    "files": 19,
+    "bytes": 15496002,
+    "sha256": "FFB232CF338A243A9F00411FD5E57B757FF3C44DA0B269DEE758396592195B5D",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": null
+  },
+  "native": {
+    "integrity": "ok",
+    "responding": true,
+    "foreign_key_violations": 0,
+    "schema": 29,
+    "tables": 87,
+    "pid": 20156,
+    "opened": true
+  },
+  "production": {
+    "files_preserved": 39,
+    "operational_database_opened": false
+  },
+  "git": {
+    "publication": "Development for review",
+    "pr": 13,
+    "base": "main",
+    "merge": "requires owner review and full exact-head green CI",
+    "tag": "not_created_before_integration"
+  }
+}

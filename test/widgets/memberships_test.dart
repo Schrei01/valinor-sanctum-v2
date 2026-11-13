@@ -164,6 +164,12 @@ void main() {
       expect(find.text('Inscribir en Ventas'), findsNothing);
       expect(find.text('Renovar en Ventas'), findsOneWidget);
       await capture('directory');
+      await tester.tap(find.text('Registrar persona'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await capture('registration');
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
       await controller.load();
       final id = controller.addAccount()!;
       controller.selectDebtor(id, 'Cliente sintético');
