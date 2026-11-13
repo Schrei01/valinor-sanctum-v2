@@ -206,6 +206,9 @@ void main() {
             // This fixture reconstructs v12 before the split column existed.
             copy.remove('payment_split_json');
             copy.remove('membership_discount');
+            copy.remove('voucher_selected');
+            copy.remove('voucher_minor');
+            copy.remove('voucher_period_id');
           }
           await old.insert(table, copy);
         }

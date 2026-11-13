@@ -9,8 +9,9 @@ import '../../inventory/presentation/inventory_widgets.dart';
 import '../../workspace/domain/business_profile.dart';
 import '../application/quick_sales_controller.dart';
 import '../domain/quick_sales_store.dart';
+import '../domain/account_voucher.dart';
 import 'split_payment_dialog.dart';
-import '../../memberships/data/sqlite_membership_store.dart';
+
 import '../../memberships/domain/membership.dart';
 import '../../memberships/presentation/memberships_page.dart';
 
@@ -436,6 +437,7 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     final debtBlocked =
         hasCredit &&
         !widget.data.debtors.any((p) => p.id == account.debtorId && p.isActive);
+    final payable = accountPayable(account), covered = accountVoucher(account);
     final singlePayment = account.singlePaymentOptionId;
     final paymentOptions = widget.data.paymentOptions
         .where((p) => p.isActive || p.id == singlePayment)
@@ -463,7 +465,8 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
       if (option == null || line.productId == null) continue;
       final amount =
           BigInt.from(line.unitPriceMinor ?? 0) *
-          BigInt.from(int.tryParse(line.quantityText) ?? 0);
+              BigInt.from(int.tryParse(line.quantityText) ?? 0) -
+          BigInt.from(line.voucherMinor);
       groups.update(
         option.displayLabel,
         (current) => current + amount,
@@ -477,18 +480,13 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (member != null)
-              MembershipBenefitsPanel(
-                member: member,
-                onClaim: locked || widget.membershipStore == null
-                    ? null
-                    : () => claimMembershipBooster(
-                        context,
-                        widget.membershipStore!,
-                        member,
-                        widget.data,
-                        () => widget.controller.load(),
-                      ),
+            if (member != null) MembershipBenefitsPanel(member: member),
+            if (covered > BigInt.zero || account.lines.any((l) => l.useVoucher))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Consumo: ${inventoryMoney(total.toInt(), widget.profile)} · Cubierto con bono: ${inventoryMoney(covered.toInt(), widget.profile)} · Restante por pagar: ${inventoryMoney(payable.toInt(), widget.profile)}\nEl bono se aplica en el orden de las líneas y se descuenta al registrar la venta.',
+                ),
               ),
             Row(
               children: [
@@ -616,7 +614,7 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                                 ),
                               ),
                           ],
-                    onChanged: locked || isSplit
+                    onChanged: locked || isSplit || payable == BigInt.zero
                         ? null
                         : (value) => controller.selectAccountPayment(
                             account.id,
@@ -636,7 +634,7 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                       onPressed:
                           locked ||
                               controller.loadError != null ||
-                              total <= BigInt.zero ||
+                              payable <= BigInt.zero ||
                               total > BigInt.from(0x7fffffffffffffff)
                           ? null
                           : () async {
@@ -665,7 +663,8 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                             controller.loadError != null ||
                             account.needsPaymentReview ||
                             (account.paymentMode == 'single' &&
-                                singlePayment == null)
+                                singlePayment == null &&
+                                payable > BigInt.zero)
                         ? null
                         : () => controller.register(account.id),
                     icon: const Icon(Icons.point_of_sale, size: 20),
@@ -734,7 +733,7 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                       if (personHint != null && !debtBlocked) Text(personHint),
                       if (hasCredit && !account.needsPaymentReview)
                         Text(
-                          'Cobrado: ${_money(total - credit)} · Deudas: ${_money(credit)}',
+                          'Cobrado: ${_money(payable - credit)} · Deudas: ${_money(credit)}',
                           key: ValueKey('quick-credit-summary-${account.id}'),
                         ),
                       if (groups.length > 1 && !account.needsPaymentReview)
@@ -870,7 +869,8 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
       QuickSaleLine(
         id: widget.line.id,
         productId: product.id,
-        membershipDiscount: priorLine?.membershipDiscount ?? false,
+        membershipDiscount: false,
+        useVoucher: product.id != 'membership:elven' && widget.line.useVoucher,
         quantityText: product.isVariablePrice ? '1' : widget.line.quantityText,
         unitPriceMinor: product.isVariablePrice
             ? (product.id == widget.line.productId
@@ -1027,6 +1027,9 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           unitPriceMinor: line.unitPriceMinor,
           paymentOptionId: line.paymentOptionId,
           paymentParts: line.paymentParts,
+          useVoucher: line.useVoucher,
+          voucherMinor: line.voucherMinor,
+          voucherPeriodId: line.voucherPeriodId,
         ),
       ),
     );
@@ -1066,6 +1069,9 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
             unitPriceMinor: amount,
             paymentOptionId: line.paymentOptionId,
             paymentParts: line.paymentParts,
+            useVoucher: line.useVoucher,
+            voucherMinor: line.voucherMinor,
+            voucherPeriodId: line.voucherPeriodId,
           ),
         );
       },
@@ -1089,40 +1095,52 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
     final member = widget.data.memberships
         .where((m) => m.personId == widget.account.debtorId)
         .firstOrNull;
-    final canDiscount =
+    final canVoucher =
         selected != null &&
-        SqliteMembershipStore.eligible(selected.name) &&
+        selected.id != 'membership:elven' &&
         member?.activeAt(DateTime.now().toUtc()) == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (canDiscount || line.membershipDiscount)
+        if (line.membershipDiscount)
+          TextButton(
+            onPressed: widget.locked
+                ? null
+                : () => widget.onChanged(
+                    QuickSaleLine(
+                      id: line.id,
+                      productId: line.productId,
+                      quantityText: line.quantityText,
+                      unitPriceMinor: selected?.listPriceMinor,
+                      paymentOptionId: line.paymentOptionId,
+                      paymentParts: line.paymentParts,
+                    ),
+                  ),
+            child: const Text('Quitar descuento anterior'),
+          ),
+        if (canVoucher || line.useVoucher)
           CheckboxListTile(
-            key: ValueKey('membership-discount-${line.id}'),
+            key: ValueKey('membership-voucher-${line.id}'),
             contentPadding: EdgeInsets.zero,
             dense: true,
             title: Text(
-              '20 % de membresía · ${member == null ? 0 : 2 - member.discountsUsed} disponibles',
+              'Usar bono · Cubierto: ${inventoryMoney(line.voucherMinor, widget.profile)}',
             ),
-            value: line.membershipDiscount,
+            value: line.useVoucher,
             onChanged:
                 widget.locked ||
-                    (!line.membershipDiscount &&
-                        (!canDiscount || (member?.discountsUsed ?? 2) >= 2))
+                    (!line.useVoucher &&
+                        (member?.voucherRemainingMinor ?? 0) <= 0)
                 ? null
                 : (value) => widget.onChanged(
                     QuickSaleLine(
                       id: line.id,
                       productId: line.productId,
                       quantityText: line.quantityText,
-                      unitPriceMinor: value == true
-                          ? SqliteMembershipStore.discounted(
-                              selected!.listPriceMinor,
-                            )
-                          : selected?.listPriceMinor,
+                      unitPriceMinor: line.unitPriceMinor,
                       paymentOptionId: line.paymentOptionId,
                       paymentParts: line.paymentParts,
-                      membershipDiscount: value == true,
+                      useVoucher: value == true,
                     ),
                   ),
           ),

@@ -333,6 +333,9 @@ void main() {
               final prior = Map<String, Object?>.from(item);
               if (row.key == 'quick_sales_lines') {
                 expect(prior.remove('membership_discount'), 0);
+                expect(prior.remove('voucher_selected'), 0);
+                expect(prior.remove('voucher_minor'), 0);
+                expect(prior.remove('voucher_period_id'), isNull);
               }
               return jsonEncode(prior);
             }).toList()..sort(),

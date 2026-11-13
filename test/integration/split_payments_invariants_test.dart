@@ -412,7 +412,10 @@ void main() {
         expect(
           {...current[i]}
             ..remove('payment_split_json')
-            ..remove('membership_discount'),
+            ..remove('membership_discount')
+            ..remove('voucher_selected')
+            ..remove('voucher_minor')
+            ..remove('voucher_period_id'),
           oldLines[i],
         );
         expect(current[i]['membership_discount'], 0);

@@ -1,5 +1,7 @@
 # Mensualidad Élfica — Desarrollo 0.47.0
 
+Antecedente histórico: los beneficios de boosters de esta entrega fueron sustituidos en Desarrollo0.49 por el [bono de COP30.000](103-membresias-bono-tienda.md). Para el funcionamiento vigente consulta esa guía.
+
 La membresía cuesta COP 109.000 por mes calendario y comparte la persona de Deudores. Permite cobrar en Efectivo, Transferencia, Deudas o dividir el total mediante el flujo existente de Ventas. La inscripción se activa únicamente al confirmar esa venta, incluso cuando queda deuda. Los abonos posteriores se registran en Deudores y no renuevan ni restituyen beneficios.
 
 ## Uso

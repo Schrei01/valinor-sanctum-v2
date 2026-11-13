@@ -21,6 +21,10 @@ class Membership {
     this.ends,
     this.includedClaimed = false,
     this.discountsUsed = 0,
+    this.voucherGrantedMinor = 0,
+    this.voucherUsedMinor = 0,
+    this.moneyScale = 0,
+    this.currencyCode = 'COP',
   });
   final String personId, name, email;
   final int? birthDay, birthMonth;
@@ -28,6 +32,10 @@ class Membership {
   final DateTime? starts, ends;
   final bool includedClaimed;
   final int discountsUsed;
+  final int voucherGrantedMinor, voucherUsedMinor;
+  final int moneyScale;
+  final String currencyCode;
+  int get voucherRemainingMinor => voucherGrantedMinor - voucherUsedMinor;
   bool activeAt(DateTime utc) =>
       starts != null &&
       ends != null &&
