@@ -1,0 +1,61 @@
+{
+  "version": "0.48.0+83",
+  "edition": "Development",
+  "schema": 28,
+  "schema_changed": false,
+  "date": "2026-11-12",
+  "validation": {
+    "focused_tests_passed": 41,
+    "failed": 0,
+    "analysis": "No issues found",
+    "format_files": 243,
+    "format_changes": 0,
+    "widget_widths": [
+      1120,
+      400
+    ],
+    "coverage": [
+      "previous personal balance after intervening repayments",
+      "later repayments do not change earlier balances",
+      "same-time posting sequence",
+      "divided sale actual credit without double-counting immediate collection",
+      "legacy collection adapter",
+      "settled charges",
+      "read projection does not mutate tables",
+      "real SQLite reopen and membership repayment compatibility"
+    ]
+  },
+  "artifact": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.48.0-development-windows-x64.zip",
+    "edition": "Development",
+    "files": 19,
+    "bytes": 15478983,
+    "sha256": "80538AE5EB398142C176C078401F5F437F3B8DEB1B14917FA2F7447A7054E2F0",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe"
+  },
+  "native": {
+    "opened": true,
+    "responding": true,
+    "integrity": "ok",
+    "foreign_key_violations": 0,
+    "schemaVersion": 28,
+    "tables": 84,
+    "profile_currency": "COP",
+    "profile_scale": 0
+  },
+  "production": {
+    "operational_database_opened": false,
+    "app_closed": false,
+    "bundle_executable_unchanged": true
+  },
+  "git": {
+    "branch": "codex/deudores-saldo-anterior",
+    "base": "codex/membresias-elficas",
+    "dependency_pr": 10,
+    "dependency_ci": "success",
+    "merge": "pending_owner_review_and_complete_green_ci",
+    "tag": "not_created_before_integration"
+  }
+}

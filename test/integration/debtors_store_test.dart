@@ -13,6 +13,7 @@ import 'package:valinor_sanctum_2/features/inventory/data/sqlite_inventory_store
 import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/data/sqlite_quick_sales_store.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
+import 'package:valinor_sanctum_2/features/quick_sales/domain/account_payment_split.dart';
 import 'package:valinor_sanctum_2/features/collections/data/sqlite_collections_store.dart';
 import 'package:valinor_sanctum_2/features/collections/domain/collections_store.dart';
 import 'package:valinor_sanctum_2/features/reports/data/sqlite_reports_store.dart';
@@ -188,6 +189,143 @@ void main() {
     occurredAtUtc: time ?? at,
   );
 
+  test(
+    'history reconstructs personal debt before each charge, including repayments and settled charges',
+    () async {
+      final id = await person(
+        'Ana',
+        amount: 10000,
+        source: PreviousDebtSource.additional,
+      );
+      await person('Bea', amount: 8000, source: PreviousDebtSource.additional);
+      await run(
+        loan('first-loan', id, 5000, time: at.add(const Duration(minutes: 10))),
+      );
+      await pay(id, 4000);
+      await run(
+        loan('second-loan', id, 7000, time: at.add(const Duration(hours: 2))),
+      );
+      var history = (await store.load()).charges
+          .where((c) => c.debtorId == id)
+          .toList();
+      expect(history.map((c) => c.balanceBeforeMinor), [0, 10000, 11000]);
+      final oldBefore = {
+        for (final c in history) c.receivableId: c.balanceBeforeMinor,
+      };
+      await run(
+        DebtorCommand(
+          commandId: 'later-payment',
+          kind: 'payment',
+          debtorId: id,
+          amountMinor: 3000,
+          paymentOptionId: 'quick-default:NEQUI',
+          occurredAtUtc: at.add(const Duration(hours: 3)),
+        ),
+      );
+      await run(
+        loan('third-loan', id, 1000, time: at.add(const Duration(hours: 4))),
+      );
+      final data = await store.load();
+      history = data.charges.where((c) => c.debtorId == id).toList();
+      expect(history.map((c) => c.balanceBeforeMinor), [
+        0,
+        10000,
+        11000,
+        15000,
+      ]);
+      expect(history.first.remainingMinor, 3000);
+      for (final c in history.take(3)) {
+        expect(c.balanceBeforeMinor, oldBefore[c.receivableId]);
+      }
+      expect(data.debtors.singleWhere((p) => p.id == id).balanceMinor, 16000);
+      final before = await snapshot();
+      await store.load();
+      expect(await snapshot(), before);
+    },
+  );
+  test(
+    'same-time charges and repayments use posting sequence rather than random identifiers',
+    () async {
+      final id = await person(
+        'Ana',
+        amount: 10000,
+        source: PreviousDebtSource.additional,
+      );
+      final time = at.add(const Duration(hours: 1));
+      await run(loan('z-first', id, 5000, time: time));
+      await pay(id, 4000);
+      await run(loan('a-last', id, 2000, time: time));
+      final charges =
+          (await store.load()).charges.where((c) => !c.isOpening).toList()
+            ..sort((a, b) => a.historyOrder.compareTo(b.historyOrder));
+      expect(charges.map((c) => c.originalCreditMinor), [5000, 2000]);
+      expect(charges.map((c) => c.balanceBeforeMinor), [10000, 11000]);
+    },
+  );
+  test(
+    'divided sales show only their credit portion and never subtract automatic checkout twice',
+    () async {
+      await stock();
+      final id = await person(
+        'Ana',
+        amount: 3000,
+        source: PreviousDebtSource.additional,
+      );
+      final draft = QuickSaleAccount(
+        id: 'split',
+        label: 'Ana',
+        customerName: 'Ana',
+        debtorId: id,
+        revision: 0,
+        status: 'open',
+        updatedAtUtc: at,
+        lines: const [
+          QuickSaleLine(
+            id: 'split-line',
+            productId: 'product',
+            unitPriceMinor: 10000,
+          ),
+        ],
+      );
+      final lines = allocateAccountPayments(draft, const [
+        QuickLinePaymentPart('quick-default:EFECTIVO', 6000),
+        QuickLinePaymentPart(QuickPaymentOption.creditId, 4000),
+      ]);
+      final account = await quick.saveAccount(
+        SaveQuickSaleAccount(
+          id: 'split',
+          label: 'Ana',
+          customerName: 'Ana',
+          debtorId: id,
+          expectedRevision: 0,
+          lines: lines,
+          paymentMode: 'split',
+          paymentSplitBasis: quickConsumptionKey(lines),
+        ),
+      );
+      await quick.prepareSale(
+        commandId: 'split-sale',
+        accountId: account.id,
+        expectedRevision: account.revision,
+        occurredAtUtc: at.add(const Duration(minutes: 10)),
+      );
+      await quick.confirmPrepared('split-sale');
+      await run(
+        loan(
+          'after-split',
+          id,
+          2000,
+          time: at.add(const Duration(minutes: 20)),
+        ),
+      );
+      final history = (await store.load()).charges;
+      final saleCharge = history.singleWhere((c) => c.label == 'Ana');
+      expect(saleCharge.originalCreditMinor, 4000);
+      expect(saleCharge.balanceBeforeMinor, 3000);
+      expect(history.last.balanceBeforeMinor, 7000);
+      expect((await store.load()).debtors.single.balanceMinor, 9000);
+    },
+  );
   test(
     'repeated owner loans increase only debt and investment; ordinary mixed repayments never count as sales',
     () async {
@@ -564,6 +702,17 @@ void main() {
       );
       await collections.confirmPrepared('old-collection');
       expect((await store.load()).debtors.single.balanceMinor, 0);
+      await run(
+        loan(
+          'after-legacy-payment',
+          id,
+          2000,
+          time: at.add(const Duration(hours: 3)),
+        ),
+      );
+      final charges = (await store.load()).charges;
+      expect(charges.last.balanceBeforeMinor, 0);
+      expect(charges.first.balanceBeforeMinor, 0);
       expect((await app.database.query('sales')).length, 1);
     },
   );

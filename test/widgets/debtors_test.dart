@@ -223,6 +223,39 @@ void main() {
     },
   );
 
+  for (final width in [1120.0, 400.0]) {
+    testWidgets(
+      'charge history labels the balance before the charge at width $width',
+      (t) async {
+        store.legacy = 0;
+        store.people.add(
+          const DebtorSummary(id: 'ana', name: 'Ana', balanceMinor: 150000),
+        );
+        store.charges.add(
+          DebtorCharge(
+            receivableId: 'history',
+            label: 'Compra fiada',
+            nameSnapshot: 'Ana',
+            occurredAtUtc: DateTime.utc(2026, 11, 12),
+            originalCreditMinor: 20000,
+            remainingMinor: 5000,
+            balanceBeforeMinor: 100000,
+            debtorId: 'ana',
+          ),
+        );
+        await open(t, size: Size(width, 1200));
+        await tap(t, find.byKey(const Key('debtor-person-ana')));
+        final row = find.byKey(const Key('debtor-charge-history-history'));
+        await t.ensureVisible(row);
+        await t.pumpAndSettle();
+        expect(
+          t.widget<Text>(row).data,
+          'Valor fiado: COP 200,00 · Deuda anterior: COP 1.000,00',
+        );
+        expect(t.takeException(), isNull);
+      },
+    );
+  }
   testWidgets('empty debt portfolio displays zero', (t) async {
     store.legacy = 0;
     await open(t, size: const Size(400, 900));

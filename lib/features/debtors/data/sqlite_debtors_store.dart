@@ -33,6 +33,7 @@ class SqliteDebtorsStore implements DebtorsStore {
         'SELECT debtor.*,EXISTS(SELECT 1 FROM debtor_openings WHERE debtor_id=debtor.id) has_opening FROM debtors debtor ORDER BY name COLLATE NOCASE,id',
       );
       final rows = await _receivables(txn);
+      final previousBalances = await _balancesBeforeCharges(txn, rows);
       final balances = <String, BigInt>{};
       final charges = <DebtorCharge>[];
       for (final r in rows) {
@@ -50,6 +51,8 @@ class SqliteDebtorsStore implements DebtorsStore {
             occurredAtUtc: DateTime.parse(r['issued_at_utc'] as String),
             originalCreditMinor: r['credit_minor'] as int,
             remainingMinor: r['remaining_minor'] as int,
+            balanceBeforeMinor: previousBalances[r['id']],
+            historyOrder: r['document_order'] as int,
             isOpening: r['is_opening'] == 1,
             debtorId: person,
           ),
@@ -760,9 +763,9 @@ JOIN journal_lines line ON line.entry_id=entry.id WHERE document.status='posted'
   static Future<List<Map<String, Object?>>> _receivables(
     DatabaseExecutor txn,
   ) => txn.rawQuery(
-    '''SELECT balance.*,link.debtor_id,
+    '''SELECT balance.*,link.debtor_id,document.rowid document_order,
  coalesce(sale.label_snapshot,CASE WHEN loan.document_id IS NOT NULL THEN 'Préstamo desde inversión' ELSE 'Saldo anterior' END) label,CASE WHEN opening.document_id IS NULL THEN 0 ELSE 1 END is_opening,
- CASE WHEN request.command_id IS NOT NULL AND json_valid(request.canonical_payload) AND json_extract(request.canonical_payload,'\$.version') IN(2,3)
+ CASE WHEN request.command_id IS NOT NULL AND json_valid(request.canonical_payload) AND json_extract(request.canonical_payload,'\$.version') IN(2,3,4)
  THEN json_extract(request.canonical_payload,'\$.creditMinor') ELSE balance.initial_minor END credit_minor
  FROM customer_receivable_balances balance LEFT JOIN debtor_receivables link ON link.receivable_id=balance.id
  LEFT JOIN sales sale ON sale.document_id=balance.origin_document_id LEFT JOIN debtor_openings opening ON opening.document_id=balance.origin_document_id
@@ -770,6 +773,68 @@ JOIN journal_lines line ON line.entry_id=entry.id WHERE document.status='posted'
  LEFT JOIN business_documents document ON document.id=balance.origin_document_id LEFT JOIN quick_sale_requests request ON request.sale_command_id=document.command_id
  WHERE sale.document_id IS NOT NULL OR opening.document_id IS NOT NULL OR loan.document_id IS NOT NULL ORDER BY balance.issued_at_utc,balance.id''',
   );
+  static Future<Map<String, int?>> _balancesBeforeCharges(
+    DatabaseExecutor txn,
+    List<Map<String, Object?>> charges,
+  ) async {
+    // A sale's automatic collection is already excluded from credit_minor.
+    // Include subsequent collections from either collection API exactly once,
+    // using the posted source documents rather than today's remaining amounts.
+    final repayments = await txn.rawQuery('''
+SELECT link.debtor_id,settlement.amount_minor,document.occurred_at_utc,
+       document.rowid document_order
+FROM all_receivable_settlements settlement
+JOIN debtor_receivables link ON link.receivable_id=settlement.receivable_id
+JOIN business_documents document ON document.id=settlement.collection_id AND document.status='posted'
+WHERE EXISTS(SELECT 1 FROM journal_entries entry WHERE entry.document_id=document.id AND entry.status='posted')
+AND NOT EXISTS(SELECT 1 FROM quick_sale_requests request WHERE request.collection_command_id=document.command_id)
+''');
+    final events =
+        <
+            ({
+              DateTime at,
+              int order,
+              String person,
+              String? chargeId,
+              BigInt amount,
+            })
+          >[
+            for (final r in charges)
+              if (r['debtor_id'] != null && (r['credit_minor'] as int) > 0)
+                (
+                  at: DateTime.parse(r['issued_at_utc'] as String).toUtc(),
+                  order: r['document_order'] as int,
+                  person: r['debtor_id'] as String,
+                  chargeId: r['id'] as String,
+                  amount: BigInt.from(r['credit_minor'] as int),
+                ),
+            for (final r in repayments)
+              (
+                at: DateTime.parse(r['occurred_at_utc'] as String).toUtc(),
+                order: r['document_order'] as int,
+                person: r['debtor_id'] as String,
+                chargeId: null,
+                amount: -BigInt.from(r['amount_minor'] as int),
+              ),
+          ]
+          ..sort((a, b) {
+            final time = a.at.compareTo(b.at);
+            return time != 0 ? time : a.order.compareTo(b.order);
+          });
+    final balances = <String, BigInt>{}, result = <String, int?>{};
+    for (final event in events) {
+      final before = balances[event.person] ?? BigInt.zero;
+      if (event.chargeId != null) {
+        result[event.chargeId!] =
+            before >= BigInt.zero && before <= Money.maxMinorUnits
+            ? before.toInt()
+            : null;
+      }
+      balances[event.person] = before + event.amount;
+    }
+    return result;
+  }
+
   static Future<List<Map<String, Object?>>> _options(
     DatabaseExecutor txn,
   ) => txn.rawQuery(

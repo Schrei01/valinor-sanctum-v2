@@ -24,12 +24,19 @@ class DebtorCharge {
     required this.occurredAtUtc,
     required this.originalCreditMinor,
     required this.remainingMinor,
+    this.balanceBeforeMinor,
+    this.historyOrder = 0,
     this.isOpening = false,
     this.debtorId,
   });
   final String receivableId, label, nameSnapshot;
   final DateTime occurredAtUtc;
   final int originalCreditMinor, remainingMinor;
+
+  /// Recorded personal balance immediately before this charge, including earlier
+  /// repayments. Null means the available history cannot establish that balance.
+  final int? balanceBeforeMinor;
+  final int historyOrder;
   final bool isOpening;
   final String? debtorId;
 }
