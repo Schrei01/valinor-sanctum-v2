@@ -459,7 +459,9 @@ Future<void> restoreReleasedV23ForFixture(DatabaseExecutor db) async {
 
 /// Test-only reconstruction of v24; never an application downgrade.
 Future<void> restoreReleasedV24ForFixture(DatabaseExecutor db) async {
-  if ((await db.rawQuery('PRAGMA user_version')).single.values.single == 27) {
+  if (((await db.rawQuery('PRAGMA user_version')).single.values.single
+          as int) >=
+      27) {
     await restoreReleasedV26ForFixture(db);
   }
   for (final name in [
@@ -536,6 +538,7 @@ Future<void> restoreReleasedV24ForFixture(DatabaseExecutor db) async {
 
 /// Test-only reconstruction of v26 before any new correction is recorded.
 Future<void> restoreReleasedV26ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV27ForFixture(db);
   final replacements = <String>{};
   for (final sql in DatabaseSchema.migration27Statements) {
     final trigger = RegExp(r'CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
@@ -564,4 +567,31 @@ Future<void> restoreReleasedV26ForFixture(DatabaseExecutor db) async {
   }
   await db.delete('schema_migrations', where: 'version>=27');
   await db.execute('PRAGMA user_version=26');
+}
+
+/// Test-only reconstruction; operational databases never downgrade.
+Future<void> restoreReleasedV27ForFixture(DatabaseExecutor db) async {
+  for (final sql in DatabaseSchema.migration28Statements) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name != null) await db.execute('DROP TRIGGER $name');
+  }
+  for (final name in [
+    'membership_benefits',
+    'membership_periods',
+    'membership_profiles',
+    'membership_sale_plans',
+  ]) {
+    expect(await db.query(name), isEmpty);
+    await db.execute('DROP TABLE $name');
+  }
+  await db.execute(
+    'ALTER TABLE quick_sales_lines DROP COLUMN membership_discount',
+  );
+  await db.execute(
+    DatabaseSchema.migration26Statements.singleWhere(
+      (s) => s.startsWith('CREATE TRIGGER services_validate_insert '),
+    ),
+  );
+  await db.delete('schema_migrations', where: 'version>=28');
+  await db.execute('PRAGMA user_version=27');
 }

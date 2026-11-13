@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../memberships/domain/membership.dart';
 import '../../events/domain/events_store.dart';
 import '../../debtors/domain/debtors_store.dart';
 import '../../reports/domain/reports_store.dart';
@@ -45,6 +46,7 @@ class WorkspaceController extends ChangeNotifier {
   LegacyTreasuryStore? get legacyTreasuryStore => _session?.legacyTreasuryStore;
   EventsStore? get eventsStore => _session?.eventsStore;
   DebtorsStore? get debtorsStore => _session?.debtorsStore;
+  MembershipStore? get membershipStore => _session?.membershipStore;
   ReportsStore? get reportsStore => _session?.reportsStore;
 
   Future<void> initialize() async {

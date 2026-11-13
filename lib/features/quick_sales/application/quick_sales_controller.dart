@@ -358,6 +358,7 @@ class QuickSalesController extends ChangeNotifier {
           productId: l.productId,
           quantityText: l.quantityText,
           unitPriceMinor: l.unitPriceMinor,
+          membershipDiscount: l.membershipDiscount,
           paymentOptionId: optionId,
         ),
     ];

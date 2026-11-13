@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../../memberships/data/sqlite_membership_store.dart';
 import 'bulk_catalog_defaults.dart';
 import '../../debtors/domain/debtors_store.dart';
 
@@ -56,6 +57,7 @@ class SqliteQuickSalesStore implements QuickSalesStore {
       _database.database.transaction((txn) async {
         await _profile(txn);
         await BulkCatalogDefaults.ensure(txn);
+        await SqliteMembershipStore.ensure(txn);
       }, exclusive: true);
 
   @override
@@ -244,6 +246,10 @@ AND l.class='asset' AND l.role='cash' ORDER BY c.name COLLATE NOCASE,c.id
       }
       return QuickSalesSnapshot(
         accounts: accounts,
+        memberships: await SqliteMembershipStore.read(
+          txn,
+          DateTime.now().toUtc(),
+        ),
         products: commercial.products,
         stock: commercial.stock,
         paymentOptions: options,
@@ -443,6 +449,7 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
           'product_id': line.productId,
           'quantity_text': line.quantityText,
           'unit_price_minor': line.unitPriceMinor,
+          if (line.membershipDiscount) 'membership_discount': 1,
           'payment_split_json': jsonEncode(
             line.paymentParts.map((p) => p.toJson()).toList(),
           ),
@@ -568,6 +575,12 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
           'Escribe un nombre y agrega productos a la cuenta.',
         );
       }
+      await SqliteMembershipStore.prepareSale(
+        txn,
+        account,
+        commandId,
+        occurredAtUtc,
+      );
       if (account.lines.any((l) => l.isSplit)) {
         return _prepareSplit(txn, account, profile, commandId, occurredAtUtc);
       }
@@ -838,6 +851,11 @@ GROUP BY debtor.id ORDER BY debtor.name COLLATE NOCASE,debtor.id''',
       {'status': 'executing'},
       where: 'command_id=?',
       whereArgs: [commandId],
+    );
+    await SqliteMembershipStore.confirmSale(
+      txn,
+      commandId,
+      DateTime.parse(request['occurred_at_utc'] as String).toUtc(),
     );
     final grouped = <String, ({int price, BigInt quantity})>{};
     for (final line in lines) {
@@ -1487,6 +1505,7 @@ WHERE line.account_id='system:legacy-customer-receivables'
               productId: l['product_id'] as String?,
               quantityText: l['quantity_text'] as String,
               unitPriceMinor: l['unit_price_minor'] as int?,
+              membershipDiscount: l['membership_discount'] == 1,
               paymentParts: List.unmodifiable(
                 (jsonDecode(l['payment_split_json'] as String) as List).map(
                   (p) => QuickLinePaymentPart(
@@ -1556,6 +1575,7 @@ WHERE line.account_id='system:legacy-customer-receivables'
             a[i].productId == b[i].productId &&
             a[i].quantityText == b[i].quantityText &&
             a[i].unitPriceMinor == b[i].unitPriceMinor &&
+            a[i].membershipDiscount == b[i].membershipDiscount &&
             a[i].paymentOptionId == b[i].paymentOptionId &&
             jsonEncode(a[i].paymentParts.map((p) => p.toJson()).toList()) ==
                 jsonEncode(b[i].paymentParts.map((p) => p.toJson()).toList()),

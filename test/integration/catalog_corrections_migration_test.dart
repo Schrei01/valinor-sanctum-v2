@@ -134,16 +134,18 @@ void main() {
           expect(await app.database.query(table), isEmpty);
         }
         for (final table in before.entries) {
-          expect(
-            rows(
-              await app.database.query(
-                table.key,
-                where: table.key == 'schema_migrations' ? 'version<=26' : null,
-              ),
-            ),
-            table.value,
-            reason: table.key,
+          final after = await app.database.query(
+            table.key,
+            where: table.key == 'schema_migrations' ? 'version<=26' : null,
           );
+          final priorColumns = after.map((row) {
+            final copy = Map<String, Object?>.from(row);
+            if (table.key == 'quick_sales_lines') {
+              expect(copy.remove('membership_discount'), 0);
+            }
+            return copy;
+          }).toList();
+          expect(rows(priorColumns), table.value, reason: table.key);
         }
         final backups = await Directory(p.join(folder.path, 'backups'))
             .list()

@@ -205,6 +205,7 @@ void main() {
           if (table == 'quick_sales_lines') {
             // This fixture reconstructs v12 before the split column existed.
             copy.remove('payment_split_json');
+            copy.remove('membership_discount');
           }
           await old.insert(table, copy);
         }

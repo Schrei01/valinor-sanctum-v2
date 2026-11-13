@@ -103,6 +103,7 @@ List<QuickSaleLine> allocateAccountPayments(
         productId: account.lines[i].productId,
         quantityText: account.lines[i].quantityText,
         unitPriceMinor: account.lines[i].unitPriceMinor,
+        membershipDiscount: account.lines[i].membershipDiscount,
         paymentOptionId: allocated[i].isEmpty
             ? parts.first.paymentOptionId
             : null,

@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:valinor_sanctum_2/features/memberships/domain/membership.dart';
 import 'package:valinor_sanctum_2/features/debtors/domain/debtors_store.dart';
 
 import 'package:valinor_sanctum_2/features/inventory/domain/inventory_store.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
 
 class FakeQuickSalesStore implements QuickSalesStore {
+  final memberships = <Membership>[];
   @override
   Future<void> ensureBulkProducts() async {}
   final debtors = <DebtorSummary>[
@@ -108,6 +110,7 @@ class FakeQuickSalesStore implements QuickSalesStore {
     final result = QuickSalesSnapshot(
       accounts: accounts,
       debtors: debtors,
+      memberships: memberships,
       products: products,
       stock: stock,
       paymentOptions: options,

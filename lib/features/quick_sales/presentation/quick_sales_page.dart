@@ -10,14 +10,19 @@ import '../../workspace/domain/business_profile.dart';
 import '../application/quick_sales_controller.dart';
 import '../domain/quick_sales_store.dart';
 import 'split_payment_dialog.dart';
+import '../../memberships/data/sqlite_membership_store.dart';
+import '../../memberships/domain/membership.dart';
+import '../../memberships/presentation/memberships_page.dart';
 
 class QuickSalesPage extends StatelessWidget {
   const QuickSalesPage({
     super.key,
     required this.controller,
+    this.membershipStore,
     required this.profile,
   });
   final QuickSalesController controller;
+  final MembershipStore? membershipStore;
   final BusinessProfile profile;
 
   @override
@@ -144,6 +149,7 @@ class QuickSalesPage extends StatelessWidget {
                       'quick-card-${account.id}-${controller.editorEpochFor(account.id)}',
                     ),
                     account: account,
+                    membershipStore: membershipStore,
                     controller: controller,
                     profile: profile,
                     data: data,
@@ -190,11 +196,13 @@ class _QuickAccountCard extends StatefulWidget {
     super.key,
     required this.account,
     required this.controller,
+    this.membershipStore,
     required this.profile,
     required this.data,
   });
   final QuickSaleAccount account;
   final QuickSalesController controller;
+  final MembershipStore? membershipStore;
   final BusinessProfile profile;
   final QuickSalesSnapshot data;
 
@@ -422,6 +430,9 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     final credit = controller.creditTotalFor(account);
     final isSplit = account.isPaymentSplit;
     final personHint = _personHint(hasCredit);
+    final member = widget.data.memberships
+        .where((m) => m.personId == account.debtorId)
+        .firstOrNull;
     final debtBlocked =
         hasCredit &&
         !widget.data.debtors.any((p) => p.id == account.debtorId && p.isActive);
@@ -466,6 +477,19 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (member != null)
+              MembershipBenefitsPanel(
+                member: member,
+                onClaim: locked || widget.membershipStore == null
+                    ? null
+                    : () => claimMembershipBooster(
+                        context,
+                        widget.membershipStore!,
+                        member,
+                        widget.data,
+                        () => widget.controller.load(),
+                      ),
+              ),
             Row(
               children: [
                 Expanded(child: _accountField(locked)),
@@ -836,16 +860,17 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
         .where((p) => p.id == candidate.id)
         .firstOrNull;
     if (widget.locked || product == null) return;
-    final priorPrice = widget.account.lines
+    final priorLine = widget.account.lines
         .where(
           (line) => line.id != widget.line.id && line.productId == product.id,
         )
-        .firstOrNull
-        ?.unitPriceMinor;
+        .firstOrNull;
+    final priorPrice = priorLine?.unitPriceMinor;
     widget.onChanged(
       QuickSaleLine(
         id: widget.line.id,
         productId: product.id,
+        membershipDiscount: priorLine?.membershipDiscount ?? false,
         quantityText: product.isVariablePrice ? '1' : widget.line.quantityText,
         unitPriceMinor: product.isVariablePrice
             ? (product.id == widget.line.productId
@@ -998,6 +1023,7 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
           id: line.id,
           productId: line.productId,
           quantityText: value.replaceAll('.', ''),
+          membershipDiscount: line.membershipDiscount,
           unitPriceMinor: line.unitPriceMinor,
           paymentOptionId: line.paymentOptionId,
           paymentParts: line.paymentParts,
@@ -1060,66 +1086,108 @@ class _QuickLineEditorState extends State<_QuickLineEditor> {
       onPressed: widget.locked ? null : widget.onRemove,
       icon: const Icon(Icons.delete_outline, size: 20),
     );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 650) {
-          return Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).dividerColor),
-              borderRadius: BorderRadius.circular(8),
+    final member = widget.data.memberships
+        .where((m) => m.personId == widget.account.debtorId)
+        .firstOrNull;
+    final canDiscount =
+        selected != null &&
+        SqliteMembershipStore.eligible(selected.name) &&
+        member?.activeAt(DateTime.now().toUtc()) == true;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (canDiscount || line.membershipDiscount)
+          CheckboxListTile(
+            key: ValueKey('membership-discount-${line.id}'),
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: Text(
+              '20 % de membresía · ${member == null ? 0 : 2 - member.discountsUsed} disponibles',
             ),
-            child: Column(
+            value: line.membershipDiscount,
+            onChanged:
+                widget.locked ||
+                    (!line.membershipDiscount &&
+                        (!canDiscount || (member?.discountsUsed ?? 2) >= 2))
+                ? null
+                : (value) => widget.onChanged(
+                    QuickSaleLine(
+                      id: line.id,
+                      productId: line.productId,
+                      quantityText: line.quantityText,
+                      unitPriceMinor: value == true
+                          ? SqliteMembershipStore.discounted(
+                              selected!.listPriceMinor,
+                            )
+                          : selected?.listPriceMinor,
+                      paymentOptionId: line.paymentOptionId,
+                      paymentParts: line.paymentParts,
+                      membershipDiscount: value == true,
+                    ),
+                  ),
+          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 650) {
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Theme.of(context).dividerColor),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    productField,
+                    const SizedBox(height: 10),
+                    if (selected?.isVariablePrice == true) ...[
+                      valueField,
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(child: subtotal),
+                          remove,
+                        ],
+                      ),
+                    ] else
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 68, child: quantityField),
+                          const SizedBox(width: 12),
+                          Expanded(child: subtotal),
+                          remove,
+                        ],
+                      ),
+                  ],
+                ),
+              );
+            }
+            return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                productField,
-                const SizedBox(height: 10),
-                if (selected?.isVariablePrice == true) ...[
-                  valueField,
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(child: subtotal),
-                      remove,
-                    ],
+                Expanded(flex: 4, child: productField),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: selected?.isVariablePrice == true ? 210 : 68,
+                  child: selected?.isVariablePrice == true
+                      ? valueField
+                      : quantityField,
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 116,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: subtotal,
                   ),
-                ] else
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 68, child: quantityField),
-                      const SizedBox(width: 12),
-                      Expanded(child: subtotal),
-                      remove,
-                    ],
-                  ),
+                ),
+                remove,
               ],
-            ),
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 4, child: productField),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: selected?.isVariablePrice == true ? 210 : 68,
-              child: selected?.isVariablePrice == true
-                  ? valueField
-                  : quantityField,
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 116,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: subtotal,
-              ),
-            ),
-            remove,
-          ],
-        );
-      },
+            );
+          },
+        ),
+      ],
     );
   }
 }
