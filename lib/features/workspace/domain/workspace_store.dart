@@ -1,4 +1,5 @@
 import 'business_profile.dart';
+import '../../memberships/domain/membership.dart';
 import '../../events/domain/events_store.dart';
 import '../../debtors/domain/debtors_store.dart';
 import '../../reports/domain/reports_store.dart';
@@ -38,6 +39,7 @@ class WorkspaceSession {
     this.eventsStore,
     this.debtorsStore,
     this.reportsStore,
+    this.membershipStore,
   });
   final WorkspaceStore store;
   final String databasePath;
@@ -55,4 +57,5 @@ class WorkspaceSession {
   final EventsStore? eventsStore;
   final DebtorsStore? debtorsStore;
   final ReportsStore? reportsStore;
+  final MembershipStore? membershipStore;
 }

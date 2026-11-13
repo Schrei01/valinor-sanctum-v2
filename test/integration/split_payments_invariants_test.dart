@@ -409,7 +409,13 @@ void main() {
       expect(await factsWithoutSplit(), before);
       final current = await app.database.query('quick_sales_lines');
       for (var i = 0; i < oldLines.length; i++) {
-        expect({...current[i]}..remove('payment_split_json'), oldLines[i]);
+        expect(
+          {...current[i]}
+            ..remove('payment_split_json')
+            ..remove('membership_discount'),
+          oldLines[i],
+        );
+        expect(current[i]['membership_discount'], 0);
         expect(current[i]['payment_split_json'], '[]');
       }
       expect(

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../../memberships/domain/membership.dart';
 import '../../inventory/domain/inventory_store.dart';
 import '../../debtors/domain/debtors_store.dart';
 
@@ -13,6 +14,7 @@ class QuickSaleLine {
     this.unitPriceMinor,
     this.paymentOptionId,
     this.paymentParts = const [],
+    this.membershipDiscount = false,
   });
   final String id;
   final String? productId;
@@ -20,6 +22,7 @@ class QuickSaleLine {
   final int? unitPriceMinor;
   final String? paymentOptionId;
   final List<QuickLinePaymentPart> paymentParts;
+  final bool membershipDiscount;
   bool get isSplit => paymentParts.isNotEmpty;
   bool get hasCredit => isSplit
       ? paymentParts.any(
@@ -91,7 +94,14 @@ class QuickSaleAccount {
 }
 
 String quickConsumptionKey(List<QuickSaleLine> lines) => jsonEncode([
-  for (final l in lines) [l.id, l.productId, l.quantityText, l.unitPriceMinor],
+  for (final l in lines)
+    [
+      l.id,
+      l.productId,
+      l.quantityText,
+      l.unitPriceMinor,
+      if (l.membershipDiscount) true,
+    ],
 ]);
 
 class SaveQuickSaleAccount {
@@ -236,6 +246,7 @@ class QuickSalesSnapshot {
     required List<PreparedQuickSale> pendingSales,
     required List<ConfirmedQuickSale> sales,
     List<DebtorSummary> debtors = const [],
+    this.memberships = const [],
   }) : accounts = List.unmodifiable(accounts),
        products = List.unmodifiable(products),
        stock = List.unmodifiable(stock),
@@ -250,6 +261,7 @@ class QuickSalesSnapshot {
   final List<PreparedQuickSale> pendingSales;
   final List<ConfirmedQuickSale> sales;
   final List<DebtorSummary> debtors;
+  final List<Membership> memberships;
 
   late final Map<String, StockPosition> _positions = Map.unmodifiable({
     for (final position in stock) position.productId: position,

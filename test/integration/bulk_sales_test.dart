@@ -329,8 +329,13 @@ void main() {
       for (final row in before.entries) {
         expect(
           jsonEncode(
-            (await disk.database.query(row.key)).map(jsonEncode).toList()
-              ..sort(),
+            (await disk.database.query(row.key)).map((item) {
+              final prior = Map<String, Object?>.from(item);
+              if (row.key == 'quick_sales_lines') {
+                expect(prior.remove('membership_discount'), 0);
+              }
+              return jsonEncode(prior);
+            }).toList()..sort(),
           ),
           row.value,
           reason: row.key,

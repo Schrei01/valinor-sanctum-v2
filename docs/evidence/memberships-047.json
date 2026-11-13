@@ -1,0 +1,54 @@
+{
+  "version": "0.47.0+82",
+  "edition": "Development",
+  "schema": 28,
+  "tables": 84,
+  "date": "2026-11-12",
+  "validation": {
+    "full_run_passed": 940,
+    "full_run_skipped": 3,
+    "initial_compatibility_fixture_failures_corrected": 2,
+    "final_focused_passed": 38,
+    "final_focused_failed": 0,
+    "reopen_recovery_included": true,
+    "analysis": "No issues found",
+    "formatted_files": 243,
+    "render_widths": [
+      1120,
+      400
+    ],
+    "renders_inspected": 4
+  },
+  "artifact": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.47.0-development-windows-x64.zip",
+    "edition": "Development",
+    "files": 19,
+    "bytes": 15476515,
+    "sha256": "D88D36D3EC00D32A05CE3546074D864D286017BA9A93E8BBAA655A51CFBA7066",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe"
+  },
+  "native": {
+    "opened": true,
+    "responding": true,
+    "schemaVersion": 28,
+    "integrity": "ok",
+    "foreign_key_violations": 0,
+    "business_name": "Valinor",
+    "currency": "COP",
+    "scale": 0,
+    "synthetic_members_created": 0,
+    "automatic_v27_backup_observed": true
+  },
+  "production": {
+    "operational_database_opened": false,
+    "operational_app_closed": false,
+    "bundle_executable_unchanged": true
+  },
+  "git": {
+    "branch": "codex/membresias-elficas",
+    "merge": "pending_owner_review_and_complete_green_ci",
+    "tag": "not_created_before_integration"
+  }
+}

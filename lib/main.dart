@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'features/memberships/data/sqlite_membership_store.dart';
 import 'features/events/data/sqlite_events_store.dart';
 import 'features/debtors/data/sqlite_debtors_store.dart';
 import 'features/reports/data/sqlite_reports_store.dart';
@@ -43,6 +44,10 @@ JOIN business_documents document ON document.id=opening.document_id AND document
 JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='posted'
 ''');
       return WorkspaceSession(
+        membershipStore: SqliteMembershipStore(
+          database,
+          synthetic: config.environment == AppEnvironment.test,
+        ),
         store: SqliteWorkspaceStore(database),
         reportsStore: SqliteReportsStore(database),
         debtorsStore: SqliteDebtorsStore(

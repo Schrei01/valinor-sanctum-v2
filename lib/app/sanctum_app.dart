@@ -1,5 +1,9 @@
 import 'package:flutter/services.dart';
 import 'dart:async';
+import '../features/memberships/presentation/memberships_page.dart';
+import '../features/memberships/data/sqlite_membership_store.dart';
+import '../features/memberships/domain/membership.dart';
+import '../features/quick_sales/domain/quick_sales_store.dart';
 import '../features/events/application/events_controller.dart';
 import '../features/events/presentation/events_page.dart';
 import 'dart:ui' show AppExitResponse;
@@ -33,6 +37,7 @@ const _destinations = [
   (Icons.account_balance_outlined, 'Tesorería'),
   (Icons.event_outlined, 'Eventos'),
   (Icons.bar_chart_outlined, 'Reportes'),
+  (Icons.card_membership_outlined, 'Membresías'),
 ];
 
 class SanctumApp extends StatelessWidget {
@@ -91,10 +96,21 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
   TreasuryOperationController? _treasuryOperations;
   EventsController? _events;
   late final AppLifecycleListener _exitListener;
+  int _membershipEpoch = 0;
+  Timer? _membershipClock;
+  DateTime _lastMembershipDay = membershipDay(DateTime.now().toUtc());
 
   @override
   void initState() {
     super.initState();
+    _membershipClock = Timer.periodic(const Duration(minutes: 1), (_) {
+      final today = membershipDay(DateTime.now().toUtc());
+      if (mounted && today != _lastMembershipDay) {
+        _lastMembershipDay = today;
+        setState(() {});
+        unawaited(_quickSales?.load());
+      }
+    });
     HardwareKeyboard.instance.addHandler(_handleCatalogShortcut);
     _exitListener = AppLifecycleListener(
       onExitRequested: () async {
@@ -143,6 +159,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     if (index == 3) unawaited(_debtors?.load());
     if (index == 5) unawaited(_events?.load());
     if (index == 6) unawaited(_reports?.load());
+    if (index == 7) _membershipEpoch++;
     if (index == 4) {
       unawaited(_treasury?.load());
       unawaited(_treasuryOperations?.load());
@@ -151,6 +168,7 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
 
   @override
   void dispose() {
+    _membershipClock?.cancel();
     HardwareKeyboard.instance.removeHandler(_handleCatalogShortcut);
     _exitListener.dispose();
     _inventory?.dispose();
@@ -338,6 +356,45 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                           businessName: controller.profile?.businessName,
                           isProduction: widget.isProduction,
                         ),
+                        if (_quickSales != null)
+                          ListenableBuilder(
+                            listenable: _quickSales!,
+                            builder: (context, _) {
+                              final now = DateTime.now().toUtc();
+                              final alerts =
+                                  _quickSales!.snapshot?.memberships
+                                      .where(
+                                        (m) =>
+                                            m.ends != null &&
+                                            !m.ends!.isAfter(
+                                              membershipDay(
+                                                now,
+                                              ).add(const Duration(days: 3)),
+                                            ),
+                                      )
+                                      .toList() ??
+                                  [];
+                              if (alerts.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              return Material(
+                                color: const Color(0xffffe6b8),
+                                child: ListTile(
+                                  dense: true,
+                                  leading: const Icon(
+                                    Icons.card_membership_outlined,
+                                  ),
+                                  title: Text(
+                                    'Membresías: ${alerts.take(3).map((m) => "${m.name} · ${m.statusAt(now)}").join("; ")}${alerts.length > 3 ? "; y ${alerts.length - 3} más" : ""}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () => _selectSection(7),
+                                ),
+                              );
+                            },
+                          ),
                         Expanded(
                           child: IndexedStack(
                             index: _section,
@@ -413,6 +470,20 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                       ),
                                 wide,
                               ),
+                              _scrollPage(
+                                controller.membershipStore == null ||
+                                        controller.debtorsStore == null ||
+                                        controller.quickSalesStore == null
+                                    ? const _ModuleUnavailable()
+                                    : MembershipsPage(
+                                        key: ValueKey(_membershipEpoch),
+                                        store: controller.membershipStore!,
+                                        debtors: controller.debtorsStore!,
+                                        sales: controller.quickSalesStore!,
+                                        onEnroll: _enrollMembership,
+                                      ),
+                                wide,
+                              ),
                             ],
                           ),
                         ),
@@ -458,11 +529,37 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
     ),
   );
 
+  Future<void> _enrollMembership(String personId) async {
+    final sales = _quickSales!;
+    await sales.load();
+    final product = sales.snapshot!.products.singleWhere(
+      (p) => p.id == SqliteMembershipStore.productId,
+    );
+    final id = sales.addAccount();
+    if (id == null) throw StateError('No se pudo abrir la cuenta.');
+    sales.selectDebtor(id, personId);
+    final account = sales.accounts.singleWhere((a) => a.id == id);
+    sales.editLine(
+      id,
+      QuickSaleLine(
+        id: account.lines.first.id,
+        productId: product.id,
+        unitPriceMinor: product.listPriceMinor,
+        paymentOptionId: account.singlePaymentOptionId,
+      ),
+    );
+    if (!await sales.flush(id)) {
+      throw StateError(sales.errorFor(id) ?? 'No se pudo guardar la cuenta.');
+    }
+    if (mounted) _selectSection(2);
+  }
+
   Widget _salesContent(WorkspaceController controller) {
     if (_quickSales == null) return const _ModuleUnavailable();
     return QuickSalesPage(
       key: ObjectKey(_quickSales),
       controller: _quickSales!,
+      membershipStore: controller.membershipStore,
       profile: controller.profile!,
     );
   }
