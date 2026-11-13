@@ -142,6 +142,9 @@ void main() {
             final copy = Map<String, Object?>.from(row);
             if (table.key == 'quick_sales_lines') {
               expect(copy.remove('membership_discount'), 0);
+              expect(copy.remove('voucher_selected'), 0);
+              expect(copy.remove('voucher_minor'), 0);
+              expect(copy.remove('voucher_period_id'), isNull);
             }
             return copy;
           }).toList();

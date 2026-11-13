@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import '../../../core/domain/money.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../core/infrastructure/database/app_database.dart';
 import '../../debtors/data/sqlite_debtors_store.dart';
 import '../../debtors/domain/debtors_store.dart';
-import '../../inventory/data/sqlite_stock_adjustment_store.dart';
-import '../../inventory/domain/stock_adjustment_store.dart';
+
 import '../../quick_sales/domain/quick_sales_store.dart';
 import '../domain/membership.dart';
 
@@ -68,6 +68,7 @@ class SqliteMembershipStore implements MembershipStore {
     final profiles = await txn.rawQuery(
       '''SELECT p.*,d.name FROM membership_profiles p JOIN debtors d ON d.id=p.person_id ORDER BY d.name COLLATE NOCASE''',
     );
+    final profile = (await txn.query('app_profile')).single;
     final result = <Membership>[];
     final day = membershipDay(atUtc).toIso8601String().substring(0, 10);
     for (final p in profiles) {
@@ -83,11 +84,27 @@ class SqliteMembershipStore implements MembershipStore {
               where: 'period_id=?',
               whereArgs: [period['id']],
             );
+      final grants = period == null
+          ? <Map<String, Object?>>[]
+          : await txn.rawQuery(
+              '''SELECT g.amount_minor,
+        coalesce((SELECT sum(v.amount_minor) FROM membership_voucher_collections v
+          JOIN membership_voucher_plans p ON p.request_id=v.request_id
+          JOIN business_documents d ON d.id=v.document_id AND d.status='posted'
+          JOIN journal_entries e ON e.document_id=d.id AND e.status='posted'
+          WHERE p.period_id=g.period_id),0) used_minor
+        FROM membership_voucher_grants g WHERE g.period_id=?''',
+              [period['id']],
+            );
       result.add(
         Membership(
           personId: p['person_id'] as String,
           name: p['name'] as String,
           email: p['email'] as String,
+          moneyScale: profile['money_scale'] as int,
+          currencyCode: profile['currency_code'] as String,
+          voucherGrantedMinor: grants.firstOrNull?['amount_minor'] as int? ?? 0,
+          voucherUsedMinor: grants.firstOrNull?['used_minor'] as int? ?? 0,
           birthDay: p['birth_day'] as int?,
           birthMonth: p['birth_month'] as int?,
           periodId: period?['id'] as String?,
@@ -192,7 +209,12 @@ class SqliteMembershipStore implements MembershipStore {
         .where((l) => l.productId == productId)
         .toList();
     final discounts = account.lines.where((l) => l.membershipDiscount).toList();
-    if (signup.isEmpty && discounts.isEmpty) return;
+    if (discounts.isNotEmpty) {
+      fail(
+        'Los beneficios de boosters fueron reemplazados por el bono. Quita el descuento anterior.',
+      );
+    }
+    if (signup.isEmpty) return;
     if (account.debtorId == null) {
       fail('Asocia la cuenta a una persona para usar Membresías.');
     }
@@ -233,44 +255,6 @@ class SqliteMembershipStore implements MembershipStore {
         'start': start.toIso8601String().substring(0, 10),
         'end': membershipNextMonth(start).toIso8601String().substring(0, 10),
         'amount': signup.single.unitPriceMinor,
-      });
-    }
-    var used = person.discountsUsed;
-    for (final l in discounts) {
-      if (!person.activeAt(atUtc)) {
-        fail(
-          'La membresía debe estar activa para aplicar el descuento. Confirma primero la inscripción.',
-        );
-      }
-      final product = (await txn.query(
-        'catalog_items',
-        where: 'id=?',
-        whereArgs: [l.productId],
-      )).single;
-      final base = product['list_price_minor'] as int;
-      final quantity = int.tryParse(l.quantityText) ?? 0;
-      if (!eligible(product['name'] as String) ||
-          quantity < 1 ||
-          base <= 0 ||
-          l.unitPriceMinor != discounted(base)) {
-        fail('Revisa el booster y su precio con descuento de membresía.');
-      }
-      used += quantity;
-      if (used > 2) {
-        fail(
-          'Solo quedan ${2 - person.discountsUsed} boosters con descuento en este período.',
-        );
-      }
-      plans.add({
-        'kind': 'discount',
-        'personId': person.personId,
-        'periodId': person.periodId,
-        'lineId': l.id,
-        'productId': l.productId,
-        'name': product['name'],
-        'quantity': quantity,
-        'base': base,
-        'charged': l.unitPriceMinor! * quantity,
       });
     }
     await txn.insert('membership_sale_plans', {
@@ -318,6 +302,12 @@ class SqliteMembershipStore implements MembershipStore {
           'ends': p['end'],
           'amount_minor': p['amount'],
         });
+        final profile = (await txn.query('app_profile')).single;
+        await txn.insert('membership_voucher_grants', {
+          'period_id': 'membership:$requestId',
+          'amount_minor':
+              30000 * math.pow(10, profile['money_scale'] as int).toInt(),
+        });
       } else {
         final member = (await read(
           txn,
@@ -361,62 +351,9 @@ class SqliteMembershipStore implements MembershipStore {
     required String periodId,
     required String productId,
     required DateTime atUtc,
-  }) => database.database.transaction((txn) async {
-    final prior = await txn.query(
-      'membership_benefits',
-      where: 'id=?',
-      whereArgs: [commandId],
-    );
-    if (prior.isNotEmpty) {
-      if (prior.single['period_id'] != periodId ||
-          prior.single['product_id'] != productId) {
-        fail('Esta entrega ya corresponde a otro booster.');
-      }
-      return;
-    }
-    final member = (await read(
-      txn,
-      atUtc,
-    )).where((p) => p.periodId == periodId).firstOrNull;
-    if (member == null || !member.activeAt(atUtc) || member.includedClaimed) {
-      fail('El booster incluido no está disponible en este período.');
-    }
-    final product = (await txn.query(
-      'catalog_items',
-      where: 'id=? AND is_active=1',
-      whereArgs: [productId],
-    )).firstOrNull;
-    if (product == null || !eligible(product['name'] as String)) {
-      fail('Selecciona un booster de Yu-Gi-Oh!, Magic o Pokémon.');
-    }
-    final adjustments = SqliteStockAdjustmentStore(
-      database,
-      synthetic: synthetic,
-      transaction: txn,
-    );
-    await adjustments.prepareAdjustment(
-      StockAdjustmentCommand(
-        commandId: commandId,
-        productId: productId,
-        quantity: 1,
-        reason: 'Booster incluido · Mensualidad Élfica · ${member.name}',
-        occurredAtUtc: atUtc,
-      ),
-    );
-    await adjustments.confirmAdjustment(commandId);
-    await txn.insert('membership_benefits', {
-      'id': commandId,
-      'period_id': periodId,
-      'kind': 'included',
-      'product_id': productId,
-      'product_name': product['name'],
-      'quantity': 1,
-      'base_price_minor': product['list_price_minor'],
-      'charged_minor': 0,
-      'occurred_at_utc': atUtc.toIso8601String(),
-      'source_id': commandId,
-    });
-  }, exclusive: true);
+  }) async {
+    fail('El booster incluido fue reemplazado por el bono de tienda.');
+  }
 
   @override
   Future<List<({String name, String period, String detail})>> history(
@@ -429,6 +366,7 @@ class SqliteMembershipStore implements MembershipStore {
       orderBy: 'starts DESC',
     );
     final result = <({String name, String period, String detail})>[];
+    final profile = (await database.database.query('app_profile')).single;
     for (final p in periods) {
       final benefits = await database.database.query(
         'membership_benefits',
@@ -436,18 +374,29 @@ class SqliteMembershipStore implements MembershipStore {
         whereArgs: [p['id']],
         orderBy: 'occurred_at_utc',
       );
+      final voucherRows = await database.database.rawQuery(
+        '''SELECT p.allocations_json,d.occurred_at_utc
+        FROM membership_voucher_collections v JOIN membership_voucher_plans p ON p.request_id=v.request_id
+        JOIN business_documents d ON d.id=v.document_id AND d.status='posted'
+        JOIN journal_entries e ON e.document_id=d.id AND e.status='posted' WHERE p.period_id=? ORDER BY d.occurred_at_utc''',
+        [p['id']],
+      );
+      final voucherEntries = [
+        for (final row in voucherRows)
+          for (final item
+              in jsonDecode(row['allocations_json'] as String) as List)
+            'Bono · ${item['quantity']} × ${item['name']} · ${Money.fromMinorUnits(item['amountMinor'] as int, currency: profile['currency_code'] as String, scale: profile['money_scale'] as int).formatEsCo(includeCurrency: true)} · ${_localMoment(row['occurred_at_utc'] as String)}',
+      ];
+      final oldEntries = benefits.map(
+        (b) =>
+            'Beneficio anterior · ${b['kind'] == 'included' ? 'Incluido' : '20 % descuento'} · ${b['quantity']} × ${b['product_name']} · ${_localMoment(b['occurred_at_utc'] as String)}',
+      );
+      final entries = [...oldEntries, ...voucherEntries];
       result.add((
         name:
             '${_dateLabel(DateTime.parse(p['starts'] as String))} al ${_dateLabel(DateTime.parse(p['ends'] as String))}',
         period: p['id'] as String,
-        detail: benefits.isEmpty
-            ? 'Sin beneficios utilizados'
-            : benefits
-                  .map(
-                    (b) =>
-                        '${b['kind'] == 'included' ? 'Incluido' : '20 % descuento'} · ${b['quantity']} × ${b['product_name']} · ${_localMoment(b['occurred_at_utc'] as String)}',
-                  )
-                  .join('\n'),
+        detail: entries.isEmpty ? 'Sin consumos de bono' : entries.join('\n'),
       ));
     }
     return result;

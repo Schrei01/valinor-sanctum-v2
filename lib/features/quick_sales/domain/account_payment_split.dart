@@ -17,7 +17,8 @@ Map<String, BigInt> accountPaymentTotals(QuickSaleAccount account) {
     } else if (line.paymentOptionId != null) {
       final amount =
           BigInt.from(line.unitPriceMinor ?? 0) *
-          (BigInt.tryParse(line.quantityText.trim()) ?? BigInt.zero);
+              (BigInt.tryParse(line.quantityText.trim()) ?? BigInt.zero) -
+          BigInt.from(line.voucherMinor);
       totals.update(
         line.paymentOptionId!,
         (v) => v + amount,
@@ -56,7 +57,10 @@ List<QuickSaleLine> allocateAccountPayments(
         'Completa producto, cantidad y precio de todas las líneas antes de dividir la cuenta.',
       );
     }
-    remaining.add(quantity * BigInt.from(line.unitPriceMinor!));
+    remaining.add(
+      quantity * BigInt.from(line.unitPriceMinor!) -
+          BigInt.from(line.voucherMinor),
+    );
   }
   var capacity = remaining.fold(BigInt.zero, (s, v) => s + v);
   if (capacity <= BigInt.zero ||
@@ -104,8 +108,13 @@ List<QuickSaleLine> allocateAccountPayments(
         quantityText: account.lines[i].quantityText,
         unitPriceMinor: account.lines[i].unitPriceMinor,
         membershipDiscount: account.lines[i].membershipDiscount,
+        useVoucher: account.lines[i].useVoucher,
+        voucherMinor: account.lines[i].voucherMinor,
+        voucherPeriodId: account.lines[i].voucherPeriodId,
         paymentOptionId: allocated[i].isEmpty
-            ? parts.first.paymentOptionId
+            ? (account.lines[i].voucherMinor > 0
+                  ? null
+                  : parts.first.paymentOptionId)
             : null,
         paymentParts: List.unmodifiable(allocated[i]),
       ),

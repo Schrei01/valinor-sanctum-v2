@@ -571,6 +571,7 @@ Future<void> restoreReleasedV26ForFixture(DatabaseExecutor db) async {
 
 /// Test-only reconstruction; operational databases never downgrade.
 Future<void> restoreReleasedV27ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV28ForFixture(db);
   for (final sql in DatabaseSchema.migration28Statements) {
     final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
     if (name != null) await db.execute('DROP TRIGGER $name');
@@ -594,4 +595,47 @@ Future<void> restoreReleasedV27ForFixture(DatabaseExecutor db) async {
   );
   await db.delete('schema_migrations', where: 'version>=28');
   await db.execute('PRAGMA user_version=27');
+}
+
+/// Synthetic reconstruction only; never part of the runtime migration path.
+Future<void> restoreReleasedV28ForFixture(DatabaseExecutor db) async {
+  for (final sql in DatabaseSchema.migration29Statements) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name != null) await db.execute('DROP TRIGGER $name');
+  }
+  await db.execute('DROP VIEW all_receivable_settlements');
+  await db.execute(
+    DatabaseSchema.migration13Statements.singleWhere(
+      (s) => s.startsWith('CREATE VIEW all_receivable_settlements '),
+    ),
+  );
+  for (final table in [
+    'membership_voucher_collections',
+    'membership_voucher_plans',
+    'membership_voucher_grants',
+  ]) {
+    expect(await db.query(table), isEmpty);
+    await db.execute('DROP TABLE $table');
+  }
+  for (final column in [
+    'voucher_period_id',
+    'voucher_minor',
+    'voucher_selected',
+  ]) {
+    await db.execute('ALTER TABLE quick_sales_lines DROP COLUMN $column');
+  }
+  await db.execute(
+    DatabaseSchema.migration13Statements.singleWhere(
+      (s) => s.startsWith(
+        'CREATE TRIGGER collections_validate_document_posting\n',
+      ),
+    ),
+  );
+  await db.execute(
+    DatabaseSchema.migration18Statements.singleWhere(
+      (s) => s.startsWith('CREATE TRIGGER account_payment_prepare_guard '),
+    ),
+  );
+  await db.delete('schema_migrations', where: 'version>=29');
+  await db.execute('PRAGMA user_version=28');
 }

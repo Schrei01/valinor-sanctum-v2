@@ -266,6 +266,26 @@ ORDER BY document.occurred_at_utc,document.id,line.sequence''',
         }
       }
     }
+    final voucherByProduct = <(String, String), BigInt>{};
+    for (final v in await txn.rawQuery(
+      '''SELECT a.confirmed_document_id,p.allocations_json
+      FROM membership_voucher_collections v JOIN membership_voucher_plans p ON p.request_id=v.request_id
+      JOIN quick_sale_requests r ON r.command_id=v.request_id JOIN quick_sales_accounts a ON a.id=r.account_id
+      JOIN business_documents d ON d.id=v.document_id AND d.status='posted'
+      JOIN journal_entries e ON e.document_id=d.id AND e.status='posted' ''',
+    )) {
+      for (final part in jsonDecode(v['allocations_json'] as String) as List) {
+        final key = (
+          v['confirmed_document_id'] as String,
+          part['productId'] as String,
+        );
+        voucherByProduct.update(
+          key,
+          (n) => n + BigInt.from(part['amountMinor'] as int),
+          ifAbsent: () => BigInt.from(part['amountMinor'] as int),
+        );
+      }
+    }
     final sales = <ReportSaleLine>[];
     var hasOtherSelectedTender = false;
     for (final row in saleRows) {
@@ -278,7 +298,13 @@ ORDER BY document.occurred_at_utc,document.id,line.sequence''',
           _Tender();
       hasOtherSelectedTender =
           hasOtherSelectedTender || tender.other != BigInt.zero;
-      final credit = quick == null ? gross : tender.credit;
+      final voucher =
+          voucherByProduct[(
+            row['sale_id'] as String,
+            row['product_id'] as String,
+          )] ??
+          BigInt.zero;
+      final credit = quick == null ? gross : tender.credit - voucher;
       if (quick != null &&
           gross !=
               tender.cash + tender.transfer + tender.other + tender.credit) {
@@ -297,7 +323,8 @@ ORDER BY document.occurred_at_utc,document.id,line.sequence''',
           categoryId: row['category_id'] as String? ?? '',
           categoryName: row['category_name'] as String? ?? 'Sin categoría',
           quantity: row['quantity'] as int,
-          salesMinor: row['total_minor'] as int,
+          salesMinor: reportMinor(gross - voucher),
+          voucherMinor: reportMinor(voucher),
           costMinor: row['total_cost_minor'] as int,
           cashMinor: reportMinor(tender.cash),
           transferMinor: reportMinor(tender.transfer),
@@ -410,7 +437,18 @@ JOIN journal_entries entry ON entry.document_id=document.id AND entry.status='po
           name: event['name_snapshot'] as String,
           createdAtUtc: _date(event['occurred_at_utc']),
           quantity: reportSum(lines.map((l) => l['quantity'] as int)),
-          salesMinor: reportSum(lines.map((l) => l['total_minor'] as int)),
+          salesMinor: reportSum(
+            lines.map(
+              (l) => reportMinor(
+                BigInt.from(l['total_minor'] as int) -
+                    (voucherByProduct[(
+                          l['sale_id'] as String,
+                          l['product_id'] as String,
+                        )] ??
+                        BigInt.zero),
+              ),
+            ),
+          ),
           costMinor: reportSum([
             event['total_cost_minor'] as int,
             for (final change in eventCorrections.where(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../domain/account_voucher.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -122,6 +123,27 @@ class QuickSalesController extends ChangeNotifier {
           card.awaitingUnlock = false;
           card.error = null;
           card.editorEpoch++;
+        }
+      }
+      for (final entry in _cards.entries.toList()) {
+        final card = entry.value;
+        if (card.pending != null ||
+            card.acting ||
+            card.account.status != 'open') {
+          continue;
+        }
+        final member = next.memberships
+            .where((m) => m.personId == card.account.debtorId)
+            .firstOrNull;
+        final adjusted = allocateVoucher(
+          card.account.lines,
+          member?.activeAt(DateTime.now().toUtc()) == true
+              ? member!.voucherRemainingMinor
+              : 0,
+          member?.periodId,
+        );
+        if (quickConsumptionKey(adjusted) != card.account.consumptionKey) {
+          _change(entry.key, lines: adjusted);
         }
       }
       final openIds = next.accounts
@@ -359,6 +381,9 @@ class QuickSalesController extends ChangeNotifier {
           quantityText: l.quantityText,
           unitPriceMinor: l.unitPriceMinor,
           membershipDiscount: l.membershipDiscount,
+          useVoucher: l.useVoucher,
+          voucherMinor: l.voucherMinor,
+          voucherPeriodId: l.voucherPeriodId,
           paymentOptionId: optionId,
         ),
     ];
@@ -386,25 +411,79 @@ class QuickSalesController extends ChangeNotifier {
   }) {
     final card = _cards[id];
     if (_disposed || card == null || isLocked(id)) return;
-    final changedConsumption =
-        lines != null &&
-        quickConsumptionKey(lines) != card.account.consumptionKey;
-    final invalidateSplit = card.account.isPaymentSplit && changedConsumption;
-    card.account = _copy(
+    var candidate = _copy(
       card.account,
       label: label,
       customerName: customerName,
       debtorId: debtorId,
       clearDebtor: clearDebtor,
       lines: lines,
-      paymentMode: paymentMode ?? (invalidateSplit ? 'split' : null),
+      paymentMode: paymentMode,
       accountPaymentOptionId: accountPaymentOptionId,
+      clearAccountPayment: clearAccountPayment,
+      paymentSplitBasis: paymentSplitBasis,
+    );
+    final member = snapshot?.memberships
+        .where((m) => m.personId == candidate.debtorId)
+        .firstOrNull;
+    if (candidate.paymentMode == 'legacy' &&
+        candidate.lines.any((l) => l.useVoucher)) {
+      final split = candidate.isPaymentSplit;
+      candidate = _copy(
+        candidate,
+        paymentMode: split ? 'split' : 'single',
+        accountPaymentOptionId: split ? null : candidate.singlePaymentOptionId,
+        clearAccountPayment: split,
+        paymentSplitBasis: split ? card.account.consumptionKey : '',
+      );
+    }
+    var adjusted = allocateVoucher(
+      candidate.lines,
+      member?.activeAt(DateTime.now().toUtc()) == true
+          ? member!.voucherRemainingMinor
+          : 0,
+      member?.periodId,
+    );
+    final changedConsumption =
+        quickConsumptionKey(adjusted) != card.account.consumptionKey;
+    final invalidateSplit = card.account.isPaymentSplit && changedConsumption;
+    final fullyCovered =
+        adjusted.any((l) => l.voucherMinor > 0) &&
+        adjusted.every((l) => linePayable(l) == BigInt.zero);
+    if (fullyCovered) {
+      adjusted = [
+        for (final l in adjusted)
+          QuickSaleLine(
+            id: l.id,
+            productId: l.productId,
+            quantityText: l.quantityText,
+            unitPriceMinor: l.unitPriceMinor,
+            membershipDiscount: l.membershipDiscount,
+            useVoucher: l.useVoucher,
+            voucherMinor: l.voucherMinor,
+            voucherPeriodId: l.voucherPeriodId,
+          ),
+      ];
+      candidate = _copy(
+        candidate,
+        paymentMode: 'single',
+        clearAccountPayment: true,
+        paymentSplitBasis: '',
+      );
+    }
+    card.account = _copy(
+      candidate,
+      lines: adjusted,
+      paymentMode: fullyCovered
+          ? 'single'
+          : paymentMode ?? (invalidateSplit ? 'split' : null),
       clearAccountPayment: clearAccountPayment || invalidateSplit,
-      paymentSplitBasis:
-          paymentSplitBasis ??
-          (invalidateSplit && card.account.paymentMode == 'legacy'
-              ? card.account.consumptionKey
-              : null),
+      paymentSplitBasis: fullyCovered
+          ? ''
+          : paymentSplitBasis ??
+                (invalidateSplit && card.account.paymentMode == 'legacy'
+                    ? card.account.consumptionKey
+                    : null),
     );
     card.generation++;
     card.error = null;
@@ -495,7 +574,7 @@ class QuickSalesController extends ChangeNotifier {
       accounts.fold(BigInt.zero, (sum, account) => sum + totalFor(account));
 
   bool hasCreditFor(QuickSaleAccount account) =>
-      account.lines.any((line) => line.hasCredit);
+      creditTotalFor(account) > BigInt.zero;
 
   BigInt creditTotalFor(QuickSaleAccount account) => account.lines
       .where((line) => line.hasCredit)
@@ -513,7 +592,8 @@ class QuickSalesController extends ChangeNotifier {
                         (a, p) => a + BigInt.from(p.amountMinor),
                       )
                 : BigInt.from(line.unitPriceMinor ?? 0) *
-                      BigInt.from(int.tryParse(line.quantityText) ?? 0)),
+                          BigInt.from(int.tryParse(line.quantityText) ?? 0) -
+                      BigInt.from(line.voucherMinor)),
       );
 
   Future<bool> register(String id) async {
@@ -536,7 +616,8 @@ class QuickSalesController extends ChangeNotifier {
     }
     if (card.account.needsPaymentReview ||
         (card.account.paymentMode == 'single' &&
-            card.account.accountPaymentOptionId == null)) {
+            card.account.accountPaymentOptionId == null &&
+            accountPayable(card.account) > BigInt.zero)) {
       card.error = card.account.needsPaymentReview
           ? 'El consumo cambió. Revisa y guarda de nuevo la división antes de registrar.'
           : 'Selecciona la forma de pago de la cuenta.';

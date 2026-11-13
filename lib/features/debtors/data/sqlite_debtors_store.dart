@@ -32,8 +32,34 @@ class SqliteDebtorsStore implements DebtorsStore {
       final people = await txn.rawQuery(
         'SELECT debtor.*,EXISTS(SELECT 1 FROM debtor_openings WHERE debtor_id=debtor.id) has_opening FROM debtors debtor ORDER BY name COLLATE NOCASE,id',
       );
-      final rows = await _receivables(txn);
-      final previousBalances = await _balancesBeforeCharges(txn, rows);
+      final originalRows = await _receivables(txn);
+      final voucherDocs = <String>{}, voucherAmounts = <String, int>{};
+      if ((await txn.rawQuery('PRAGMA user_version')).single.values.single
+              as int >=
+          29) {
+        for (final v in await txn.rawQuery(
+          '''SELECT v.* FROM membership_voucher_collections v
+          JOIN business_documents d ON d.id=v.document_id AND d.status='posted'
+          JOIN journal_entries e ON e.document_id=d.id AND e.status='posted' ''',
+        )) {
+          voucherDocs.add(v['document_id'] as String);
+          voucherAmounts[v['request_id'] as String] = v['amount_minor'] as int;
+        }
+      }
+      final rows = [
+        for (final r in originalRows)
+          {
+            ...r,
+            'credit_minor':
+                (r['credit_minor'] as int) -
+                (voucherAmounts[r['quick_request_id']] ?? 0),
+          },
+      ];
+      final previousBalances = await _balancesBeforeCharges(
+        txn,
+        rows,
+        voucherDocs,
+      );
       final balances = <String, BigInt>{};
       final charges = <DebtorCharge>[];
       for (final r in rows) {
@@ -763,7 +789,7 @@ JOIN journal_lines line ON line.entry_id=entry.id WHERE document.status='posted'
   static Future<List<Map<String, Object?>>> _receivables(
     DatabaseExecutor txn,
   ) => txn.rawQuery(
-    '''SELECT balance.*,link.debtor_id,document.rowid document_order,
+    '''SELECT balance.*,link.debtor_id,document.rowid document_order,request.command_id quick_request_id,
  coalesce(sale.label_snapshot,CASE WHEN loan.document_id IS NOT NULL THEN 'Préstamo desde inversión' ELSE 'Saldo anterior' END) label,CASE WHEN opening.document_id IS NULL THEN 0 ELSE 1 END is_opening,
  CASE WHEN request.command_id IS NOT NULL AND json_valid(request.canonical_payload) AND json_extract(request.canonical_payload,'\$.version') IN(2,3,4)
  THEN json_extract(request.canonical_payload,'\$.creditMinor') ELSE balance.initial_minor END credit_minor
@@ -776,12 +802,13 @@ JOIN journal_lines line ON line.entry_id=entry.id WHERE document.status='posted'
   static Future<Map<String, int?>> _balancesBeforeCharges(
     DatabaseExecutor txn,
     List<Map<String, Object?>> charges,
+    Set<String> voucherDocuments,
   ) async {
     // A sale's automatic collection is already excluded from credit_minor.
     // Include subsequent collections from either collection API exactly once,
     // using the posted source documents rather than today's remaining amounts.
     final repayments = await txn.rawQuery('''
-SELECT link.debtor_id,settlement.amount_minor,document.occurred_at_utc,
+SELECT link.debtor_id,settlement.amount_minor,document.occurred_at_utc,document.id document_id,
        document.rowid document_order
 FROM all_receivable_settlements settlement
 JOIN debtor_receivables link ON link.receivable_id=settlement.receivable_id
@@ -809,13 +836,14 @@ AND NOT EXISTS(SELECT 1 FROM quick_sale_requests request WHERE request.collectio
                   amount: BigInt.from(r['credit_minor'] as int),
                 ),
             for (final r in repayments)
-              (
-                at: DateTime.parse(r['occurred_at_utc'] as String).toUtc(),
-                order: r['document_order'] as int,
-                person: r['debtor_id'] as String,
-                chargeId: null,
-                amount: -BigInt.from(r['amount_minor'] as int),
-              ),
+              if (!voucherDocuments.contains(r['document_id']))
+                (
+                  at: DateTime.parse(r['occurred_at_utc'] as String).toUtc(),
+                  order: r['document_order'] as int,
+                  person: r['debtor_id'] as String,
+                  chargeId: null,
+                  amount: -BigInt.from(r['amount_minor'] as int),
+                ),
           ]
           ..sort((a, b) {
             final time = a.at.compareTo(b.at);
