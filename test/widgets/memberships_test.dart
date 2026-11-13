@@ -157,12 +157,14 @@ void main() {
         });
       }
 
+      var peopleChanges = 0;
       await open(
         MembershipsPage(
           store: members,
           debtors: debtors,
           sales: sales,
           onEnroll: (_) async {},
+          onPeopleChanged: () => peopleChanges++,
         ),
       );
       expect(find.text('Membresías'), findsOneWidget);
@@ -184,6 +186,7 @@ void main() {
       await tester.tap(find.text('Guardar datos'));
       await tester.pumpAndSettle();
       expect(members.lastSavedMonth, 3);
+      expect(peopleChanges, 1);
       await tester.tap(find.text('Editar datos'));
       await tester.pumpAndSettle();
       expect(find.text('Junio'), findsOneWidget);
@@ -195,6 +198,7 @@ void main() {
       await tester.tap(find.text('Guardar datos'));
       await tester.pumpAndSettle();
       expect(members.lastSavedMonth, isNull);
+      expect(peopleChanges, 2);
       await controller.load();
       final id = controller.addAccount()!;
       controller.selectDebtor(id, 'Cliente sintético');

@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'dart:async';
 import '../features/memberships/presentation/memberships_page.dart';
+import '../features/memberships/presentation/membership_alerts.dart';
 import '../features/memberships/data/sqlite_membership_store.dart';
 import '../features/memberships/domain/membership.dart';
 import '../features/quick_sales/domain/quick_sales_store.dart';
@@ -360,38 +361,11 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                           ListenableBuilder(
                             listenable: _quickSales!,
                             builder: (context, _) {
-                              final now = DateTime.now().toUtc();
-                              final alerts =
-                                  _quickSales!.snapshot?.memberships
-                                      .where(
-                                        (m) =>
-                                            m.ends != null &&
-                                            !m.ends!.isAfter(
-                                              membershipDay(
-                                                now,
-                                              ).add(const Duration(days: 3)),
-                                            ),
-                                      )
-                                      .toList() ??
-                                  [];
-                              if (alerts.isEmpty) {
-                                return const SizedBox.shrink();
-                              }
-                              return Material(
-                                color: const Color(0xffffe6b8),
-                                child: ListTile(
-                                  dense: true,
-                                  leading: const Icon(
-                                    Icons.card_membership_outlined,
-                                  ),
-                                  title: Text(
-                                    'Membresías: ${alerts.take(3).map((m) => "${m.name} · ${m.statusAt(now)}").join("; ")}${alerts.length > 3 ? "; y ${alerts.length - 3} más" : ""}',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => _selectSection(7),
-                                ),
+                              return MembershipAlerts(
+                                members:
+                                    _quickSales!.snapshot?.memberships ?? [],
+                                now: DateTime.now().toUtc(),
+                                onOpen: () => _selectSection(7),
                               );
                             },
                           ),
@@ -481,6 +455,8 @@ class _WorkspaceShellState extends State<_WorkspaceShell> {
                                         debtors: controller.debtorsStore!,
                                         sales: controller.quickSalesStore!,
                                         onEnroll: _enrollMembership,
+                                        onPeopleChanged: () =>
+                                            unawaited(_quickSales?.load()),
                                       ),
                                 wide,
                               ),

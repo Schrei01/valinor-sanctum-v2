@@ -39,6 +39,7 @@ class MembershipBenefitsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now().toUtc(),
         active = member.activeAt(DateTime.now().toUtc());
+    final birthday = member.birthdayNoticeAt(now);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 10),
@@ -52,6 +53,7 @@ class MembershipBenefitsPanel extends StatelessWidget {
         runSpacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          if (birthday != null) Text(birthday),
           Text(
             'Mensualidad Élfica · ${member.statusAt(now)}\n${membershipDate(member.starts)} al ${membershipDate(member.ends)}',
           ),
@@ -72,11 +74,13 @@ class MembershipsPage extends StatefulWidget {
     required this.debtors,
     required this.sales,
     required this.onEnroll,
+    this.onPeopleChanged,
   });
   final MembershipStore store;
   final DebtorsStore debtors;
   final QuickSalesStore sales;
   final Future<void> Function(String personId) onEnroll;
+  final VoidCallback? onPeopleChanged;
   @override
   State<MembershipsPage> createState() => _MembershipsPageState();
 }
@@ -266,7 +270,10 @@ class _MembershipsPageState extends State<MembershipsPage> {
                           birthDay: int.tryParse(day.text),
                           birthMonth: birthMonth,
                         );
-                        if (context.mounted) Navigator.pop(context);
+                        if (context.mounted) {
+                          widget.onPeopleChanged?.call();
+                          Navigator.pop(context);
+                        }
                       } catch (e) {
                         if (context.mounted) {
                           update(() {
