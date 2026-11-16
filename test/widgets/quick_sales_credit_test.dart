@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:valinor_sanctum_2/features/debtors/domain/debtors_store.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/application/quick_sales_controller.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
@@ -191,9 +192,20 @@ void main() {
   testWidgets(
     'all credit consumes stock and records named debt without money collection',
     (tester) async {
+      final personIndex = store.debtors.indexWhere(
+        (p) => p.id == 'Cliente sintético',
+      );
+      store.debtors[personIndex] = const DebtorSummary(
+        id: 'Cliente sintético',
+        name: 'Cliente sintético',
+        balanceMinor: 1000000,
+      );
       await open(tester);
       await creditAccount(tester);
       await enter(tester, keyed('quick-label-'), 'Cliente sintético');
+      expect(find.text('Deuda al registrar: COP 13.000,00'), findsOneWidget);
+      expect(store.customerDebts, isEmpty);
+      expect(store.preparedIds, isEmpty);
       await tap(tester, keyed('quick-register-').first);
       expect(store.sales, hasLength(1));
       expect(store.sales.single.result.creditMinor, 300000);
@@ -217,6 +229,14 @@ void main() {
   testWidgets(
     'legacy mixed draft opens as divided and preserves its cash transfer and debt',
     (tester) async {
+      final personIndex = store.debtors.indexWhere(
+        (p) => p.id == 'Cliente mixto',
+      );
+      store.debtors[personIndex] = const DebtorSummary(
+        id: 'Cliente mixto',
+        name: 'Cliente mixto',
+        balanceMinor: 1000000,
+      );
       await open(tester);
       await creditAccount(tester);
       await enter(tester, keyed('quick-label-'), 'Cliente mixto');
@@ -248,6 +268,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Pago dividido'), findsOneWidget);
+      expect(find.text('Deuda al registrar: COP 13.000,00'), findsOneWidget);
       expect(
         find.text('Cobrado: COP 5.000,00 · Deudas: COP 3.000,00'),
         findsOneWidget,

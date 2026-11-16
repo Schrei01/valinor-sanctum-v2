@@ -429,6 +429,9 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
     final total = controller.totalFor(account);
     final hasCredit = controller.hasCreditFor(account);
     final credit = controller.creditTotalFor(account);
+    final debtor = widget.data.debtors
+        .where((p) => p.id == account.debtorId && p.isActive)
+        .firstOrNull;
     final isSplit = account.isPaymentSplit;
     final personHint = _personHint(hasCredit);
     final member = widget.data.memberships
@@ -735,6 +738,13 @@ class _QuickAccountCardState extends State<_QuickAccountCard> {
                         Text(
                           'Cobrado: ${_money(payable - credit)} · Deudas: ${_money(credit)}',
                           key: ValueKey('quick-credit-summary-${account.id}'),
+                        ),
+                      if (debtor != null &&
+                          hasCredit &&
+                          !account.needsPaymentReview)
+                        Text(
+                          'Deuda al registrar: ${_money(BigInt.from(debtor.balanceMinor) + credit)}',
+                          key: ValueKey('quick-debt-total-${account.id}'),
                         ),
                       if (groups.length > 1 && !account.needsPaymentReview)
                         Text(

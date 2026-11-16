@@ -1,0 +1,56 @@
+{
+  "version": "0.52.0+91",
+  "edition": "Development",
+  "date": "2026-11-16",
+  "schema": 29,
+  "schema_changed": false,
+  "feature": "Sales forecast: selected person current balance + current account credit portion",
+  "scope_clarified_by_owner": "Ventas",
+  "validation": {
+    "selected_tests_passed": 12,
+    "failed": 0,
+    "format_changes": 0,
+    "format_files": 250,
+    "release": "success",
+    "analysis": "No issues found",
+    "counts_overlap": true,
+    "voucher_ui_repeated_passed": 2,
+    "coverage": [
+      "all credit with pre-existing personal debt",
+      "mixed payments add credit only",
+      "projection does not prepare or confirm a sale",
+      "voucher coverage excluded",
+      "split recovery and membership UI"
+    ]
+  },
+  "artifact": {
+    "archive": "C:\\proyectos\\valinor_sanctum_2\\dist\\valinor-sanctum-2-0.52.0-development-windows-x64.zip",
+    "edition": "Development",
+    "files": 19,
+    "bytes": 15504624,
+    "sha256": "53C556191CE8716B84E68EC75A988CBB23B6E711E4250B10821D61163D4C1944",
+    "includes_synthetic_profiles": false,
+    "excludes_flutter_debug_artifacts": true,
+    "current_executable": "C:\\proyectos\\valinor_sanctum_2\\dist\\ValinorSanctum2\\valinor_sanctum_2.exe"
+  },
+  "native": {
+    "integrity": "ok",
+    "tables": 87,
+    "foreign_key_violations": 0,
+    "opened": true,
+    "schema": 29,
+    "responding": true,
+    "pid": 13216
+  },
+  "production": {
+    "files_preserved": 39,
+    "version": "1.10.0",
+    "operational_database_opened": false
+  },
+  "git": {
+    "tag": "not_created_before_integration",
+    "merge": "pending owner review and full green CI",
+    "base": "main",
+    "branch": "codex/ventas-deuda-resultante"
+  }
+}
