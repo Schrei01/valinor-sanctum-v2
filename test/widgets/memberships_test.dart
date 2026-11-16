@@ -244,6 +244,7 @@ void main() {
       controller.selectAccountPayment(id, QuickPaymentOption.creditId);
       await tester.pumpAndSettle();
       expect(find.text('Cobrado: COP 0 · Deudas: COP 20.000'), findsOneWidget);
+      expect(find.text('Deuda al registrar: COP 20.000'), findsOneWidget);
       await controller.flushAll();
       await tester.pumpWidget(const SizedBox.shrink());
     });
