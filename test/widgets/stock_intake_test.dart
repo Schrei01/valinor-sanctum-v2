@@ -281,6 +281,9 @@ void main() {
       );
       expect(find.text('Reponer producto · existencias: 2'), findsOneWidget);
       await enter(tester, 'intake-cost', '1.100');
+      expect(value(tester, 'intake-pvp'), '2.500,00');
+      await enter(tester, 'intake-quantity', '2');
+      expect(value(tester, 'intake-pvp'), '2.500,00');
       await enter(tester, 'intake-pvp', '2.600');
       expect(find.text('Usar sugerido'), findsNothing);
       await tap(tester, find.byKey(const Key('intake-use-previous-pvp')));
@@ -302,6 +305,48 @@ void main() {
       expect(store.preparedCommands.single.listPriceMinor, 260000);
       expect(store.stock.single.quantity, 4);
       expect(store.products, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'zero previous PVP and manual edits survive cost changes while selecting another product uses its own PVP',
+    (tester) async {
+      store.products.addAll([
+        const CatalogProduct(
+          id: 'zero',
+          name: 'Producto sin precio',
+          sku: 'ZERO',
+          categoryId: 'food',
+          listPriceMinor: 0,
+        ),
+        const CatalogProduct(
+          id: 'other',
+          name: 'Producto con precio',
+          sku: 'OTHER',
+          categoryId: 'food',
+          listPriceMinor: 5000,
+        ),
+      ]);
+      await open(tester, moneyScale: 0);
+      await enter(tester, 'intake-name', 'ZERO');
+      await tap(tester, find.text('Producto sin precio').last);
+      await enter(tester, 'intake-cost', '6.500');
+      expect(find.text('PVP sugerido: COP 10.000'), findsOneWidget);
+      expect(value(tester, 'intake-pvp'), '0');
+      await enter(tester, 'intake-quantity', '2');
+      expect(value(tester, 'intake-pvp'), '0');
+      await enter(tester, 'intake-pvp', '9.000');
+      await enter(tester, 'intake-cost', '7.000');
+      await controller.load();
+      await tester.pumpAndSettle();
+      expect(value(tester, 'intake-pvp'), '9.000');
+      await enter(tester, 'intake-name', 'OTHER');
+      await tap(tester, find.text('Producto con precio').last);
+      expect(value(tester, 'intake-pvp'), '5.000');
+      await enter(tester, 'intake-cost', '1.000');
+      expect(value(tester, 'intake-pvp'), '5.000');
+      expect(store.preparedCommands, isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
