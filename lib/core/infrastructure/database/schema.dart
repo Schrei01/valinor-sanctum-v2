@@ -13,11 +13,12 @@ import 'bulk_sales_schema.dart';
 import 'catalog_corrections_schema.dart';
 import 'membership_schema.dart';
 import 'membership_voucher_schema.dart';
+import 'membership_corrections_schema.dart';
 part 'split_payment_schema.dart';
 
 /// Immutable bootstrap schema. Later changes require a new schema version.
 abstract final class DatabaseSchema {
-  static const int version = 29;
+  static const int version = 30;
   static String utcSortKey(String expression) => _utcSortKey(expression);
 
   // ASCII VS20: a file-format marker, independent of the original POS.
@@ -98,6 +99,7 @@ abstract final class DatabaseSchema {
     27 => 'catalog_event_corrections_and_expense_reasons_v27',
     28 => 'elven_memberships_v28',
     29 => 'monthly_store_vouchers_v29',
+    30 => 'audited_membership_corrections_v30',
     _ => throw ArgumentError.value(version, 'version'),
   };
 
@@ -131,8 +133,13 @@ abstract final class DatabaseSchema {
     27 => checksum(migration27Statements.join('\n;\n')),
     28 => checksum(migration28Statements.join('\n;\n')),
     29 => checksum(migration29Statements.join('\n;\n')),
+    30 => checksum(migration30Statements.join('\n;\n')),
     _ => throw ArgumentError.value(version, 'version'),
   };
+
+  static final List<String> migration30Statements = List.unmodifiable(
+    MembershipCorrectionsSchema.statements,
+  );
 
   static final List<String> migration29Statements = List.unmodifiable(
     MembershipVoucherSchema.build(migration13Statements, migration18Statements),

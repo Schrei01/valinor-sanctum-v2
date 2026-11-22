@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/features/memberships/domain/membership.dart';
+import 'package:valinor_sanctum_2/features/memberships/domain/membership_corrections.dart';
 import 'package:valinor_sanctum_2/features/memberships/presentation/memberships_page.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/application/quick_sales_controller.dart';
 import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
@@ -58,6 +59,15 @@ class MembersFake implements MembershipStore {
   ) async => [];
 }
 
+class EditableMembersFake extends MembersFake
+    implements MembershipCorrectionsStore {
+  CorrectMembershipPerson? correction;
+  @override
+  Future<void> correctPerson(CorrectMembershipPerson command) async {
+    correction = command;
+  }
+}
+
 void main() {
   setUpAll(() async {
     for (final family in {
@@ -89,6 +99,69 @@ void main() {
     }
   });
   for (final width in [1120.0, 400.0]) {
+    testWidgets(
+      'existing edit dialog changes name and start without voucher controls at $width',
+      (tester) async {
+        await tester.binding.setSurfaceSize(Size(width, 1100));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final members = EditableMembersFake();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: MembershipsPage(
+                  store: members,
+                  debtors: FakeDebtorsStore(),
+                  sales: FakeQuickSalesStore(),
+                  onEnroll: (_) async {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Editar datos'));
+        await tester.pumpAndSettle();
+        final fields = find.byType(TextFormField);
+        expect(tester.widget<TextFormField>(fields.first).enabled, isTrue);
+        expect(fields, findsNWidgets(3));
+        await tester.enterText(fields.first, 'Nombre corregido');
+        final dateButton = find.byKey(const ValueKey('membership-edit-start'));
+        await tester.ensureVisible(dateButton);
+        await tester.tap(dateButton);
+        await tester.pumpAndSettle();
+        final selected = members.person.starts!.subtract(
+          const Duration(days: 1),
+        );
+        // Input mode avoids depending on localized calendar weekday labels.
+        await tester.tap(find.byIcon(Icons.edit_outlined));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byType(InputDatePickerFormField).evaluate().isNotEmpty
+              ? find.descendant(
+                  of: find.byType(InputDatePickerFormField),
+                  matching: find.byType(TextFormField),
+                )
+              : find.byType(TextFormField).last,
+          '${selected.month}/${selected.day}/${selected.year}',
+        );
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'Vencimiento: ${membershipDate(membershipNextMonth(selected))}',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('Guardar datos'));
+        await tester.pumpAndSettle();
+        expect(members.correction!.name, 'Nombre corregido');
+        expect(members.correction!.start, selected);
+        expect(members.correction!.expected.voucherGrantedMinor, 30000);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
     testWidgets('membership screen and sales discount controls at $width', (
       tester,
     ) async {

@@ -5,6 +5,7 @@ import '../../inventory/presentation/inventory_widgets.dart';
 import '../../quick_sales/domain/quick_sales_store.dart';
 import '../../../core/domain/money.dart';
 import '../domain/membership.dart';
+import '../domain/membership_corrections.dart';
 
 const _birthMonths = [
   'Enero',
@@ -125,6 +126,7 @@ class _MembershipsPageState extends State<MembershipsPage> {
         email = TextEditingController(text: member?.email ?? ''),
         day = TextEditingController(text: member?.birthDay?.toString() ?? '');
     int? birthMonth = member?.birthMonth;
+    DateTime? start = member?.starts;
     String? personId = member?.personId, dialogError;
     bool saving = false;
     final form = GlobalKey<FormState>();
@@ -176,7 +178,7 @@ class _MembershipsPageState extends State<MembershipsPage> {
                     ],
                     TextFormField(
                       controller: name,
-                      enabled: personId == null && !saving,
+                      enabled: (member != null || personId == null) && !saving,
                       maxLength: 120,
                       decoration: const InputDecoration(labelText: 'Nombre'),
                       validator: (v) =>
@@ -232,6 +234,46 @@ class _MembershipsPageState extends State<MembershipsPage> {
                         ),
                       ],
                     ),
+                    if (member != null &&
+                        widget.store is MembershipCorrectionsStore) ...[
+                      const SizedBox(height: 16),
+                      if (member.periodId == null)
+                        const Text(
+                          'Sin mensualidad registrada para cambiar la fecha de inicio.',
+                        )
+                      else ...[
+                        OutlinedButton.icon(
+                          key: const ValueKey('membership-edit-start'),
+                          icon: const Icon(Icons.calendar_month_outlined),
+                          label: Text(
+                            'Fecha de inicio: ${membershipDate(start)}',
+                          ),
+                          onPressed: saving
+                              ? null
+                              : () async {
+                                  final selected = await showDatePicker(
+                                    context: context,
+                                    initialDate: start!,
+                                    firstDate: DateTime(1900),
+                                    lastDate: DateTime(2200, 12, 31),
+                                  );
+                                  if (selected != null && context.mounted) {
+                                    update(() {
+                                      start = DateTime.utc(
+                                        selected.year,
+                                        selected.month,
+                                        selected.day,
+                                      );
+                                    });
+                                  }
+                                },
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Vencimiento: ${membershipDate(start == member.starts ? member.ends : membershipNextMonth(start!))}',
+                        ),
+                      ],
+                    ],
                     if (dialogError != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
@@ -262,14 +304,31 @@ class _MembershipsPageState extends State<MembershipsPage> {
                       }
                       update(() => saving = true);
                       try {
-                        await widget.store.savePerson(
-                          commandId: commandId,
-                          personId: personId,
-                          name: name.text,
-                          email: email.text,
-                          birthDay: int.tryParse(day.text),
-                          birthMonth: birthMonth,
-                        );
+                        final corrections = widget.store;
+                        if (member != null &&
+                            corrections is MembershipCorrectionsStore) {
+                          await (corrections as MembershipCorrectionsStore)
+                              .correctPerson(
+                                CorrectMembershipPerson(
+                                  commandId: commandId,
+                                  expected: member,
+                                  name: name.text,
+                                  email: email.text,
+                                  birthDay: int.tryParse(day.text),
+                                  birthMonth: birthMonth,
+                                  start: start,
+                                ),
+                              );
+                        } else {
+                          await widget.store.savePerson(
+                            commandId: commandId,
+                            personId: personId,
+                            name: name.text,
+                            email: email.text,
+                            birthDay: int.tryParse(day.text),
+                            birthMonth: birthMonth,
+                          );
+                        }
                         if (context.mounted) {
                           widget.onPeopleChanged?.call();
                           Navigator.pop(context);
