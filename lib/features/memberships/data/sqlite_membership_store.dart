@@ -8,11 +8,17 @@ import '../../debtors/domain/debtors_store.dart';
 
 import '../../quick_sales/domain/quick_sales_store.dart';
 import '../domain/membership.dart';
+import '../domain/membership_corrections.dart';
+import 'sqlite_membership_corrections.dart';
 
-class SqliteMembershipStore implements MembershipStore {
+class SqliteMembershipStore
+    implements MembershipStore, MembershipCorrectionsStore {
   SqliteMembershipStore(this.database, {this.synthetic = false});
   final AppDatabase database;
   final bool synthetic;
+  @override
+  Future<void> correctPerson(CorrectMembershipPerson command) =>
+      SqliteMembershipCorrections.correct(database, command);
   static const productId = 'membership:elven';
   static bool eligible(String name) {
     final n = name.toLowerCase().replaceAll('é', 'e').replaceAll('ó', 'o');

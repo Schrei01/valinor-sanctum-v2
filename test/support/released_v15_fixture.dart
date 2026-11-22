@@ -599,6 +599,7 @@ Future<void> restoreReleasedV27ForFixture(DatabaseExecutor db) async {
 
 /// Synthetic reconstruction only; never part of the runtime migration path.
 Future<void> restoreReleasedV28ForFixture(DatabaseExecutor db) async {
+  await restoreReleasedV29ForFixture(db);
   for (final sql in DatabaseSchema.migration29Statements) {
     final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
     if (name != null) await db.execute('DROP TRIGGER $name');
@@ -638,4 +639,26 @@ Future<void> restoreReleasedV28ForFixture(DatabaseExecutor db) async {
   );
   await db.delete('schema_migrations', where: 'version>=29');
   await db.execute('PRAGMA user_version=28');
+}
+
+/// Synthetic v29 reconstruction; operational databases never downgrade.
+Future<void> restoreReleasedV29ForFixture(DatabaseExecutor db) async {
+  for (final sql in DatabaseSchema.migration30Statements) {
+    final name = RegExp(r'^CREATE TRIGGER (\w+)').firstMatch(sql)?.group(1);
+    if (name != null) await db.execute('DROP TRIGGER $name');
+  }
+  expect(await db.query('membership_corrections'), isEmpty);
+  await db.execute('DROP TABLE membership_corrections');
+  await db.execute(
+    DatabaseSchema.migration28Statements.singleWhere(
+      (s) => s.startsWith('CREATE TRIGGER membership_periods_no_update '),
+    ),
+  );
+  await db.execute(
+    DatabaseSchema.migration13Statements.singleWhere(
+      (s) => s.startsWith('CREATE TRIGGER debtors_identity_immutable '),
+    ),
+  );
+  await db.delete('schema_migrations', where: 'version>=30');
+  await db.execute('PRAGMA user_version=29');
 }

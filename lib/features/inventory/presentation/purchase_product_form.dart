@@ -315,7 +315,7 @@ class _PurchaseProductFormState extends State<_PurchaseProductForm> {
           }
           _sku.text = product.sku ?? '';
           _pvp.text = _amount(product.listPriceMinor);
-          _pvpManual = false;
+          _pvpManual = true;
           final defaults = data.productDefaults[product.id];
           _cost.clear();
           _supplier.text = defaults?.supplierName ?? '';

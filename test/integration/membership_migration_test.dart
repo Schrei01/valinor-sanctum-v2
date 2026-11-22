@@ -4,13 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:valinor_sanctum_2/core/infrastructure/app_config.dart';
 import 'package:valinor_sanctum_2/core/infrastructure/database/app_database.dart';
+import 'package:valinor_sanctum_2/features/memberships/data/sqlite_membership_store.dart';
+import 'package:valinor_sanctum_2/features/quick_sales/data/sqlite_quick_sales_store.dart';
+import 'package:valinor_sanctum_2/features/quick_sales/domain/quick_sales_store.dart';
 import '../support/released_v15_fixture.dart'
-    show restoreReleasedV27ForFixture, restoreReleasedV28ForFixture;
+    show
+        restoreReleasedV27ForFixture,
+        restoreReleasedV28ForFixture,
+        restoreReleasedV29ForFixture;
 import 'quick_sales_store_test.dart' show fixture;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  for (final fromVersion in [27, 28]) {
+  for (final fromVersion in [27, 28, 29]) {
     test(
       'v$fromVersion migration preserves all prior rows and creates a verified automatic backup',
       () async {
@@ -22,10 +28,57 @@ void main() {
         try {
           app = await AppDatabase.open(path: path);
           await fixture(app, moneyScale: 0);
+          if (fromVersion == 29) {
+            final members = SqliteMembershipStore(app, synthetic: true);
+            final sales = SqliteQuickSalesStore(app, synthetic: true);
+            await sales.ensureDefaults();
+            await sales.ensureBulkProducts();
+            final id = await members.savePerson(
+              commandId: 'migration-person',
+              name: 'Persona de migración',
+              email: 'migration@example.com',
+              birthDay: 29,
+              birthMonth: 2,
+            );
+            final account = await sales.saveAccount(
+              SaveQuickSaleAccount(
+                id: 'membership-migration',
+                label: 'Mensualidad',
+                customerName: 'Persona de migración',
+                debtorId: id,
+                expectedRevision: 0,
+                lines: [
+                  const QuickSaleLine(
+                    id: 'membership-migration-line',
+                    productId: SqliteMembershipStore.productId,
+                    unitPriceMinor: 109000,
+                    paymentOptionId: 'quick-default:EFECTIVO',
+                  ),
+                ],
+              ),
+            );
+            await sales.prepareSale(
+              commandId: 'membership-migration-sale',
+              accountId: account.id,
+              expectedRevision: account.revision,
+              occurredAtUtc: DateTime.now().toUtc(),
+            );
+            await sales.confirmPrepared('membership-migration-sale');
+            expect(
+              await app.database.query('membership_periods'),
+              hasLength(1),
+            );
+            expect(
+              await app.database.query('membership_voucher_grants'),
+              hasLength(1),
+            );
+          }
           if (fromVersion == 27) {
             await restoreReleasedV27ForFixture(app.database);
-          } else {
+          } else if (fromVersion == 28) {
             await restoreReleasedV28ForFixture(app.database);
+          } else {
+            await restoreReleasedV29ForFixture(app.database);
           }
           final tables = (await app.database.rawQuery(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'schema_migrations' ORDER BY name",
@@ -42,11 +95,11 @@ void main() {
             (await app.database.rawQuery(
               'PRAGMA user_version',
             )).single.values.single,
-            29,
+            30,
           );
           for (final t in tables) {
             final rows = await app.database.query(t);
-            if (t == 'quick_sales_lines') {
+            if (t == 'quick_sales_lines' && fromVersion < 29) {
               for (final row in rows) {
                 if (fromVersion == 27) row.remove('membership_discount');
                 row.remove('voucher_selected');

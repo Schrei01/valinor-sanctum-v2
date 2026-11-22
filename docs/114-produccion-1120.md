@@ -1,0 +1,11 @@
+# Producción 1.12.0
+
+Publica Desarrollo0.54.0 y conserva Compras0.53.0. En **Membresías → Editar datos** se pueden corregir nombre, correo, cumpleaños y fecha de inicio. El vencimiento se recalcula a un mes calendario; no se edita ni reinicia el bono. El nombre mantiene la misma persona en Ventas y Deudores. En Compras, cambiar costo o cantidad conserva el PVP anterior o el escrito manualmente. [Edición de Membresías](113-membresias-editar-datos.md), [PVP anterior](112-compras-conservar-pvp-anterior.md).
+
+La compilación `1.12.0+95` utiliza `SANCTUM_ENV=installed`, con rótulos Producción y su icono Valinor. Lee `%USERPROFILE%\Documents\sanctum2.sqlite3` y `legacy-treasury.json`. Si falta la base, crea Valinor/COP/0 decimales; si existe, la conserva y migra al esquema30 con respaldo previo verificado. Desde29 agrega la auditoría de correcciones de Membresías y conserva las87 tablas anteriores y sus filas; el esquema final tiene88 tablas. Los ejecutables de esquema29 no deben abrir una base ya migrada a30.
+
+El instalador es `dist/Valinor-Sanctum-1.12.0-Produccion-Instalar.exe`; no contiene bases ni historial privados. La preparación y los ensayos no instalan sobre la operación ni abren la base operativa con escritura. El propietario ejecuta el instalador cuando corresponda, con Producción cerrada. No necesita reemplazar la base por la de Desarrollo: la actualización migra su propia base con respaldo.
+
+La última distribución de Desarrollo0.54.0+94, `pubspec.yaml`, sus datos/configuración y la instalación operativa se conservan. Instalación, arranque vacío, migración de snapshot, bloqueo al actualizar una app abierta, reinstalación, reapertura y desinstalación se verifican en ubicaciones privadas de `tmp`. Los ensayos cotejan el contenido del paquete, integridad, claves foráneas, filas históricas y conservación del historial.
+
+La publicación final requiere CI completo aprobado del PR18 actualizado, integración autorizada y reconstrucción desde el commit integrado y aprobado. La etiqueta inmutable es `prod-1.12.0`; los artefactos previos de Producción se retiran solo después de verificar la entrega final. La evidencia privada permanece fuera de Git en `tmp/release-1120`.
